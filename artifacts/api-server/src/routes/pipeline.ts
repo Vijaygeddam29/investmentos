@@ -19,6 +19,9 @@ router.get("/pipeline/status", (_req, res) => {
     running: status.running,
     lastRun: status.lastRun ?? undefined,
     tickersProcessed: status.tickersProcessed ?? undefined,
+    currentTicker: status.currentTicker ?? undefined,
+    totalTickers: status.totalTickers ?? undefined,
+    results: status.results ?? undefined,
   });
 });
 

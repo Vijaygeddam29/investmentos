@@ -1,0 +1,51 @@
+#1 - Investment Operating System — Full Build
+What & Why
+Build a full-stack Investment OS platform that ingests 100+ financial metrics per company via the Financial Modeling Prep (FMP) API, scores each company across 120 factors in 8 families, runs three strategy engines (Fortress, Rocket, Wave), generates full AI-written research memos, and presents everything in a three-dashboard interface. Also includes a Factor Drift Detector, Opportunity Detector, and Risk Detector. Architecture provided by the user; this implements it in TypeScript/Node.js/React.
+
+FMP_API_KEY environment secret must be set before the pipeline runs. Key provided by user.
+
+Done looks like
+A running web app with three dashboard tabs: Fortress Companies, Rocket Innovators, Wave Trades
+Each tab shows a ranked table of tickers with all three engine scores, key metrics, and AI verdict (Buy/Hold/Sell)
+A Valuation section on each company showing entry price signals: Margin of Safety, DCF discount, P/E vs peers, PEG ratio, EV/EBITDA, FCF yield — enabling entry/exit decisions
+Clicking a company opens a full detail view with all 120 factor scores across 8 families, plus a written AI research memo (business quality, growth potential, risk factors, final verdict)
+A "Run Pipeline" button triggers full data ingestion and scoring across all tickers in the universe
+A Factor Drift panel showing companies where key metrics are significantly deteriorating (ROIC falling, debt rising, insider selling)
+An Opportunity Alert panel showing newly surfaced Rockets and Fortress candidates (score crossed threshold)
+A Risk Alert panel showing companies with warning signals
+A Universe Manager page to view, add, and remove tickers from the watchlist
+Data persists in PostgreSQL; each pipeline run stores a timestamped snapshot so historical trends are visible
+Out of scope
+Non-equity asset classes (bonds, commodities, crypto) — equities only in v1
+Automated nightly scheduling — manual pipeline trigger only (can be added after)
+Portfolio construction / Kelly sizing / capital allocation engine
+User authentication / multi-tenant
+Tasks
+Database schema — Create Drizzle ORM tables for: companies, financial_metrics (120 factor columns), price_history, scores (fortress/rocket/wave + 8 sub-scores), ai_verdicts, drift_signals, opportunity_alerts. Push schema to PostgreSQL.
+
+OpenAPI spec + codegen — Define all API endpoints in openapi.yaml: POST /pipeline/run, GET /scores, GET /companies, GET /companies/:ticker, GET /companies/:ticker/metrics, GET /companies/:ticker/verdict, GET /drift-signals, GET /opportunity-alerts, GET /risk-alerts, GET /universe (CRUD). Run codegen.
+
+FMP data harvester — Fetch from FMP: key-metrics, income-statement, balance-sheet, cash-flow-statement, historical-price-full, ratios, and financial-growth endpoints per ticker. Map all 120 factors across 8 families into the database schema. Handle errors gracefully per ticker. Read FMP_API_KEY from environment.
+
+120-Factor scoring engines — Implement all 8 factor family scorers (Profitability, Growth, Capital Efficiency, Financial Strength, Cash Flow Quality, Innovation/Founder Signals, Market Momentum, Valuation). Compose into three engine scores using the documented weights: Fortress (Profitability 30%, Efficiency 20%, CashFlow 20%, Strength 20%, Valuation 10%), Rocket (Growth 30%, Innovation 30%, Efficiency 15%, Momentum 15%, Strength 10%), Wave (Momentum 40%, Valuation 30%, Growth 20%, Sentiment 10%).
+
+Valuation + entry/exit signals — Within the Valuation family scorer, compute: P/E, Forward P/E, PEG, EV/EBITDA, EV/Sales, Price/FCF, Price/Book, FCF yield, Margin of Safety (vs DCF intrinsic value), DCF discount percentage, Rule of 40 score, Shareholder yield. Expose these as structured entry/exit signals on the company detail endpoint.
+
+Factor Drift, Opportunity, and Risk detectors — Compare latest factor scores to historical averages: flag ROIC deterioration, debt rising, receivables growing faster than revenue, insider selling, margin compression. Flag companies where rocket_score or fortress_score crossed above threshold for the first time. Flag companies with multiple active risk signals.
+
+AI research memo — For each ticker, compose a prompt with all scores, sub-scores, drift signals, and key metrics. Call the Replit AI integration (no user API key needed) to generate a full investment memo: Business quality, Growth potential, Risk factors, Entry/exit timing, Final verdict with classification (Fortress/Rocket/Wave hybrid or single type). Store result in ai_verdicts table.
+
+Pipeline orchestrator + API routes — Wire harvester → scorers → detectors → AI memo into a single pipeline per ticker. Expose all REST routes from the OpenAPI spec. Universe manager CRUD (add/remove tickers, filter by country/sector).
+
+React dashboard frontend — Build the full UI with: three score-filtered tabs, a company detail drawer with all 120 factor scores in 8 collapsible sections, valuation/entry-exit card, AI research memo panel, Drift/Opportunity/Risk alert feeds, Universe manager page, and Run Pipeline button with per-ticker progress indicators. Use generated React Query hooks throughout.
+
+Relevant files
+lib/api-spec/openapi.yaml
+lib/db/src/schema/index.ts
+lib/db/drizzle.config.ts
+artifacts/api-server/src/routes/index.ts
+artifacts/api-server/src/app.ts
+artifacts/api-server/src/routes/health.ts
+lib/api-client-react/src/index.ts
+lib/api-zod/src/index.ts
+replit.md

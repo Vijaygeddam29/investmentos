@@ -8,12 +8,25 @@ import { companiesTable } from "@workspace/db/schema";
 let pipelineRunning = false;
 let lastRunDate: string | null = null;
 let tickersProcessed = 0;
+let currentTicker: string | null = null;
+let totalTickers = 0;
+let pipelineResults: Array<{
+  ticker: string;
+  success: boolean;
+  error?: string;
+  fortressScore?: number;
+  rocketScore?: number;
+  waveScore?: number;
+}> = [];
 
 export function getPipelineStatus() {
   return {
     running: pipelineRunning,
     lastRun: lastRunDate,
     tickersProcessed,
+    currentTicker,
+    totalTickers,
+    results: pipelineResults,
   };
 }
 
@@ -29,6 +42,8 @@ export async function runPipeline(tickers?: string[]) {
 
   pipelineRunning = true;
   tickersProcessed = 0;
+  currentTicker = null;
+  pipelineResults = [];
 
   const tickerList = tickers?.length
     ? tickers
@@ -44,22 +59,16 @@ export async function runPipeline(tickers?: string[]) {
     };
   }
 
-  const results: Array<{
-    ticker: string;
-    success: boolean;
-    error?: string;
-    fortressScore?: number;
-    rocketScore?: number;
-    waveScore?: number;
-  }> = [];
+  totalTickers = tickerList.length;
 
   let processed = 0;
   let failed = 0;
 
   try {
     for (const ticker of tickerList) {
+      currentTicker = ticker;
       try {
-        console.log(`[Pipeline] Processing ${ticker}...`);
+        console.log(`[Pipeline] Processing ${ticker} (${processed + 1}/${tickerList.length})...`);
 
         await fetchAndStoreCompany(ticker);
         await fetchAndStoreMetrics(ticker);
@@ -76,29 +85,27 @@ export async function runPipeline(tickers?: string[]) {
           console.warn(`[Pipeline] AI memo failed for ${ticker}: ${aiErr.message}`);
         }
 
-        results.push({
+        const result = {
           ticker,
           success: true,
           fortressScore: scores.fortressScore,
           rocketScore: scores.rocketScore,
           waveScore: scores.waveScore,
-        });
+        };
+        pipelineResults.push(result);
 
         processed++;
         tickersProcessed = processed;
-        console.log(`[Pipeline] ${ticker} done - F:${scores.fortressScore} R:${scores.rocketScore} W:${scores.waveScore}`);
+        console.log(`[Pipeline] ${ticker} done — F:${scores.fortressScore} R:${scores.rocketScore} W:${scores.waveScore}`);
       } catch (error: any) {
         console.error(`[Pipeline] Failed ${ticker}:`, error.message);
-        results.push({
-          ticker,
-          success: false,
-          error: error.message,
-        });
+        pipelineResults.push({ ticker, success: false, error: error.message });
         failed++;
       }
     }
   } finally {
     pipelineRunning = false;
+    currentTicker = null;
     lastRunDate = new Date().toISOString();
   }
 
@@ -106,6 +113,6 @@ export async function runPipeline(tickers?: string[]) {
     status: "completed",
     processed,
     failed,
-    results,
+    results: pipelineResults,
   };
 }

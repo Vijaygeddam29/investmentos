@@ -5,12 +5,7 @@ import {
   driftSignalsTable,
   opportunityAlertsTable,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
-
-function pctChange(current: number | null, historical: number | null): number | null {
-  if (current == null || historical == null || historical === 0) return null;
-  return (current - historical) / Math.abs(historical);
-}
+import { eq, desc, and, ne, lt } from "drizzle-orm";
 
 export async function detectDrift(ticker: string) {
   const metrics = await db.select().from(financialMetricsTable)
@@ -24,7 +19,8 @@ export async function detectDrift(ticker: string) {
   const historicalAvgs: Record<string, number> = {};
   const fields = [
     "roic", "grossMargin", "operatingMargin", "debtToEquity",
-    "netDebtEbitda", "fcfYield", "revenueGrowth1y",
+    "netDebtEbitda", "fcfYield", "revenueGrowth1y", "currentRatio",
+    "interestCoverage", "fcfToNetIncome",
   ] as const;
 
   for (const field of fields) {
@@ -40,8 +36,6 @@ export async function detectDrift(ticker: string) {
     currentValue: number | null;
     historicalAvg: number | null;
   }> = [];
-
-  const today = new Date().toISOString().split("T")[0];
 
   if (latest.roic != null && historicalAvgs.roic && latest.roic < historicalAvgs.roic * 0.8) {
     signals.push({
@@ -87,17 +81,6 @@ export async function detectDrift(ticker: string) {
     });
   }
 
-  if (latest.receivablesGrowthVsRevenue != null && latest.receivablesGrowthVsRevenue > 0.1) {
-    signals.push({
-      signalType: "risk",
-      description: "Receivables growing faster than revenue — possible channel stuffing",
-      severity: "high",
-      factorName: "Receivables vs Revenue",
-      currentValue: latest.receivablesGrowthVsRevenue,
-      historicalAvg: 0,
-    });
-  }
-
   if (latest.fcfYield != null && historicalAvgs.fcfYield && latest.fcfYield < historicalAvgs.fcfYield * 0.5) {
     signals.push({
       signalType: "drift",
@@ -109,7 +92,88 @@ export async function detectDrift(ticker: string) {
     });
   }
 
-  await db.delete(driftSignalsTable).where(eq(driftSignalsTable.ticker, ticker));
+  if (latest.interestCoverage != null && historicalAvgs.interestCoverage && latest.interestCoverage < historicalAvgs.interestCoverage * 0.6) {
+    signals.push({
+      signalType: "drift",
+      description: `Interest coverage declining: ${latest.interestCoverage.toFixed(1)}x vs historical avg ${historicalAvgs.interestCoverage.toFixed(1)}x`,
+      severity: latest.interestCoverage < 3 ? "high" : "medium",
+      factorName: "Interest Coverage",
+      currentValue: latest.interestCoverage,
+      historicalAvg: historicalAvgs.interestCoverage,
+    });
+  }
+
+  if (latest.currentRatio != null && latest.currentRatio < 1.0) {
+    signals.push({
+      signalType: "risk",
+      description: `Current ratio below 1.0 (${latest.currentRatio.toFixed(2)}) — short-term liquidity concern`,
+      severity: latest.currentRatio < 0.7 ? "high" : "medium",
+      factorName: "Current Ratio",
+      currentValue: latest.currentRatio,
+      historicalAvg: historicalAvgs.currentRatio ?? null,
+    });
+  }
+
+  if (latest.receivablesGrowthVsRevenue != null && latest.receivablesGrowthVsRevenue > 0.1) {
+    signals.push({
+      signalType: "risk",
+      description: `Receivables growing faster than revenue by ${(latest.receivablesGrowthVsRevenue * 100).toFixed(1)}pp — possible channel stuffing`,
+      severity: latest.receivablesGrowthVsRevenue > 0.2 ? "high" : "medium",
+      factorName: "Receivables vs Revenue",
+      currentValue: latest.receivablesGrowthVsRevenue,
+      historicalAvg: 0,
+    });
+  }
+
+  if (latest.inventoryGrowthVsRevenue != null && latest.inventoryGrowthVsRevenue > 0.15) {
+    signals.push({
+      signalType: "risk",
+      description: `Inventory building faster than revenue by ${(latest.inventoryGrowthVsRevenue * 100).toFixed(1)}pp — demand risk`,
+      severity: latest.inventoryGrowthVsRevenue > 0.3 ? "high" : "medium",
+      factorName: "Inventory vs Revenue",
+      currentValue: latest.inventoryGrowthVsRevenue,
+      historicalAvg: 0,
+    });
+  }
+
+  if (latest.altmanZScore != null && latest.altmanZScore < 1.8) {
+    signals.push({
+      signalType: "risk",
+      description: `Altman Z-Score ${latest.altmanZScore.toFixed(2)} in distress zone (<1.8) — bankruptcy risk`,
+      severity: "high",
+      factorName: "Altman Z-Score",
+      currentValue: latest.altmanZScore,
+      historicalAvg: null,
+    });
+  }
+
+  if (latest.stockBasedCompPct != null && latest.stockBasedCompPct > 0.10) {
+    signals.push({
+      signalType: "risk",
+      description: `SBC at ${(latest.stockBasedCompPct * 100).toFixed(1)}% of revenue — significant shareholder dilution`,
+      severity: latest.stockBasedCompPct > 0.20 ? "high" : "medium",
+      factorName: "SBC / Revenue",
+      currentValue: latest.stockBasedCompPct,
+      historicalAvg: null,
+    });
+  }
+
+  if (latest.accrualRatio != null && latest.accrualRatio > 0.10) {
+    signals.push({
+      signalType: "risk",
+      description: `High accrual ratio (${(latest.accrualRatio * 100).toFixed(1)}%) — earnings quality concern`,
+      severity: latest.accrualRatio > 0.20 ? "high" : "medium",
+      factorName: "Accrual Ratio",
+      currentValue: latest.accrualRatio,
+      historicalAvg: null,
+    });
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  await db.delete(driftSignalsTable).where(
+    and(eq(driftSignalsTable.ticker, ticker), eq(driftSignalsTable.date, today))
+  );
 
   for (const signal of signals) {
     await db.insert(driftSignalsTable).values({
@@ -123,14 +187,15 @@ export async function detectDrift(ticker: string) {
 }
 
 export async function detectOpportunities(ticker: string) {
-  const scores = await db.select().from(scoresTable)
+  const currentScores = await db.select().from(scoresTable)
     .where(eq(scoresTable.ticker, ticker))
     .orderBy(desc(scoresTable.date))
-    .limit(1);
+    .limit(2);
 
-  if (!scores.length) return [];
+  if (!currentScores.length) return [];
 
-  const latest = scores[0];
+  const latest = currentScores[0];
+  const previous = currentScores.length > 1 ? currentScores[1] : null;
   const today = new Date().toISOString().split("T")[0];
   const alerts: Array<{
     alertType: string;
@@ -139,34 +204,30 @@ export async function detectOpportunities(ticker: string) {
     description: string;
   }> = [];
 
-  if (latest.fortressScore != null && latest.fortressScore > 0.7) {
+  const thresholds = [
+    { engine: "fortress", score: latest.fortressScore, prevScore: previous?.fortressScore, threshold: 0.7, label: "long-term compounder" },
+    { engine: "rocket", score: latest.rocketScore, prevScore: previous?.rocketScore, threshold: 0.65, label: "high-growth innovator" },
+    { engine: "wave", score: latest.waveScore, prevScore: previous?.waveScore, threshold: 0.6, label: "momentum opportunity" },
+  ];
+
+  for (const { engine, score, prevScore, threshold, label } of thresholds) {
+    if (score == null || score <= threshold) continue;
+
+    const isNewCross = prevScore == null || prevScore <= threshold;
+    const alertType = isNewCross ? "new_threshold_cross" : "threshold_crossed";
+    const prefix = isNewCross ? "NEW: " : "";
+
     alerts.push({
-      alertType: "threshold_crossed",
-      engineType: "fortress",
-      score: latest.fortressScore,
-      description: `Fortress score ${latest.fortressScore.toFixed(2)} — qualifies as long-term compounder`,
+      alertType,
+      engineType: engine,
+      score,
+      description: `${prefix}${engine.charAt(0).toUpperCase() + engine.slice(1)} score ${score.toFixed(2)} — ${label} detected`,
     });
   }
 
-  if (latest.rocketScore != null && latest.rocketScore > 0.65) {
-    alerts.push({
-      alertType: "threshold_crossed",
-      engineType: "rocket",
-      score: latest.rocketScore,
-      description: `Rocket score ${latest.rocketScore.toFixed(2)} — high-growth innovator detected`,
-    });
-  }
-
-  if (latest.waveScore != null && latest.waveScore > 0.6) {
-    alerts.push({
-      alertType: "threshold_crossed",
-      engineType: "wave",
-      score: latest.waveScore,
-      description: `Wave score ${latest.waveScore.toFixed(2)} — momentum trade opportunity`,
-    });
-  }
-
-  await db.delete(opportunityAlertsTable).where(eq(opportunityAlertsTable.ticker, ticker));
+  await db.delete(opportunityAlertsTable).where(
+    and(eq(opportunityAlertsTable.ticker, ticker), eq(opportunityAlertsTable.date, today))
+  );
 
   for (const alert of alerts) {
     await db.insert(opportunityAlertsTable).values({

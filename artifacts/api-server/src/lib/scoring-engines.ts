@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { financialMetricsTable, priceHistoryTable, scoresTable } from "@workspace/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, value));
@@ -25,6 +25,16 @@ function stability(arr: (number | null | undefined)[]): number {
   const variance = valid.reduce((s, v) => s + (v - mean) ** 2, 0) / valid.length;
   const cv = Math.sqrt(variance) / Math.abs(mean);
   return clamp(1 - cv);
+}
+
+function trend(arr: (number | null | undefined)[]): number {
+  const valid = arr.filter((v): v is number => v != null && !isNaN(v));
+  if (valid.length < 2) return 0.5;
+  let improving = 0;
+  for (let i = 1; i < valid.length; i++) {
+    if (valid[i - 1] >= valid[i]) improving++;
+  }
+  return improving / (valid.length - 1);
 }
 
 export function scoreProfitability(metrics: any[]): number {
@@ -62,13 +72,13 @@ export function scoreGrowth(metrics: any[]): number {
     normalize(latest.epsGrowth5y, -0.10, 0.30),
     normalize(latest.fcfGrowth, -0.20, 0.50),
     normalize(latest.operatingIncomeGrowth, -0.20, 0.50),
-    normalize(latest.revenueGrowth1y, 0, 0.40),
-    normalize(latest.revenueGrowth1y, 0, 0.50),
-    normalize(latest.revenueGrowth1y, 0, 0.30),
-    normalize(latest.revenueGrowth1y, 0, 0.35),
+    trend(metrics.map(m => m.revenueGrowth1y)),
+    trend(metrics.map(m => m.epsGrowth1y)),
+    normalize(latest.grossMarginTrend, -0.05, 0.05),
+    normalize(latest.operatingMarginTrend, -0.05, 0.05),
     normalize(latest.operatingMargin, 0, 0.40),
     normalize(latest.rdToRevenue, 0, 0.30),
-    normalize(latest.revenueGrowth1y, 0, 0.40),
+    normalize(latest.reinvestmentRate, 0, 0.80),
   ];
   return avg(scores);
 }
@@ -82,16 +92,16 @@ export function scoreCapitalEfficiency(metrics: any[]): number {
     normalize(latest.roa, 0, 0.15),
     normalize(latest.assetTurnover, 0, 2.0),
     normalize(latest.inventoryTurnover, 0, 15),
-    normalize(latest.workingCapitalEfficiency, 0, 1),
-    normalize(latest.capexToRevenue, 0.01, 0.15),
-    normalize(latest.capexToRevenue, 0, 0.20),
-    normalize(latest.operatingLeverage, 0, 2),
+    normalize(latest.workingCapitalEfficiency, 0, 5),
+    normalize(latest.capexToRevenue, 0.30, 0.02),
+    normalize(latest.operatingLeverage, 0, 3),
     normalize(latest.shareholderYield, 0, 0.10),
     normalize(latest.dividendGrowth, 0, 0.20),
     normalize(latest.reinvestmentRate, 0, 0.50),
     normalize(latest.rdToRevenue, 0, 0.25),
-    0.5,
     normalize(latest.employeeProductivity, 0, 500000),
+    normalize(latest.incrementalMargin, -0.2, 0.5),
+    stability(metrics.map(m => m.roic)),
   ];
   return avg(scores);
 }
@@ -107,14 +117,14 @@ export function scoreFinancialStrength(metrics: any[]): number {
     normalize(latest.quickRatio, 0.5, 2.5),
     normalize(latest.cashToDebt, 0, 2),
     normalize(latest.altmanZScore, 1.8, 5),
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    normalize(latest.liquidityRatio, 0.5, 3),
-    0.5,
+    normalize(latest.liquidityRatio, 0, 1.5),
+    stability(metrics.map(m => m.debtToEquity)),
+    trend(metrics.map(m => m.interestCoverage)),
+    normalize(latest.operatingCfToRevenue, 0, 0.3),
+    normalize(latest.fcfToNetIncome, 0.5, 1.5),
+    normalize(latest.taxEfficiency, 0.5, 0.85),
+    normalize(latest.workingCapitalDrift, -0.1, 0.1),
+    normalize(latest.accrualRatio, 0.1, -0.1),
   ];
   return avg(scores);
 }
@@ -126,17 +136,17 @@ export function scoreCashFlowQuality(metrics: any[]): number {
     normalize(latest.fcfToNetIncome, 0.5, 1.5),
     normalize(latest.operatingCfToRevenue, 0, 0.30),
     stability(metrics.map(m => m.fcfYield)),
-    normalize(latest.accrualRatio, 0.5, -0.5),
-    normalize(latest.receivablesGrowthVsRevenue, 0.5, -0.5),
-    normalize(latest.inventoryGrowthVsRevenue, 0.5, -0.5),
-    0.5,
+    normalize(latest.accrualRatio, 0.1, -0.1),
+    normalize(latest.receivablesGrowthVsRevenue, 0.2, -0.2),
+    normalize(latest.inventoryGrowthVsRevenue, 0.2, -0.2),
+    stability(metrics.map(m => m.freeCashFlow)),
     normalize(latest.deferredRevenueGrowth, 0, 0.30),
     normalize(latest.stockBasedCompPct, 0.15, 0),
-    normalize(latest.workingCapitalDrift, 0.2, -0.2),
-    normalize(latest.cashConversionCycle, 100, 0),
+    normalize(latest.workingCapitalDrift, 0.1, -0.1),
+    normalize(latest.cashConversionCycle, 120, 0),
     normalize(latest.earningsSurprises, -0.05, 0.10),
-    stability(metrics.map(m => m.freeCashFlow)),
-    normalize(latest.taxEfficiency, 0, 0.30),
+    trend(metrics.map(m => m.freeCashFlow)),
+    normalize(latest.taxEfficiency, 0.5, 0.85),
     normalize(latest.capitalAllocationDiscipline, 0, 1),
   ];
   return avg(scores);
@@ -147,20 +157,20 @@ export function scoreInnovation(metrics: any[]): number {
   const latest = metrics[0];
   const scores = [
     normalize(latest.insiderOwnership, 0, 0.20),
-    normalize(latest.insiderOwnership, 0, 0.15),
+    normalize(latest.institutionalOwnership, 0.3, 0.90),
     normalize(latest.insiderBuying, 0, 1),
     normalize(latest.rdToRevenue, 0, 0.25),
-    0.5,
-    0.5,
-    normalize(latest.rdProductivity, 0, 1),
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
+    normalize(latest.rdProductivity, 0, 3),
+    trend(metrics.map(m => m.rdToRevenue)),
+    normalize(latest.revenueGrowth1y, 0, 0.50),
+    normalize(latest.grossMarginTrend, -0.02, 0.05),
+    normalize(latest.operatingLeverage, 0, 3),
+    normalize(latest.reinvestmentRate, 0, 0.8),
+    normalize(latest.employeeProductivity, 0, 500000),
+    normalize(latest.fcfGrowth, -0.1, 0.5),
+    normalize(latest.incrementalMargin, 0, 0.5),
+    stability(metrics.map(m => m.revenueGrowth1y)),
+    normalize(latest.operatingIncomeGrowth, -0.1, 0.5),
   ];
   return avg(scores);
 }
@@ -169,39 +179,55 @@ export function scoreMomentum(prices: any[]): number {
   if (prices.length < 50) return 0.5;
 
   const closes = prices.map(p => p.close).reverse();
+  const len = closes.length;
 
+  const ma10 = avg(closes.slice(-10));
+  const ma20 = avg(closes.slice(-20));
   const ma50 = avg(closes.slice(-50));
-  const ma200 = closes.length >= 200 ? avg(closes.slice(-200)) : ma50;
+  const ma200 = len >= 200 ? avg(closes.slice(-200)) : ma50;
 
+  const currentPrice = closes[len - 1];
   const goldenCross = ma50 > ma200 ? 1 : 0;
 
   const rsiVal = calculateRSI(closes);
-  const rsiScore = rsiVal < 30 ? 0.9 : rsiVal < 50 ? 0.7 : rsiVal < 70 ? 0.5 : 0.2;
+  const rsiScore = rsiVal < 30 ? 0.9 : rsiVal < 40 ? 0.75 : rsiVal < 60 ? 0.5 : rsiVal < 70 ? 0.35 : 0.2;
 
   const recentVolumes = prices.slice(0, 20).map(p => p.volume || 0);
   const olderVolumes = prices.slice(20, 40).map(p => p.volume || 0);
   const volumeTrend = avg(recentVolumes) > avg(olderVolumes) ? 0.7 : 0.4;
 
-  const currentPrice = closes[closes.length - 1];
   const relStrength = ma200 > 0 ? currentPrice / ma200 : 1;
   const relStrengthScore = normalize(relStrength, 0.8, 1.3);
+
+  const priceAboveMa50 = currentPrice > ma50 ? 0.8 : 0.3;
+  const priceAboveMa200 = currentPrice > ma200 ? 0.8 : 0.3;
+  const trendAlignment = (ma10 > ma20 && ma20 > ma50) ? 0.9 : (ma10 > ma50 ? 0.6 : 0.3);
+
+  const high52w = Math.max(...closes.slice(-Math.min(252, len)));
+  const low52w = Math.min(...closes.slice(-Math.min(252, len)));
+  const rangePos = high52w !== low52w ? (currentPrice - low52w) / (high52w - low52w) : 0.5;
+  const nearHigh = normalize(rangePos, 0, 1);
+
+  const ret1m = len >= 21 ? (currentPrice - closes[len - 21]) / closes[len - 21] : 0;
+  const ret3m = len >= 63 ? (currentPrice - closes[len - 63]) / closes[len - 63] : 0;
+  const ret6m = len >= 126 ? (currentPrice - closes[len - 126]) / closes[len - 126] : 0;
 
   const scores = [
     rsiScore,
     goldenCross ? 0.8 : 0.3,
-    normalize(ma50, ma200 * 0.9, ma200 * 1.1),
-    normalize(ma200, ma200 * 0.95, ma200 * 1.05),
-    goldenCross,
+    priceAboveMa50,
+    priceAboveMa200,
+    trendAlignment,
     volumeTrend,
     relStrengthScore,
-    relStrengthScore,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
-    0.5,
+    nearHigh,
+    normalize(ret1m, -0.1, 0.15),
+    normalize(ret3m, -0.15, 0.25),
+    normalize(ret6m, -0.2, 0.4),
+    normalize(currentPrice / ma50, 0.9, 1.15),
+    normalize(currentPrice / ma200, 0.85, 1.25),
+    normalize(ma50 / ma200, 0.95, 1.1),
+    normalize(rangePos, 0.2, 0.9),
   ];
   return avg(scores);
 }
@@ -224,7 +250,7 @@ export function scoreValuation(metrics: any[]): number {
     normalize(latest.revenueMultipleVsGrowth, 3, 0.5),
     normalize(latest.intrinsicValueGap, -0.3, 0.3),
     normalize(latest.marginOfSafety, -0.2, 0.4),
-    normalize(latest.dcfDiscount, -0.3, 0.4),
+    normalize(latest.dcfDiscount, -0.05, 0.05),
   ];
   return avg(scores);
 }
@@ -312,35 +338,34 @@ export async function calculateAllScores(ticker: string) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  await db.delete(scoresTable).where(eq(scoresTable.ticker, ticker));
+  const r = (v: number) => Math.round(v * 100) / 100;
 
-  await db.insert(scoresTable).values({
+  const scoreRow = {
     ticker,
     date: today,
-    fortressScore: Math.round(fortressScore * 100) / 100,
-    rocketScore: Math.round(rocketScore * 100) / 100,
-    waveScore: Math.round(waveScore * 100) / 100,
-    profitabilityScore: Math.round(profitability * 100) / 100,
-    growthScore: Math.round(growth * 100) / 100,
-    capitalEfficiencyScore: Math.round(capitalEfficiency * 100) / 100,
-    financialStrengthScore: Math.round(financialStrength * 100) / 100,
-    cashFlowQualityScore: Math.round(cashFlowQuality * 100) / 100,
-    innovationScore: Math.round(innovation * 100) / 100,
-    momentumScore: Math.round(momentum * 100) / 100,
-    valuationScore: Math.round(valuation * 100) / 100,
-  });
-
-  return {
-    fortressScore: Math.round(fortressScore * 100) / 100,
-    rocketScore: Math.round(rocketScore * 100) / 100,
-    waveScore: Math.round(waveScore * 100) / 100,
-    profitabilityScore: Math.round(profitability * 100) / 100,
-    growthScore: Math.round(growth * 100) / 100,
-    capitalEfficiencyScore: Math.round(capitalEfficiency * 100) / 100,
-    financialStrengthScore: Math.round(financialStrength * 100) / 100,
-    cashFlowQualityScore: Math.round(cashFlowQuality * 100) / 100,
-    innovationScore: Math.round(innovation * 100) / 100,
-    momentumScore: Math.round(momentum * 100) / 100,
-    valuationScore: Math.round(valuation * 100) / 100,
+    fortressScore: r(fortressScore),
+    rocketScore: r(rocketScore),
+    waveScore: r(waveScore),
+    profitabilityScore: r(profitability),
+    growthScore: r(growth),
+    capitalEfficiencyScore: r(capitalEfficiency),
+    financialStrengthScore: r(financialStrength),
+    cashFlowQualityScore: r(cashFlowQuality),
+    innovationScore: r(innovation),
+    momentumScore: r(momentum),
+    valuationScore: r(valuation),
   };
+
+  const existing = await db.select({ id: scoresTable.id })
+    .from(scoresTable)
+    .where(and(eq(scoresTable.ticker, ticker), eq(scoresTable.date, today)))
+    .limit(1);
+
+  if (existing.length) {
+    await db.update(scoresTable).set(scoreRow).where(eq(scoresTable.id, existing[0].id));
+  } else {
+    await db.insert(scoresTable).values(scoreRow);
+  }
+
+  return scoreRow;
 }
