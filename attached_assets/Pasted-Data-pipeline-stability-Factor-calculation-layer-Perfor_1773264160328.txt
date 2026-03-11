@@ -1,0 +1,406 @@
+Data pipeline stability
+
+Factor calculation layer
+
+Performance & batching
+
+AI memo orchestration
+
+Observability & debugging
+
+Financial correctness (very important)
+
+I'll walk through the gaps.
+
+1. You Are Missing a Factor Computation Layer
+
+Right now your design jumps from:
+
+FMP raw data → 120 factor scores
+
+But in reality it must be:
+
+FMP raw financials
+      ↓
+Derived financial metrics
+      ↓
+120 factor scores
+
+Example.
+
+FMP gives:
+
+revenue
+grossProfit
+operatingIncome
+totalAssets
+cash
+debt
+
+But your factors require derived metrics like:
+
+ROIC
+incremental margin
+cash conversion cycle
+FCF yield
+R&D intensity
+You need a module
+/lib/factors/derived-metrics.ts
+
+Example:
+
+export function computeDerivedMetrics(financials) {
+  const roic =
+    financials.nopat /
+    (financials.totalDebt + financials.totalEquity - financials.cash)
+
+  const fcfYield =
+    financials.freeCashFlow / financials.marketCap
+
+  const rdIntensity =
+    financials.researchAndDevelopmentExpenses /
+    financials.revenue
+
+  return {
+    roic,
+    fcfYield,
+    rdIntensity
+  }
+}
+
+Without this layer the 120-factor model cannot work.
+
+2. Missing Market Data Enrichment
+
+Your architecture needs real market context.
+
+Currently missing:
+
+sector ETF performance
+industry averages
+peer valuation
+relative strength vs index
+
+Example:
+
+For NVIDIA
+
+You must compare:
+
+PE vs semiconductor sector
+Revenue growth vs peers
+EV/EBITDA vs industry median
+Required module
+lib/market-data/peer-benchmarks.ts
+
+Outputs:
+
+pe_vs_sector
+growth_vs_sector
+margin_vs_sector
+
+These feed your valuation and momentum factors.
+
+3. Missing Batching & Rate Limit Protection
+
+Financial Modeling Prep will rate limit you.
+
+Your pipeline currently assumes:
+
+for ticker in universe
+   fetch everything
+
+That will fail.
+
+You need request batching.
+
+Example:
+
+/lib/harvester/fmp-client.ts
+import Bottleneck from "bottleneck"
+
+const limiter = new Bottleneck({
+  maxConcurrent: 3,
+  minTime: 200
+})
+
+export const limitedFetch = limiter.wrap(fetch)
+
+Without this:
+
+429 rate limit errors
+partial pipelines
+data corruption
+4. Missing Pipeline State Tracking
+
+Your pipeline must track which tickers succeeded or failed.
+
+Otherwise debugging becomes impossible.
+
+Add table:
+
+pipeline_runs
+
+Schema:
+
+id
+started_at
+completed_at
+status
+tickers_processed
+tickers_failed
+
+And
+
+pipeline_ticker_runs
+ticker
+status
+error_message
+duration_ms
+5. Missing Backfill / Historical Data Loader
+
+Your scoring engines rely on history.
+
+Example factors require:
+
+5 year ROIC
+3 year revenue CAGR
+margin stability
+
+But your pipeline currently only loads latest data.
+
+You must backfill.
+
+Required endpoint:
+
+/pipeline/backfill?ticker=AAPL&years=10
+
+Using
+
+/income-statement?limit=120
+
+From Financial Modeling Prep.
+
+6. Missing Price Indicator Engine
+
+Your Wave strategy requires:
+
+RSI
+MACD
+Golden cross
+
+But those indicators are not yet defined.
+
+Add module:
+
+lib/indicators/technical.ts
+
+Example:
+
+export function rsi(prices:number[], period=14){
+  // RSI calculation
+}
+
+export function movingAverage(prices:number[], period:number){
+  return prices.slice(-period).reduce((a,b)=>a+b)/period
+}
+7. Missing Sentiment / Insider Data
+
+Your design includes:
+
+insider buying
+founder signals
+analyst revisions
+
+But these are not in FMP default calls.
+
+You need endpoints:
+
+/insider-trading
+/analyst-estimates
+
+Otherwise your Innovation and Sentiment factors will be empty.
+
+8. Missing Factor Normalization
+
+Different factors operate on different scales.
+
+Example:
+
+ROIC = 0–50
+Debt/Equity = 0–5
+RSI = 0–100
+
+Before combining scores they must be normalized.
+
+Example:
+
+z-score normalization
+or
+percentile ranking
+
+Add module:
+
+lib/factors/normalizer.ts
+
+Example:
+
+export function percentileRank(value, dataset){
+   const sorted=[...dataset].sort()
+   const rank=sorted.indexOf(value)
+   return rank/sorted.length
+}
+
+Without this the engine weights will be wrong.
+
+9. Missing AI Memo Cost Control
+
+Generating AI memos for 8000 stocks will be expensive.
+
+Instead you should only generate memos for:
+
+top 100 fortress
+top 100 rocket
+risk alerts
+user portfolio
+
+Pipeline step:
+
+if score > threshold
+   generate memo
+10. Missing Frontend Data Virtualization
+
+Your tables may show thousands of stocks.
+
+React must use virtualization.
+
+Recommended:
+
+tanstack/react-table
+tanstack/react-virtual
+
+Otherwise the browser will freeze.
+
+11. Missing Data Freshness Indicators
+
+Your UI must show:
+
+last pipeline run
+data age
+missing data flags
+
+Add API endpoint:
+
+GET /pipeline/status
+
+Returns:
+
+last_run
+duration
+tickers_processed
+errors
+12. Missing Security for API Keys
+
+Never expose:
+
+FMP_API_KEY
+
+Add environment loader:
+
+lib/config/env.ts
+
+Example:
+
+export const config = {
+  fmpKey: process.env.FMP_API_KEY
+}
+13. Missing Replit Deployment Configuration
+
+Add:
+
+replit.nix
+
+Example:
+
+nodejs
+postgresql
+
+and ensure:
+
+npm run dev
+
+runs both:
+
+api-server
+frontend
+14. Missing Testing
+
+You need minimal tests for:
+
+factor calculations
+pipeline execution
+API endpoints
+
+Use:
+
+vitest
+15. One Very Important Missing Feature
+
+Your system currently detects:
+
+good companies
+bad companies
+
+But investors need:
+
+WHEN to buy
+
+Add:
+
+Entry Timing Score
+
+Combine:
+
+valuation percentile
+momentum
+earnings revision
+
+Output:
+
+entry_score
+What Your System Will Become
+
+Once the missing parts are added your platform will resemble:
+
+Research tools used by firms like:
+
+Two Sigma
+
+Bridgewater Associates
+
+Renaissance Technologies
+
+But optimized for fundamental + AI research.
+
+The Single Biggest Upgrade You Could Add Next
+
+Right now your platform analyzes companies.
+
+The next step is to analyze the entire market structure.
+
+Add:
+
+Sector rotation engine
+
+Example:
+
+AI
+Semiconductors
+Energy
+Healthcare
+
+Ranking sectors by momentum and capital flows.
+
+This dramatically improves Wave + Rocket performance.
+
+✅ If you want, I can also show you the 3 architectural mistakes that usually cause these investment platforms to fail after a few months, and how to avoid them before you invest more time building this.

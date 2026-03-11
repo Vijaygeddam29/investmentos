@@ -2,7 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, Target } from "lucide-react";
 import { FactorAccordion } from "./FactorAccordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   const { data, isLoading } = useGetCompany(ticker || "", {
     query: { enabled: !!ticker }
   });
-  
+
   const { data: metricsData } = useGetCompanyMetrics(ticker || "", { limit: 1 }, {
     query: { enabled: !!ticker }
   });
@@ -28,10 +28,16 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   const valuation = data?.valuation;
   const driftSignals = data?.driftSignals || [];
   const latestMetrics = metricsData?.metrics?.[0];
+  const entryTimingScore = (scores as any)?.entryTimingScore;
+
+  const entryLabel = entryTimingScore == null ? null :
+    entryTimingScore >= 0.70 ? { label: "Strong Entry", color: "bg-success text-white" } :
+    entryTimingScore >= 0.55 ? { label: "Moderate", color: "bg-warning/20 text-warning border-warning/30" } :
+    { label: "Poor Timing", color: "bg-destructive/20 text-destructive border-destructive/30" };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[90vw] sm:max-w-[600px] sm:w-[600px] border-l border-border bg-card p-0 flex flex-col">
+      <SheetContent className="w-[90vw] sm:max-w-[640px] sm:w-[640px] border-l border-border bg-card p-0 flex flex-col">
         {isLoading || !company ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -52,19 +58,27 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                   </p>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-3 gap-4 mt-6">
+
+              <div className="grid grid-cols-4 gap-3 mt-5">
+                <ScorePanel label="Fortress" score={scores?.fortressScore} type="fortress" />
+                <ScorePanel label="Rocket" score={scores?.rocketScore} type="rocket" />
+                <ScorePanel label="Wave" score={scores?.waveScore} type="wave" />
                 <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Fortress Score</div>
-                  <ScoreBadge score={scores?.fortressScore} type="fortress" className="text-lg px-3 py-1" />
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rocket Score</div>
-                  <ScoreBadge score={scores?.rocketScore} type="rocket" className="text-lg px-3 py-1" />
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Wave Score</div>
-                  <ScoreBadge score={scores?.waveScore} type="wave" className="text-lg px-3 py-1" />
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Entry Timing</div>
+                  {entryTimingScore != null ? (
+                    <>
+                      <div className="text-xl font-mono font-bold text-foreground">
+                        {entryTimingScore.toFixed(2)}
+                      </div>
+                      {entryLabel && (
+                        <span className={`mt-1 text-[9px] px-1.5 py-0.5 rounded font-medium border inline-block ${entryLabel.color}`}>
+                          {entryLabel.label}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
                 </div>
               </div>
             </SheetHeader>
@@ -73,31 +87,32 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
               <div className="p-6">
                 <Tabs defaultValue="overview" className="w-full">
                   <TabsList className="w-full grid grid-cols-4 mb-6 bg-secondary/50">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="overview">AI Memo</TabsTrigger>
                     <TabsTrigger value="factors">120 Factors</TabsTrigger>
-                    <TabsTrigger value="valuation">Valuation</TabsTrigger>
+                    <TabsTrigger value="valuation">Entry/Exit</TabsTrigger>
                     <TabsTrigger value="signals">
                       Signals
                       {driftSignals.length > 0 && (
-                        <span className="ml-1.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                        <span className="ml-1.5 w-2 h-2 rounded-full bg-destructive animate-pulse inline-block" />
                       )}
                     </TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="overview" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* ── AI Memo ── */}
+                  <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
                     {verdict ? (
                       <div className="rounded-xl border border-border bg-gradient-to-br from-secondary/50 to-background p-5 shadow-lg relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                           <TrendingUp className="w-32 h-32" />
                         </div>
                         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                          <span className="w-2 h-6 bg-primary rounded-full block"></span>
+                          <span className="w-2 h-6 bg-primary rounded-full block" />
                           AI Research Memo
                         </h3>
                         <div className="mb-4 flex items-center gap-3">
                           <Badge className={
-                            verdict.verdict.toUpperCase() === 'BUY' ? 'bg-success text-white' : 
-                            verdict.verdict.toUpperCase() === 'SELL' ? 'bg-destructive text-white' : 
+                            verdict.verdict.toUpperCase() === 'BUY' ? 'bg-success text-white' :
+                            verdict.verdict.toUpperCase() === 'SELL' ? 'bg-destructive text-white' :
                             'bg-warning text-warning-foreground'
                           }>
                             {verdict.verdict.toUpperCase()}
@@ -117,67 +132,105 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                       </div>
                     ) : (
                       <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No AI verdict generated yet. Run the pipeline.
+                        No AI memo generated yet. Run the pipeline.
                       </div>
                     )}
                   </TabsContent>
 
-                  <TabsContent value="factors" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* ── 120 Factors ── */}
+                  <TabsContent value="factors" className="animate-in fade-in duration-300">
                     {latestMetrics ? (
                       <FactorAccordion metrics={latestMetrics} scores={scores} />
                     ) : (
                       <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No factor data available.
+                        No factor data available. Run the pipeline first.
                       </div>
                     )}
                   </TabsContent>
 
-                  <TabsContent value="valuation" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* ── Entry/Exit Signals ── */}
+                  <TabsContent value="valuation" className="animate-in fade-in duration-300">
                     {valuation ? (
-                      <div className="grid grid-cols-2 gap-4">
-                        <ValuationCard title="P/E Ratio" value={valuation.peRatio} optimal="< 25" />
-                        <ValuationCard title="Forward P/E" value={valuation.forwardPe} optimal="< 20" />
-                        <ValuationCard title="PEG Ratio" value={valuation.pegRatio} optimal="< 1.5" />
-                        <ValuationCard title="EV / EBITDA" value={valuation.evToEbitda} optimal="< 15" />
-                        <ValuationCard title="Price / FCF" value={valuation.priceToFcf} optimal="< 20" />
-                        <ValuationCard title="FCF Yield" value={valuation.fcfYield} isPercentage optimal="> 4%" />
-                        <div className="col-span-2 mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm text-primary font-medium mb-1">Margin of Safety</div>
-                            <div className="text-xs text-muted-foreground">Discount to intrinsic value</div>
+                      <div className="space-y-6">
+                        {/* Entry timing banner */}
+                        {entryTimingScore != null && (
+                          <div className={`p-4 rounded-xl border flex items-center justify-between
+                            ${entryTimingScore >= 0.70 ? 'border-success/30 bg-success/5' :
+                              entryTimingScore >= 0.55 ? 'border-warning/30 bg-warning/5' :
+                              'border-destructive/30 bg-destructive/5'}`}>
+                            <div className="flex items-center gap-3">
+                              <Target className={`w-5 h-5 ${
+                                entryTimingScore >= 0.70 ? 'text-success' :
+                                entryTimingScore >= 0.55 ? 'text-warning' : 'text-destructive'
+                              }`} />
+                              <div>
+                                <div className="text-sm font-semibold">Entry Timing Score</div>
+                                <div className="text-xs text-muted-foreground">Valuation + Momentum + Earnings Revision</div>
+                              </div>
+                            </div>
+                            <div className="text-2xl font-mono font-bold">{entryTimingScore.toFixed(2)}</div>
                           </div>
-                          <div className="text-2xl font-mono font-bold text-primary">
-                            {valuation.marginOfSafety ? `${(valuation.marginOfSafety * 100).toFixed(1)}%` : '-'}
+                        )}
+
+                        {/* DCF & intrinsic value signals */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Intrinsic Value Signals</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <ValuationCard title="Margin of Safety" value={valuation.marginOfSafety} isPercentage optimal="> 20%" highlight />
+                            <ValuationCard title="DCF Discount" value={valuation.dcfDiscount} isPercentage optimal="> 0%" highlight />
+                            <ValuationCard title="Rule of 40" value={valuation.ruleOf40} optimal="> 40" isRaw />
+                            <ValuationCard title="Shareholder Yield" value={valuation.shareholderYield} isPercentage optimal="> 3%" />
+                          </div>
+                        </div>
+
+                        {/* Relative valuation */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Relative Valuation Multiples</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <ValuationCard title="P/E Ratio" value={valuation.peRatio} optimal="< 25" />
+                            <ValuationCard title="Forward P/E" value={valuation.forwardPe} optimal="< 20" />
+                            <ValuationCard title="PEG Ratio" value={valuation.pegRatio} optimal="< 1.5" />
+                            <ValuationCard title="EV / EBITDA" value={valuation.evToEbitda} optimal="< 15" />
+                            <ValuationCard title="EV / Sales" value={valuation.evToSales} optimal="< 5" />
+                            <ValuationCard title="Price / FCF" value={valuation.priceToFcf} optimal="< 20" />
+                            <ValuationCard title="Price / Book" value={valuation.priceToBook} optimal="< 5" />
+                            <ValuationCard title="FCF Yield" value={valuation.fcfYield} isPercentage optimal="> 4%" />
                           </div>
                         </div>
                       </div>
                     ) : (
                       <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No valuation data available.
+                        No valuation data available. Run the pipeline first.
                       </div>
                     )}
                   </TabsContent>
 
-                  <TabsContent value="signals" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* ── Drift Signals ── */}
+                  <TabsContent value="signals" className="animate-in fade-in duration-300">
                     <div className="space-y-4">
-                      <h3 className="font-medium text-sm text-muted-foreground mb-3 uppercase tracking-wider">Active Factor Drift</h3>
+                      <h3 className="font-medium text-sm text-muted-foreground mb-3 uppercase tracking-wider">Active Factor Drift & Risk</h3>
                       {driftSignals.length > 0 ? (
                         driftSignals.map((signal) => (
-                          <div key={signal.id} className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 flex gap-4 items-start">
-                            <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                            <div>
-                              <div className="font-medium text-destructive text-sm">{signal.signalType}</div>
-                              <p className="text-sm text-muted-foreground mt-1">{signal.description}</p>
-                              {signal.currentValue !== undefined && signal.historicalAvg !== undefined && (
-                                <div className="mt-3 flex items-center gap-4 text-xs font-mono">
-                                  <div>
-                                    <span className="text-muted-foreground mr-2">Current:</span>
-                                    <span className="text-foreground">{signal.currentValue.toFixed(2)}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-muted-foreground mr-2">Hist Avg:</span>
-                                    <span className="text-foreground">{signal.historicalAvg.toFixed(2)}</span>
-                                  </div>
+                          <div key={signal.id} className={`p-4 rounded-xl border flex gap-4 items-start ${
+                            signal.severity === 'high'
+                              ? 'border-destructive/30 bg-destructive/5'
+                              : 'border-warning/20 bg-warning/5'
+                          }`}>
+                            <ShieldAlert className={`w-5 h-5 shrink-0 mt-0.5 ${signal.severity === 'high' ? 'text-destructive' : 'text-warning'}`} />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-xs font-semibold ${signal.severity === 'high' ? 'text-destructive' : 'text-warning'}`}>
+                                  {signal.factorName || signal.signalType}
+                                </span>
+                                <Badge variant={signal.severity === 'high' ? 'destructive' : 'secondary'} className="text-[9px] h-4">
+                                  {signal.severity}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{signal.description}</p>
+                              {signal.currentValue != null && signal.historicalAvg != null && (
+                                <div className="mt-3 flex gap-6 text-xs font-mono">
+                                  <span><span className="text-muted-foreground">Current: </span>{signal.currentValue.toFixed(3)}</span>
+                                  <span><span className="text-muted-foreground">Hist avg: </span>{signal.historicalAvg.toFixed(3)}</span>
                                 </div>
                               )}
                             </div>
@@ -201,15 +254,44 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   );
 }
 
-function ValuationCard({ title, value, isPercentage, optimal }: { title: string, value?: number, isPercentage?: boolean, optimal: string }) {
-  if (value === undefined || value === null) return null;
-  const displayValue = isPercentage ? `${(value * 100).toFixed(2)}%` : value.toFixed(2);
-  
+function ScorePanel({ label, score, type }: { label: string; score?: number; type: string }) {
   return (
-    <div className="p-4 rounded-xl border border-border bg-secondary/30 flex flex-col justify-between">
+    <div className="bg-secondary/50 rounded-lg p-3 border border-border">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{label}</div>
+      <ScoreBadge score={score} type={type as any} className="text-lg px-3 py-1" />
+    </div>
+  );
+}
+
+function ValuationCard({
+  title, value, isPercentage, isRaw, optimal, highlight,
+}: {
+  title: string;
+  value?: number | null;
+  isPercentage?: boolean;
+  isRaw?: boolean;
+  optimal: string;
+  highlight?: boolean;
+}) {
+  if (value == null) return null;
+
+  const display = isPercentage
+    ? `${(value * 100).toFixed(1)}%`
+    : isRaw
+    ? value.toFixed(1)
+    : value.toFixed(2);
+
+  return (
+    <div className={`p-4 rounded-xl border flex flex-col justify-between ${
+      highlight ? 'border-primary/20 bg-primary/5' : 'border-border bg-secondary/30'
+    }`}>
       <div className="text-xs text-muted-foreground mb-2">{title}</div>
-      <div className="text-lg font-mono font-medium text-foreground">{displayValue}</div>
-      <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border/50">Optimal: {optimal}</div>
+      <div className={`text-lg font-mono font-medium ${highlight ? 'text-primary' : 'text-foreground'}`}>
+        {display}
+      </div>
+      <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
+        Target: {optimal}
+      </div>
     </div>
   );
 }

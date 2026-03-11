@@ -19,6 +19,9 @@ export const scoresTable = pgTable("scores", {
   momentumScore: real("momentum_score"),
   valuationScore: real("valuation_score"),
 
+  // Entry Timing Score (Gap 15): valuation + momentum + earnings revision signal
+  entryTimingScore: real("entry_timing_score"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
