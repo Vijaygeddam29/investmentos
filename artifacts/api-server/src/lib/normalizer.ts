@@ -29,13 +29,13 @@ type ScoreKey =
   | "fortressScore" | "rocketScore" | "waveScore"
   | "profitabilityScore" | "growthScore" | "capitalEfficiencyScore"
   | "financialStrengthScore" | "cashFlowQualityScore"
-  | "innovationScore" | "momentumScore" | "valuationScore";
+  | "innovationScore" | "sentimentScore" | "momentumScore" | "valuationScore";
 
 const SCORE_KEYS: ScoreKey[] = [
   "fortressScore", "rocketScore", "waveScore",
   "profitabilityScore", "growthScore", "capitalEfficiencyScore",
   "financialStrengthScore", "cashFlowQualityScore",
-  "innovationScore", "momentumScore", "valuationScore",
+  "innovationScore", "sentimentScore", "momentumScore", "valuationScore",
 ];
 
 /**

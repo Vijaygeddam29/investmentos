@@ -463,11 +463,12 @@ export async function fetchAndStoreMetrics(ticker: string) {
     throw new Error(`No financial data found for ${ticker}`);
   }
 
-  // Insider, institutional, and analyst data (Gap 7)
-  const [insiderData, institutionalOwnership, analystData] = await Promise.all([
+  // Insider, institutional, analyst, and peer benchmark data
+  const [insiderData, institutionalOwnership, analystData, peerBenchmarks] = await Promise.all([
     fetchInsiderData(ticker),
     fetchInstitutionalOwnership(ticker),
     fetchAnalystData(ticker),
+    fetchPeerBenchmarks(ticker),
   ]);
 
   const count = Math.min(10, Math.max(keyMetrics.length, incomeStmt.length, 1));
@@ -507,6 +508,12 @@ export async function fetchAndStoreMetrics(ticker: string) {
       institutionalOwnership: isLatest ? institutionalOwnership : null,
       earningsSurprises: isLatest ? analystData.earningsSurprises : null,
       forwardPe: isLatest ? analystData.forwardPe : null,
+      // Peer-relative valuation (Fix 2: P/E vs peers)
+      pePeerMedian: isLatest ? peerBenchmarks.pePeerMedian : null,
+      evEbitdaPeerMedian: isLatest ? peerBenchmarks.evEbitdaPeerMedian : null,
+      peVsPeerMedian: isLatest && peerBenchmarks.pePeerMedian && derived.peRatio
+        ? +(derived.peRatio / peerBenchmarks.pePeerMedian).toFixed(4)
+        : null,
     };
 
     const existing = await db.select({ id: financialMetricsTable.id })

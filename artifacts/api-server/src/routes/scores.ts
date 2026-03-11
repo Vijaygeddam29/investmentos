@@ -27,6 +27,7 @@ router.get("/scores", async (req, res) => {
         financialStrengthScore: scoresTable.financialStrengthScore,
         cashFlowQualityScore: scoresTable.cashFlowQualityScore,
         innovationScore: scoresTable.innovationScore,
+        sentimentScore: scoresTable.sentimentScore,
         momentumScore: scoresTable.momentumScore,
         valuationScore: scoresTable.valuationScore,
       })
@@ -61,6 +62,7 @@ router.get("/scores", async (req, res) => {
       financialStrengthScore: s.financialStrengthScore ?? undefined,
       cashFlowQualityScore: s.cashFlowQualityScore ?? undefined,
       innovationScore: s.innovationScore ?? undefined,
+      sentimentScore: s.sentimentScore ?? undefined,
       momentumScore: s.momentumScore ?? undefined,
       valuationScore: s.valuationScore ?? undefined,
       verdict: verdictMap.get(s.ticker)?.verdict ?? undefined,

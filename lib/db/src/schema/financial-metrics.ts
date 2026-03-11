@@ -94,6 +94,14 @@ export const financialMetricsTable = pgTable("financial_metrics", {
   marginOfSafety: real("margin_of_safety"),
   dcfDiscount: real("dcf_discount"),
 
+  // Peer-relative valuation (Gap 2: peer benchmarks)
+  pePeerMedian: real("pe_peer_median"),
+  evEbitdaPeerMedian: real("ev_ebitda_peer_median"),
+  peVsPeerMedian: real("pe_vs_peer_median"),   // company PE / peer median PE
+
+  // Sentiment family inputs (Gap 3 in Wave engine)
+  sentimentScore: real("sentiment_score"),
+
   currency: text("currency"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

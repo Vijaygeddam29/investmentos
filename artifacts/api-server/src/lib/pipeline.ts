@@ -15,7 +15,7 @@
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
 import { calculateAllScores } from "./scoring-engines";
 import { computeEntryTimingScore } from "./entry-timing";
-import { detectDrift, detectOpportunities } from "./detectors";
+import { detectDrift, detectOpportunities, detectRisks } from "./detectors";
 import { generateAiMemo } from "./ai-memo";
 import { calibrateUniverseScores } from "./normalizer";
 import { db } from "@workspace/db";
@@ -115,6 +115,7 @@ export async function runPipeline(tickers?: string[]) {
         currentStep = "detecting";
         await detectDrift(ticker);
         await detectOpportunities(ticker);
+        await detectRisks(ticker);  // aggregates signals → risk_alerts table
 
         currentStep = "ai-memo";
         if (shouldGenerateMemo(scores)) {

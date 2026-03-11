@@ -62,8 +62,15 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
       id: "valuation",
       label: "Valuation",
       score: scores?.valuationScore,
-      description: "P/E, PEG, EV multiples, FCF yield, Rule of 40, Margin of Safety",
+      description: "P/E, PEG, EV multiples, FCF yield, Rule of 40, Margin of Safety, P/E vs peers",
       data: metrics.valuation,
+    },
+    {
+      id: "sentiment",
+      label: "Sentiment",
+      score: (scores as any)?.sentimentScore,
+      description: "Insider conviction, institutional ownership, earnings surprises, analyst revisions, P/E vs peers",
+      data: (metrics as any)?.sentiment,
     },
   ];
 
@@ -124,7 +131,7 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4 px-1">
-        120 factors across 8 families. Each family contributes weighted sub-scores to the three engine scores.
+        120+ factors across 9 families. Each family contributes weighted sub-scores to the three engine scores.
       </p>
       <Accordion type="multiple" className="w-full space-y-2">
         {families.map((family) => {

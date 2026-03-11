@@ -146,8 +146,10 @@ router.get("/companies/:ticker", async (req, res) => {
         financialStrengthScore: s.financialStrengthScore,
         cashFlowQualityScore: s.cashFlowQualityScore,
         innovationScore: s.innovationScore,
+        sentimentScore: s.sentimentScore,
         momentumScore: s.momentumScore,
         valuationScore: s.valuationScore,
+        entryTimingScore: s.entryTimingScore,
       } : undefined,
       latestVerdict: v ? {
         ticker: v.ticker,
@@ -172,6 +174,10 @@ router.get("/companies/:ticker", async (req, res) => {
         dcfDiscount: m.dcfDiscount,
         intrinsicValueGap: m.intrinsicValueGap,
         revenueMultipleVsGrowth: m.revenueMultipleVsGrowth,
+        // Peer-relative valuation (Fix 2: P/E vs peers)
+        pePeerMedian: m.pePeerMedian,
+        evEbitdaPeerMedian: m.evEbitdaPeerMedian,
+        peVsPeerMedian: m.peVsPeerMedian,
       } : undefined,
       momentumIndicators,
       driftSignals: driftSigs.map(({ createdAt, ...rest }) => rest),
@@ -284,6 +290,23 @@ router.get("/companies/:ticker/metrics", async (req, res) => {
         incrementalMargin: m.incrementalMargin,
         operatingIncomeGrowth: m.operatingIncomeGrowth,
       },
+      // Sentiment family: insider conviction, analyst revisions, peer-relative value, SBC dilution
+      sentiment: {
+        insiderBuying: m.insiderBuying,
+        insiderOwnership: m.insiderOwnership,
+        institutionalOwnership: m.institutionalOwnership,
+        earningsSurprises: m.earningsSurprises,
+        shareholderYield: m.shareholderYield,
+        stockBasedCompPct: m.stockBasedCompPct,
+        accrualRatio: m.accrualRatio,
+        deferredRevenueGrowth: m.deferredRevenueGrowth,
+        operatingLeverage: m.operatingLeverage,
+        peVsPeerMedian: m.peVsPeerMedian,
+        pePeerMedian: m.pePeerMedian,
+        evEbitdaPeerMedian: m.evEbitdaPeerMedian,
+        forwardPe: m.forwardPe,
+        sentimentScore: m.sentimentScore,
+      },
       momentum: momentumIndicators,
       valuation: {
         peRatio: m.peRatio,
@@ -301,6 +324,10 @@ router.get("/companies/:ticker/metrics", async (req, res) => {
         dcfDiscount: m.dcfDiscount,
         intrinsicValueGap: m.intrinsicValueGap,
         revenueMultipleVsGrowth: m.revenueMultipleVsGrowth,
+        // Peer-relative valuation
+        pePeerMedian: m.pePeerMedian,
+        evEbitdaPeerMedian: m.evEbitdaPeerMedian,
+        peVsPeerMedian: m.peVsPeerMedian,
       },
     }));
 

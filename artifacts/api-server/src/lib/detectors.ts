@@ -4,8 +4,9 @@ import {
   scoresTable,
   driftSignalsTable,
   opportunityAlertsTable,
+  riskAlertsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, ne, lt } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export async function detectDrift(ticker: string) {
   const metrics = await db.select().from(financialMetricsTable)
@@ -238,4 +239,50 @@ export async function detectOpportunities(ticker: string) {
   }
 
   return alerts;
+}
+
+/**
+ * detectRisks — aggregates all active drift/risk signals for a ticker and
+ * writes a single risk_alert row when a company exhibits multiple concurrent
+ * deterioration signals (≥ 2 total signals, or ≥ 1 high-severity signal).
+ *
+ * Risk level:
+ *  - "critical": ≥ 2 high-severity signals (e.g. Altman Z + ROIC collapse)
+ *  - "elevated": ≥ 2 signals of any severity
+ */
+export async function detectRisks(ticker: string) {
+  const today = new Date().toISOString().split("T")[0];
+
+  const todaySignals = await db.select().from(driftSignalsTable)
+    .where(and(eq(driftSignalsTable.ticker, ticker), eq(driftSignalsTable.date, today)));
+
+  const totalCount = todaySignals.length;
+  const highCount = todaySignals.filter(s => s.severity === "high").length;
+
+  // Delete existing risk_alert for today (so we re-evaluate on each pipeline run)
+  await db.delete(riskAlertsTable).where(
+    and(eq(riskAlertsTable.ticker, ticker), eq(riskAlertsTable.date, today))
+  );
+
+  if (totalCount < 2 && highCount < 1) return null;
+
+  const riskLevel = highCount >= 2 ? "critical" : "elevated";
+  const signalDescriptions = todaySignals.map(s => `[${s.severity.toUpperCase()}] ${s.factorName ?? s.signalType}: ${s.description}`);
+
+  const description = riskLevel === "critical"
+    ? `${ticker} has ${highCount} critical risk signals — immediate review warranted`
+    : `${ticker} has ${totalCount} concurrent risk signals — elevated monitoring required`;
+
+  const alert = {
+    ticker,
+    date: today,
+    riskLevel,
+    activeSignalCount: totalCount,
+    highSeverityCount: highCount,
+    description,
+    signalSummary: JSON.stringify(signalDescriptions),
+  };
+
+  await db.insert(riskAlertsTable).values(alert);
+  return alert;
 }

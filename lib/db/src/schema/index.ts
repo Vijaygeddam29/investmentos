@@ -4,3 +4,4 @@ export * from "./price-history";
 export * from "./scores";
 export * from "./ai-verdicts";
 export * from "./signals";
+export type { RiskAlert } from "./signals";

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { driftSignalsTable, opportunityAlertsTable } from "@workspace/db/schema";
+import { driftSignalsTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -52,13 +52,22 @@ router.get("/opportunity-alerts", async (req, res) => {
   }
 });
 
-router.get("/risk-alerts", async (_req, res) => {
+router.get("/risk-alerts", async (req, res) => {
   try {
-    const signals = await db.select().from(driftSignalsTable)
-      .where(eq(driftSignalsTable.severity, "high"))
-      .orderBy(desc(driftSignalsTable.date));
+    const ticker = req.query.ticker as string | undefined;
 
-    res.json({ alerts: stripCreatedAt(signals) });
+    const rows = await db.select().from(riskAlertsTable)
+      .orderBy(desc(riskAlertsTable.date));
+
+    let filtered = rows;
+    if (ticker) filtered = filtered.filter(r => r.ticker === ticker);
+
+    res.json({
+      alerts: filtered.map(({ createdAt, signalSummary, ...rest }) => ({
+        ...rest,
+        signals: signalSummary ? JSON.parse(signalSummary) : [],
+      })),
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

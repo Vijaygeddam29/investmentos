@@ -286,11 +286,57 @@ const ROCKET_WEIGHTS = {
   financialStrength: 0.10,
 };
 
+/**
+ * Sentiment family scorer.
+ * Captures market-facing signals: insider conviction, institutional support,
+ * earnings surprises, and analyst revision direction.
+ * Used in Wave engine (10% weight per spec).
+ */
+export function scoreSentiment(metrics: any[]): number {
+  if (!metrics.length) return 0.5;
+  const latest = metrics[0];
+  const scores = [
+    // Insider conviction: buying > holding > selling
+    normalize(latest.insiderBuying, 0, 1),
+    // Insider ownership: skin-in-the-game premium
+    normalize(latest.insiderOwnership, 0, 0.20),
+    // Institutional ownership: quality of shareholder base
+    normalize(latest.institutionalOwnership, 0.30, 0.90),
+    // Earnings surprises: positive = analyst upgrades ahead
+    normalize(latest.earningsSurprises, -0.05, 0.10),
+    // Analyst estimate revision: positive = upward revision cycle
+    normalize(latest.analystUpside, 0, 0.30),
+    // Shareholder yield: buybacks + dividends (capital returned = management confidence)
+    normalize(latest.shareholderYield, 0, 0.08),
+    // SBC dilution as negative sentiment (dilution erodes trust)
+    normalize(latest.stockBasedCompPct, 0.20, 0),
+    // FCF trend as proxy for recurring beats
+    trend(metrics.map(m => m.freeCashFlow)),
+    // Accrual ratio inversed: low accruals = high earnings quality = better sentiment
+    normalize(latest.accrualRatio, 0.15, -0.05),
+    // Operating leverage trend: positive inflection = margin beat setup
+    normalize(latest.operatingLeverage, -0.5, 2.0),
+    // Deferred revenue growth: forward commitment = demand strength signal
+    normalize(latest.deferredRevenueGrowth, 0, 0.25),
+    // Revenue surprise proxy: actual growth vs historical avg
+    trend(metrics.map(m => m.revenueGrowth1y)),
+    // PE vs peer: trading at discount = re-rating potential
+    normalize(latest.peVsPeerMedian, 1.5, 0.6),
+    // EV/EBITDA vs peer: relative attractiveness
+    normalize(latest.evEbitdaPeerMedian != null && latest.evToEbitda != null
+      ? latest.evToEbitda / (latest.evEbitdaPeerMedian || 1)
+      : null, 1.5, 0.5),
+    // Consistency of earnings beats
+    stability(metrics.map(m => m.earningsSurprises)),
+  ];
+  return avg(scores);
+}
+
 const WAVE_WEIGHTS = {
   momentum: 0.40,
   valuation: 0.30,
   growth: 0.20,
-  innovation: 0.10,
+  sentiment: 0.10,   // replaces innovation per spec
 };
 
 export async function calculateAllScores(ticker: string) {
@@ -310,6 +356,7 @@ export async function calculateAllScores(ticker: string) {
   const financialStrength = scoreFinancialStrength(metrics);
   const cashFlowQuality = scoreCashFlowQuality(metrics);
   const innovation = scoreInnovation(metrics);
+  const sentiment = scoreSentiment(metrics);
   const momentum = scoreMomentum(prices);
   const valuation = scoreValuation(metrics);
 
@@ -329,11 +376,12 @@ export async function calculateAllScores(ticker: string) {
     financialStrength * ROCKET_WEIGHTS.financialStrength
   );
 
+  // Wave engine per spec: Momentum(40%) + Valuation(30%) + Growth(20%) + Sentiment(10%)
   const waveScore = clamp(
     momentum * WAVE_WEIGHTS.momentum +
     valuation * WAVE_WEIGHTS.valuation +
     growth * WAVE_WEIGHTS.growth +
-    innovation * WAVE_WEIGHTS.innovation
+    sentiment * WAVE_WEIGHTS.sentiment
   );
 
   const today = new Date().toISOString().split("T")[0];
@@ -352,6 +400,7 @@ export async function calculateAllScores(ticker: string) {
     financialStrengthScore: r(financialStrength),
     cashFlowQualityScore: r(cashFlowQuality),
     innovationScore: r(innovation),
+    sentimentScore: r(sentiment),
     momentumScore: r(momentum),
     valuationScore: r(valuation),
   };
