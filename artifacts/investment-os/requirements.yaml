@@ -1,0 +1,17 @@
+packages:
+  "framer-motion": "For premium smooth transitions, drawer animations, and layout shifts."
+  "recharts": "For rendering valuation charts and historical trend sparklines."
+  "@tanstack/react-table": "For high-performance, dense data tables required for financial metrics."
+  "date-fns": "For formatting pipeline timestamps and historical data dates."
+
+images:
+  - path: "artifacts/investment-os/public/images/logo.png"
+    description: "A minimal, premium, abstract geometric logo for a quantitative hedge fund platform. Deep navy and emerald green accents on a transparent background."
+    aspect_ratio: "1:1"
+  - path: "artifacts/investment-os/public/images/auth-bg.png"
+    description: "A dark, sophisticated background with subtle data visualization nodes, glowing grids, and deep slate/charcoal tones. High-end financial terminal aesthetic."
+    aspect_ratio: "16:9"
+
+notes:
+  - "Using generated hooks from @workspace/api-client-react"
+  - "Assuming strict dark mode for the 'Bloomberg Terminal / Quant Fund' aesthetic"

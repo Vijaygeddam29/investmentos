@@ -2,7 +2,7 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Investment Operating System (Investment OS) — a hedge-fund-grade stock research platform. pnpm workspace monorepo using TypeScript.
 
 ## Stack
 
@@ -15,82 +15,114 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+- **Frontend**: React + Vite + TailwindCSS + shadcn/ui + React Query
+- **Data source**: Financial Modeling Prep (FMP) API (`/stable/` endpoints)
+- **AI**: OpenAI via Replit AI Integrations (gpt-5-mini for memos)
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── artifacts/
+│   ├── api-server/           # Express API server (backend)
+│   │   └── src/
+│   │       ├── routes/       # API route handlers
+│   │       │   ├── pipeline.ts   # POST /api/pipeline/run, GET /api/pipeline/status
+│   │       │   ├── companies.ts  # CRUD + detail + metrics + verdict
+│   │       │   ├── scores.ts     # GET /api/scores (with engine/minScore filter)
+│   │       │   ├── signals.ts    # drift-signals, opportunity-alerts, risk-alerts
+│   │       │   └── universe.ts   # Universe manager CRUD
+│   │       └── lib/          # Business logic
+│   │           ├── fmp-harvester.ts     # FMP API data ingestion
+│   │           ├── scoring-engines.ts   # 120-factor scoring (8 families)
+│   │           ├── detectors.ts         # Drift/Opportunity detection
+│   │           ├── ai-memo.ts           # AI research memo generator
+│   │           └── pipeline.ts          # Pipeline orchestrator
+│   └── investment-os/        # React Vite frontend
+│       └── src/
+│           ├── pages/        # Dashboard, Signals, Universe
+│           ├── components/   # Layout, company table, drawers
+│           └── hooks/        # Pipeline manager hook
+├── lib/
+│   ├── api-spec/             # OpenAPI spec + Orval codegen config
+│   ├── api-client-react/     # Generated React Query hooks
+│   ├── api-zod/              # Generated Zod schemas
+│   └── db/                   # Drizzle ORM schema + DB connection
+│       └── src/schema/
+│           ├── companies.ts
+│           ├── financial-metrics.ts
+│           ├── price-history.ts
+│           ├── scores.ts
+│           ├── ai-verdicts.ts
+│           └── signals.ts    # drift_signals + opportunity_alerts tables
+├── scripts/
+├── pnpm-workspace.yaml
+└── package.json
 ```
+
+## Key Features
+
+### Three Strategy Engines
+- **Fortress** (long-term compounders): Profitability 30%, Capital Efficiency 20%, Cash Flow 20%, Strength 20%, Valuation 10%
+- **Rocket** (high-growth innovators): Growth 30%, Innovation 30%, Efficiency 15%, Momentum 15%, Strength 10%
+- **Wave** (momentum/tactical): Momentum 40%, Valuation 30%, Growth 20%, Innovation 10%
+
+### 120-Factor Scoring (8 Families, 15 factors each)
+1. Profitability (ROIC, margins, ROE, ROA)
+2. Growth (revenue, EPS, FCF growth rates)
+3. Capital Efficiency (asset turnover, ROIC, reinvestment)
+4. Financial Strength (D/E, interest coverage, liquidity)
+5. Cash Flow Quality (FCF/NI, operating CF, conversion)
+6. Innovation (R&D intensity, insider ownership)
+7. Momentum (RSI, moving averages, volume trends)
+8. Valuation (P/E, EV/EBITDA, FCF yield, PEG)
+
+### Signal Detection
+- **Drift Signals**: Detects ROIC deterioration, margin compression, debt increases, FCF decline
+- **Opportunity Alerts**: Flags when companies cross engine thresholds (Fortress >0.7, Rocket >0.65, Wave >0.6)
+- **Risk Alerts**: High-severity drift signals
+
+### AI Research Memos
+- Uses OpenAI (gpt-5-mini) via Replit AI Integrations
+- Falls back to rule-based memos when AI unavailable
+- Generates verdict (BUY/HOLD/SELL) and classification
+
+## Environment Variables
+
+- `DATABASE_URL`: PostgreSQL connection (auto-provisioned by Replit)
+- `FMP_API_KEY`: Financial Modeling Prep API key
+- `AI_INTEGRATIONS_OPENAI_API_KEY`: OpenAI API key (Replit AI Integrations)
+- `AI_INTEGRATIONS_OPENAI_BASE_URL`: OpenAI base URL (Replit AI Integrations)
 
 ## TypeScript & Composite Projects
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+- **Always typecheck from the root** — `pnpm run typecheck`
+- **`emitDeclarationOnly`** — only `.d.ts` files; bundling via esbuild/tsx/vite
 
 ## Root Scripts
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+- `pnpm run build` — typecheck + recursive build
+- `pnpm run typecheck` — `tsc --build --emitDeclarationOnly`
 
-## Packages
+## Data Flow
 
-### `artifacts/api-server` (`@workspace/api-server`)
+1. User adds tickers to Universe
+2. Pipeline runs: FMP harvester → DB storage → 120-factor scoring → drift detection → opportunity alerts → AI memos
+3. Dashboard displays scores across Fortress/Rocket/Wave engines
+4. Signal pages show drift, opportunities, and risk alerts
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+## FMP API
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+Uses the new `/stable/` API endpoints (v3 is deprecated):
+- `https://financialmodelingprep.com/stable/profile?symbol=X`
+- `https://financialmodelingprep.com/stable/key-metrics?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/ratios?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/income-statement?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/balance-sheet-statement?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/cash-flow-statement?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/financial-growth?symbol=X&period=annual`
+- `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=X`
 
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+Production migrations are handled by Replit when publishing. In development, use `pnpm --filter @workspace/db run push`.

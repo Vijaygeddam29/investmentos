@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Investment OS API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: pipeline
+    description: Pipeline operations
+  - name: companies
+    description: Company operations
+  - name: scores
+    description: Score operations
+  - name: signals
+    description: Drift and opportunity signals
+  - name: universe
+    description: Universe management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,250 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /pipeline/run:
+    post:
+      operationId: runPipeline
+      tags: [pipeline]
+      summary: Run investment pipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PipelineRunRequest"
+      responses:
+        "200":
+          description: Pipeline result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineRunResponse"
+  /pipeline/status:
+    get:
+      operationId: getPipelineStatus
+      tags: [pipeline]
+      summary: Get pipeline status
+      responses:
+        "200":
+          description: Pipeline status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineStatus"
+  /scores:
+    get:
+      operationId: listScores
+      tags: [scores]
+      summary: List all company scores
+      parameters:
+        - name: engine
+          in: query
+          schema:
+            type: string
+            enum: [fortress, rocket, wave]
+        - name: minScore
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: offset
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Scores list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoresListResponse"
+  /companies:
+    get:
+      operationId: listCompanies
+      tags: [companies]
+      summary: List companies in universe
+      responses:
+        "200":
+          description: Companies list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompaniesListResponse"
+  /companies/{ticker}:
+    get:
+      operationId: getCompany
+      tags: [companies]
+      summary: Get company details
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Company detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyDetail"
+        "404":
+          description: Not found
+  /companies/{ticker}/metrics:
+    get:
+      operationId: getCompanyMetrics
+      tags: [companies]
+      summary: Get company financial metrics
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Company metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyMetricsResponse"
+  /companies/{ticker}/verdict:
+    get:
+      operationId: getCompanyVerdict
+      tags: [companies]
+      summary: Get AI verdict for company
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: AI verdict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiVerdictResponse"
+    post:
+      operationId: generateCompanyVerdict
+      tags: [companies]
+      summary: Generate AI verdict for company
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: AI verdict generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiVerdictResponse"
+  /drift-signals:
+    get:
+      operationId: listDriftSignals
+      tags: [signals]
+      summary: List factor drift signals
+      parameters:
+        - name: ticker
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Drift signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DriftSignalsResponse"
+  /opportunity-alerts:
+    get:
+      operationId: listOpportunityAlerts
+      tags: [signals]
+      summary: List opportunity alerts
+      parameters:
+        - name: engineType
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Opportunity alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityAlertsResponse"
+  /risk-alerts:
+    get:
+      operationId: listRiskAlerts
+      tags: [signals]
+      summary: List risk alerts
+      responses:
+        "200":
+          description: Risk alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskAlertsResponse"
+  /universe:
+    get:
+      operationId: listUniverse
+      tags: [universe]
+      summary: List tickers in universe
+      responses:
+        "200":
+          description: Universe tickers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompaniesListResponse"
+    post:
+      operationId: addToUniverse
+      tags: [universe]
+      summary: Add ticker to universe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTickerRequest"
+      responses:
+        "200":
+          description: Ticker added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyItem"
+  /universe/{ticker}:
+    delete:
+      operationId: removeFromUniverse
+      tags: [universe]
+      summary: Remove ticker from universe
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ticker removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +285,362 @@ components:
           type: string
       required:
         - status
-
+    PipelineRunRequest:
+      type: object
+      properties:
+        tickers:
+          type: array
+          items:
+            type: string
+    PipelineRunResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        processed:
+          type: number
+        failed:
+          type: number
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineTickerResult"
+      required:
+        - status
+        - processed
+        - failed
+        - results
+    PipelineTickerResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        success:
+          type: boolean
+        error:
+          type: string
+        fortressScore:
+          type: number
+        rocketScore:
+          type: number
+        waveScore:
+          type: number
+      required:
+        - ticker
+        - success
+    PipelineStatus:
+      type: object
+      properties:
+        running:
+          type: boolean
+        lastRun:
+          type: string
+        tickersProcessed:
+          type: number
+      required:
+        - running
+    ScoresListResponse:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreItem"
+        total:
+          type: number
+      required:
+        - scores
+        - total
+    ScoreItem:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        date:
+          type: string
+        fortressScore:
+          type: number
+        rocketScore:
+          type: number
+        waveScore:
+          type: number
+        profitabilityScore:
+          type: number
+        growthScore:
+          type: number
+        capitalEfficiencyScore:
+          type: number
+        financialStrengthScore:
+          type: number
+        cashFlowQualityScore:
+          type: number
+        innovationScore:
+          type: number
+        momentumScore:
+          type: number
+        valuationScore:
+          type: number
+        verdict:
+          type: string
+        classification:
+          type: string
+      required:
+        - ticker
+        - fortressScore
+        - rocketScore
+        - waveScore
+    CompaniesListResponse:
+      type: object
+      properties:
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyItem"
+      required:
+        - companies
+    CompanyItem:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        country:
+          type: string
+        exchange:
+          type: string
+      required:
+        - ticker
+        - name
+    CompanyDetail:
+      type: object
+      properties:
+        company:
+          $ref: "#/components/schemas/CompanyItem"
+        latestScores:
+          $ref: "#/components/schemas/ScoreItem"
+        latestVerdict:
+          $ref: "#/components/schemas/AiVerdictItem"
+        valuation:
+          $ref: "#/components/schemas/ValuationSignals"
+        driftSignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/DriftSignalItem"
+      required:
+        - company
+    CompanyMetricsResponse:
+      type: object
+      properties:
+        ticker:
+          type: string
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricSnapshot"
+      required:
+        - ticker
+        - metrics
+    MetricSnapshot:
+      type: object
+      properties:
+        date:
+          type: string
+        profitability:
+          type: object
+          additionalProperties:
+            type: number
+        growth:
+          type: object
+          additionalProperties:
+            type: number
+        capitalEfficiency:
+          type: object
+          additionalProperties:
+            type: number
+        financialStrength:
+          type: object
+          additionalProperties:
+            type: number
+        cashFlowQuality:
+          type: object
+          additionalProperties:
+            type: number
+        innovation:
+          type: object
+          additionalProperties:
+            type: number
+        valuation:
+          type: object
+          additionalProperties:
+            type: number
+      required:
+        - date
+    AiVerdictResponse:
+      type: object
+      properties:
+        verdict:
+          $ref: "#/components/schemas/AiVerdictItem"
+      required:
+        - verdict
+    AiVerdictItem:
+      type: object
+      properties:
+        ticker:
+          type: string
+        date:
+          type: string
+        verdict:
+          type: string
+        classification:
+          type: string
+        memo:
+          type: string
+      required:
+        - ticker
+        - date
+        - verdict
+        - memo
+    ValuationSignals:
+      type: object
+      properties:
+        peRatio:
+          type: number
+        forwardPe:
+          type: number
+        pegRatio:
+          type: number
+        evToEbitda:
+          type: number
+        evToSales:
+          type: number
+        priceToFcf:
+          type: number
+        priceToBook:
+          type: number
+        fcfYield:
+          type: number
+        dividendYield:
+          type: number
+        shareholderYield:
+          type: number
+        ruleOf40:
+          type: number
+        marginOfSafety:
+          type: number
+        dcfDiscount:
+          type: number
+        intrinsicValueGap:
+          type: number
+    DriftSignalsResponse:
+      type: object
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/DriftSignalItem"
+      required:
+        - signals
+    DriftSignalItem:
+      type: object
+      properties:
+        id:
+          type: number
+        ticker:
+          type: string
+        date:
+          type: string
+        signalType:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+        factorName:
+          type: string
+        currentValue:
+          type: number
+        historicalAvg:
+          type: number
+      required:
+        - ticker
+        - date
+        - signalType
+        - description
+        - severity
+    OpportunityAlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpportunityAlertItem"
+      required:
+        - alerts
+    OpportunityAlertItem:
+      type: object
+      properties:
+        id:
+          type: number
+        ticker:
+          type: string
+        date:
+          type: string
+        alertType:
+          type: string
+        engineType:
+          type: string
+        score:
+          type: number
+        description:
+          type: string
+      required:
+        - ticker
+        - date
+        - alertType
+        - engineType
+        - description
+    RiskAlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DriftSignalItem"
+      required:
+        - alerts
+    AddTickerRequest:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        country:
+          type: string
+        exchange:
+          type: string
+      required:
+        - ticker
+        - name
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success

@@ -24,3 +24,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+FMP_API_KEY = "Xzru8qMDuTcHCg2XSu5nK3n0RzpatD7r"
