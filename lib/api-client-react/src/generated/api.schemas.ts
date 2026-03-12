@@ -29,10 +29,16 @@ export interface PipelineRunResponse {
   results: PipelineTickerResult[];
 }
 
+export type PipelineStatusResultsItem = { [key: string]: unknown };
+
 export interface PipelineStatus {
   running: boolean;
   lastRun?: string;
   tickersProcessed?: number;
+  currentTicker?: string;
+  totalTickers?: number;
+  currentStep?: string;
+  results?: PipelineStatusResultsItem[];
 }
 
 export interface ScoreItem {
@@ -102,6 +108,9 @@ export interface ValuationSignals {
   marginOfSafety?: number;
   dcfDiscount?: number;
   intrinsicValueGap?: number;
+  peVsPeerMedian?: number;
+  pePeerMedian?: number;
+  evEbitdaPeerMedian?: number;
 }
 
 export interface DriftSignalItem {
@@ -136,6 +145,10 @@ export type MetricSnapshotCashFlowQuality = { [key: string]: number };
 
 export type MetricSnapshotInnovation = { [key: string]: number };
 
+export type MetricSnapshotMomentum = { [key: string]: number };
+
+export type MetricSnapshotSentiment = { [key: string]: number };
+
 export type MetricSnapshotValuation = { [key: string]: number };
 
 export interface MetricSnapshot {
@@ -146,6 +159,8 @@ export interface MetricSnapshot {
   financialStrength?: MetricSnapshotFinancialStrength;
   cashFlowQuality?: MetricSnapshotCashFlowQuality;
   innovation?: MetricSnapshotInnovation;
+  momentum?: MetricSnapshotMomentum;
+  sentiment?: MetricSnapshotSentiment;
   valuation?: MetricSnapshotValuation;
 }
 

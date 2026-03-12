@@ -68,9 +68,9 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
     {
       id: "sentiment",
       label: "Sentiment",
-      score: (scores as any)?.sentimentScore,
+      score: scores?.sentimentScore,
       description: "Insider conviction, institutional ownership, earnings surprises, analyst revisions, P/E vs peers",
-      data: (metrics as any)?.sentiment,
+      data: metrics.sentiment,
     },
   ];
 

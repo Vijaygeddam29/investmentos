@@ -348,6 +348,17 @@ components:
           type: string
         tickersProcessed:
           type: number
+        currentTicker:
+          type: string
+        totalTickers:
+          type: number
+        currentStep:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
       required:
         - running
     ScoresListResponse:
@@ -501,6 +512,14 @@ components:
           type: object
           additionalProperties:
             type: number
+        momentum:
+          type: object
+          additionalProperties:
+            type: number
+        sentiment:
+          type: object
+          additionalProperties:
+            type: number
         valuation:
           type: object
           additionalProperties:
@@ -562,6 +581,12 @@ components:
         dcfDiscount:
           type: number
         intrinsicValueGap:
+          type: number
+        peVsPeerMedian:
+          type: number
+        pePeerMedian:
+          type: number
+        evEbitdaPeerMedian:
           type: number
     DriftSignalsResponse:
       type: object

@@ -4,11 +4,11 @@
  * Pipeline:
  *   FMP raw financials → derived-metrics computation → DB upsert
  *
- * Covers gaps:
- * - Gap 1: Explicit derived-metrics layer (ROIC, FCF yield, CCC, etc.)
- * - Gap 3: All calls routed through rate-limited fmpFetch client
- * - Gap 5: 10 annual periods + 3 years of daily prices
- * - Gap 7: Insider, institutional, and analyst data fetched
+ * Covers:
+ * - Explicit derived-metrics layer (ROIC, FCF yield, CCC, etc.)
+ * - All calls routed through rate-limited fmpFetch client
+ * - 10 annual periods + 3 years of daily prices
+ * - Insider, institutional, and analyst data fetched
  */
 
 import { db } from "@workspace/db";
@@ -54,7 +54,7 @@ export async function fetchAndStoreCompany(ticker: string) {
 
 // ─── Derived Metrics ─────────────────────────────────────────────────────────
 /**
- * Explicit derived-metrics layer (Gap 1).
+ * Derived-metrics layer.
  * Accepts raw FMP slices and produces the full set of derived factors.
  * All computations are documented so financial correctness can be audited.
  */
@@ -324,7 +324,7 @@ function computeDerivedMetrics(
   };
 }
 
-// ─── Insider & Institutional Data (Gap 7) ────────────────────────────────────
+// ─── Insider & Institutional Data ────────────────────────────────────────────
 
 async function fetchInsiderData(ticker: string): Promise<{
   insiderOwnership: number | null;
@@ -429,7 +429,7 @@ async function fetchAnalystData(ticker: string, currentPrice: number | null): Pr
   }
 }
 
-// ─── Peer Benchmarks (Gap 2) ──────────────────────────────────────────────────
+// ─── Peer Benchmarks ──────────────────────────────────────────────────────────
 
 export async function fetchPeerBenchmarks(ticker: string): Promise<{
   pePeerMedian: number | null;
@@ -605,7 +605,7 @@ function computeCoV(values: number[]): number | null {
   return Math.sqrt(variance) / Math.abs(mean);
 }
 
-// ─── Price History (Gap 5: 3 years of daily prices) ─────────────────────────
+// ─── Price History (3 years of daily prices) ─────────────────────────────────
 
 export async function fetchAndStorePrices(ticker: string) {
   // 3 years = ~750 trading days

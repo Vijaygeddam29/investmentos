@@ -28,7 +28,7 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   const valuation = data?.valuation;
   const driftSignals = data?.driftSignals || [];
   const latestMetrics = metricsData?.metrics?.[0];
-  const entryTimingScore = (scores as any)?.entryTimingScore;
+  const entryTimingScore = scores?.entryTimingScore;
 
   const entryLabel = entryTimingScore == null ? null :
     entryTimingScore >= 0.70 ? { label: "Strong Entry", color: "bg-success text-white" } :
@@ -199,35 +199,35 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                         </div>
 
                         {/* Peer-relative valuation */}
-                        {((valuation as any).peVsPeerMedian != null || (valuation as any).pePeerMedian != null) && (
+                        {(valuation.peVsPeerMedian != null || valuation.pePeerMedian != null) && (
                           <div>
                             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">P/E vs Peers</h4>
                             <div className="grid grid-cols-2 gap-3">
-                              {(valuation as any).peVsPeerMedian != null && (
+                              {valuation.peVsPeerMedian != null && (
                                 <div className="rounded-lg border border-border bg-secondary/30 p-3">
                                   <div className="text-[10px] text-muted-foreground mb-1">P/E vs Peer Median</div>
-                                  <div className={`text-sm font-bold font-mono ${(valuation as any).peVsPeerMedian > 1.2 ? "text-amber-400" : (valuation as any).peVsPeerMedian < 0.85 ? "text-emerald-400" : "text-foreground"}`}>
-                                    {((valuation as any).peVsPeerMedian * 100).toFixed(0)}%
+                                  <div className={`text-sm font-bold font-mono ${valuation.peVsPeerMedian > 1.2 ? "text-amber-400" : valuation.peVsPeerMedian < 0.85 ? "text-emerald-400" : "text-foreground"}`}>
+                                    {(valuation.peVsPeerMedian * 100).toFixed(0)}%
                                   </div>
                                   <div className="text-[10px] text-muted-foreground mt-0.5">
-                                    {(valuation as any).peVsPeerMedian > 1.2 ? "Premium to peers" : (valuation as any).peVsPeerMedian < 0.85 ? "Discount to peers ✓" : "In-line with peers"}
+                                    {valuation.peVsPeerMedian > 1.2 ? "Premium to peers" : valuation.peVsPeerMedian < 0.85 ? "Discount to peers ✓" : "In-line with peers"}
                                   </div>
                                 </div>
                               )}
-                              {(valuation as any).pePeerMedian != null && (
+                              {valuation.pePeerMedian != null && (
                                 <div className="rounded-lg border border-border bg-secondary/30 p-3">
                                   <div className="text-[10px] text-muted-foreground mb-1">Peer Median P/E</div>
                                   <div className="text-sm font-bold font-mono">
-                                    {(valuation as any).pePeerMedian.toFixed(1)}x
+                                    {valuation.pePeerMedian.toFixed(1)}x
                                   </div>
                                   <div className="text-[10px] text-muted-foreground mt-0.5">Sector benchmark</div>
                                 </div>
                               )}
-                              {(valuation as any).evEbitdaPeerMedian != null && (
+                              {valuation.evEbitdaPeerMedian != null && (
                                 <div className="rounded-lg border border-border bg-secondary/30 p-3">
                                   <div className="text-[10px] text-muted-foreground mb-1">Peer Median EV/EBITDA</div>
                                   <div className="text-sm font-bold font-mono">
-                                    {(valuation as any).evEbitdaPeerMedian.toFixed(1)}x
+                                    {valuation.evEbitdaPeerMedian.toFixed(1)}x
                                   </div>
                                   <div className="text-[10px] text-muted-foreground mt-0.5">Sector benchmark</div>
                                 </div>
@@ -292,11 +292,11 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   );
 }
 
-function ScorePanel({ label, score, type }: { label: string; score?: number; type: string }) {
+function ScorePanel({ label, score, type }: { label: string; score?: number; type: "fortress" | "rocket" | "wave" | "neutral" }) {
   return (
     <div className="bg-secondary/50 rounded-lg p-3 border border-border">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{label}</div>
-      <ScoreBadge score={score} type={type as any} className="text-lg px-3 py-1" />
+      <ScoreBadge score={score} type={type} className="text-lg px-3 py-1" />
     </div>
   );
 }

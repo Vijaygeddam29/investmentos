@@ -21,4 +21,7 @@ export interface ValuationSignals {
   marginOfSafety?: number;
   dcfDiscount?: number;
   intrinsicValueGap?: number;
+  peVsPeerMedian?: number;
+  pePeerMedian?: number;
+  evEbitdaPeerMedian?: number;
 }

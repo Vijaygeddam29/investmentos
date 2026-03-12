@@ -1,5 +1,5 @@
 /**
- * Entry Timing Score (Gap 15).
+ * Entry Timing Score.
  *
  * Answers: "Is NOW a good time to enter this position?"
  *

@@ -5,9 +5,14 @@
  * Investment OS API
  * OpenAPI spec version: 0.1.0
  */
+import type { PipelineStatusResultsItem } from "./pipelineStatusResultsItem";
 
 export interface PipelineStatus {
   running: boolean;
   lastRun?: string;
   tickersProcessed?: number;
+  currentTicker?: string;
+  totalTickers?: number;
+  currentStep?: string;
+  results?: PipelineStatusResultsItem[];
 }

@@ -6,10 +6,10 @@
  *   2. Score (8-family factor model)
  *   3. Entry timing score
  *   4. Drift + opportunity detectors
- *   5. AI memo (only if score > threshold — Gap 9: cost control)
+ *   5. AI memo
  *
  * Post-all-tickers:
- *   6. Cross-sectional universe calibration (Gap 8)
+ *   6. Cross-sectional universe calibration
  */
 
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
@@ -139,7 +139,7 @@ export async function runPipeline(tickers?: string[]) {
       }
     }
 
-    // Cross-sectional universe calibration — runs once after all tickers (Gap 8)
+    // Cross-sectional universe calibration — runs once after all tickers
     if (processed >= 2) {
       currentStep = "calibrating";
       console.log(`[Pipeline] Running cross-sectional calibration across ${processed} tickers...`);

@@ -44,6 +44,10 @@ export const GetPipelineStatusResponse = zod.object({
   running: zod.boolean(),
   lastRun: zod.string().optional(),
   tickersProcessed: zod.number().optional(),
+  currentTicker: zod.string().optional(),
+  totalTickers: zod.number().optional(),
+  currentStep: zod.string().optional(),
+  results: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
 });
 
 /**
@@ -171,6 +175,9 @@ export const GetCompanyResponse = zod.object({
       marginOfSafety: zod.number().optional(),
       dcfDiscount: zod.number().optional(),
       intrinsicValueGap: zod.number().optional(),
+      peVsPeerMedian: zod.number().optional(),
+      pePeerMedian: zod.number().optional(),
+      evEbitdaPeerMedian: zod.number().optional(),
     })
     .optional(),
   driftSignals: zod
@@ -212,6 +219,8 @@ export const GetCompanyMetricsResponse = zod.object({
       financialStrength: zod.record(zod.string(), zod.number()).optional(),
       cashFlowQuality: zod.record(zod.string(), zod.number()).optional(),
       innovation: zod.record(zod.string(), zod.number()).optional(),
+      momentum: zod.record(zod.string(), zod.number()).optional(),
+      sentiment: zod.record(zod.string(), zod.number()).optional(),
       valuation: zod.record(zod.string(), zod.number()).optional(),
     }),
   ),

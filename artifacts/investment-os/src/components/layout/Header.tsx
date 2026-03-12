@@ -15,11 +15,11 @@ const STEP_LABELS: Record<string, string> = {
 export function Header() {
   const { triggerPipeline, isStarting, isRunning, status } = usePipelineManager();
 
-  const results = (status as any)?.results ?? [];
+  const results = status?.results ?? [];
   const lastTicker = results[results.length - 1];
-  const currentTicker = (status as any)?.currentTicker;
-  const currentStep = (status as any)?.currentStep;
-  const total = (status as any)?.totalTickers ?? 0;
+  const currentTicker = status?.currentTicker;
+  const currentStep = status?.currentStep;
+  const total = status?.totalTickers ?? 0;
   const processed = status?.tickersProcessed ?? 0;
 
   return (

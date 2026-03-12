@@ -48,15 +48,15 @@ router.get("/scores", async (req, res) => {
     });
 
     // ── 2. Apply minimum score filter if requested ──────────────────────────
-    const scoreField = engine === "rocket" ? "rocketScore"
+    const scoreField = (engine === "rocket" ? "rocketScore"
       : engine === "wave" ? "waveScore"
-      : "fortressScore";
+      : "fortressScore") as keyof typeof scoresTable.$inferSelect;
     const afterFilter = minScore != null
-      ? latestPerTicker.filter(s => ((s as any)[scoreField] ?? 0) >= minScore)
+      ? latestPerTicker.filter(s => ((s[scoreField] as number | null) ?? 0) >= minScore)
       : latestPerTicker;
 
     // ── 3. Sort by the selected engine score descending ─────────────────────
-    afterFilter.sort((a, b) => ((b as any)[scoreField] ?? 0) - ((a as any)[scoreField] ?? 0));
+    afterFilter.sort((a, b) => ((b[scoreField] as number | null) ?? 0) - ((a[scoreField] as number | null) ?? 0));
 
     // ── 4. Paginate ─────────────────────────────────────────────────────────
     const paginated = afterFilter.slice(offset, offset + limit);

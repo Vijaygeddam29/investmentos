@@ -1,5 +1,5 @@
 /**
- * Cross-sectional normalizer (Gap 8).
+ * Cross-sectional normalizer.
  *
  * Converts raw factor scores into percentile ranks within the current universe.
  * This ensures scores are relative — a company is scored vs peers, not vs fixed bounds.
@@ -56,7 +56,7 @@ export async function calibrateUniverseScores() {
   }
 
   // Build universe distribution for each score dimension
-  const distributions: Record<ScoreKey, number[]> = {} as any;
+  const distributions = Object.fromEntries(SCORE_KEYS.map(k => [k, [] as number[]])) as Record<ScoreKey, number[]>;
   for (const key of SCORE_KEYS) {
     distributions[key] = allScores
       .map(s => s[key])

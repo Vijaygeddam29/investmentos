@@ -10,7 +10,9 @@ import type { MetricSnapshotCashFlowQuality } from "./metricSnapshotCashFlowQual
 import type { MetricSnapshotFinancialStrength } from "./metricSnapshotFinancialStrength";
 import type { MetricSnapshotGrowth } from "./metricSnapshotGrowth";
 import type { MetricSnapshotInnovation } from "./metricSnapshotInnovation";
+import type { MetricSnapshotMomentum } from "./metricSnapshotMomentum";
 import type { MetricSnapshotProfitability } from "./metricSnapshotProfitability";
+import type { MetricSnapshotSentiment } from "./metricSnapshotSentiment";
 import type { MetricSnapshotValuation } from "./metricSnapshotValuation";
 
 export interface MetricSnapshot {
@@ -21,5 +23,7 @@ export interface MetricSnapshot {
   financialStrength?: MetricSnapshotFinancialStrength;
   cashFlowQuality?: MetricSnapshotCashFlowQuality;
   innovation?: MetricSnapshotInnovation;
+  momentum?: MetricSnapshotMomentum;
+  sentiment?: MetricSnapshotSentiment;
   valuation?: MetricSnapshotValuation;
 }

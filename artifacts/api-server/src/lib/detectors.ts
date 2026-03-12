@@ -24,9 +24,12 @@ export async function detectDrift(ticker: string) {
     "interestCoverage", "fcfToNetIncome",
   ] as const;
 
+  type FinancialMetricRow = typeof financialMetricsTable.$inferSelect;
   for (const field of fields) {
-    const vals = metrics.slice(1).map(m => (m as any)[field]).filter((v: any) => v != null);
-    if (vals.length) historicalAvgs[field] = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+    const vals = metrics.slice(1)
+      .map(m => m[field as keyof FinancialMetricRow] as number | null)
+      .filter((v): v is number => v != null);
+    if (vals.length) historicalAvgs[field] = vals.reduce((a, b) => a + b, 0) / vals.length;
   }
 
   const signals: Array<{
