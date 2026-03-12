@@ -26,6 +26,7 @@ interface HoldingAnalysis {
   purchaseDate: string | null;
   notes: string | null;
   currentPrice: number | null;
+  priceSource: "live" | "cache" | "none";
   costBasis: number;
   currentValue: number | null;
   unrealisedPnl: number | null;
@@ -572,7 +573,12 @@ export default function Portfolio() {
 
                       {/* Current price */}
                       <div className="text-right hidden lg:block">
-                        <p className="text-xs text-muted-foreground">Now</p>
+                        <div className="flex items-center justify-end gap-1">
+                          <p className="text-xs text-muted-foreground">Now</p>
+                          {h.priceSource === "live" && (
+                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 leading-none">LIVE</span>
+                          )}
+                        </div>
                         <p className="text-xs font-mono text-foreground">{h.currentPrice != null ? `$${h.currentPrice.toFixed(2)}` : "—"}</p>
                       </div>
 

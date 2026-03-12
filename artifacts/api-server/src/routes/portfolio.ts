@@ -8,6 +8,26 @@ import {
   priceHistoryTable,
 } from "@workspace/db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
+import YahooFinanceClass from "yahoo-finance2";
+
+const yf = new (YahooFinanceClass as any)({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+/** Fetch live current prices for tickers missing from the DB price cache. */
+async function fetchLivePrices(tickers: string[]): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  await Promise.allSettled(
+    tickers.map(async (ticker) => {
+      try {
+        const q = await yf.quote(ticker, {}, { validateResult: false });
+        const price = q?.regularMarketPrice ?? q?.postMarketPrice ?? null;
+        if (price != null && price > 0) result[ticker] = price;
+      } catch {
+        // best-effort — ignore failures
+      }
+    })
+  );
+  return result;
+}
 
 const router: IRouter = Router();
 
@@ -157,6 +177,18 @@ router.get("/portfolio", async (_req, res) => {
       if (latestPrice[p.ticker] === undefined) latestPrice[p.ticker] = p.close;
     }
 
+    // For tickers with no price in DB, fetch live quotes from Yahoo Finance
+    const tickersNeedingLivePrice = tickers.filter((t) => latestPrice[t] == null);
+    if (tickersNeedingLivePrice.length > 0) {
+      const livePrices = await fetchLivePrices(tickersNeedingLivePrice);
+      for (const [ticker, price] of Object.entries(livePrices)) {
+        latestPrice[ticker] = price;
+      }
+    }
+
+    // Track which tickers got live prices vs DB cache
+    const livePriceSet = new Set(tickersNeedingLivePrice.filter((t) => latestPrice[t] != null));
+
     // Build enriched holdings
     let totalCost = 0;
     let totalCurrentValue = 0;
@@ -166,6 +198,7 @@ router.get("/portfolio", async (_req, res) => {
       const company = companyMap[h.ticker] ?? null;
       const metrics = latestMetrics[h.ticker] ?? null;
       const price   = latestPrice[h.ticker] ?? null;
+      const priceSource: "live" | "cache" | "none" = price == null ? "none" : livePriceSet.has(h.ticker) ? "live" : "cache";
 
       const costBasis     = h.shares * h.purchasePrice;
       const currentValue  = price != null ? h.shares * price : null;
@@ -200,6 +233,7 @@ router.get("/portfolio", async (_req, res) => {
         purchaseDate:  h.purchaseDate,
         notes:         h.notes,
         currentPrice:  price,
+        priceSource,
         costBasis,
         currentValue,
         unrealisedPnl,
