@@ -1,0 +1,299 @@
+The best approach is to create one clean module that does both:
+
+Backtesting
+
+Live portfolio construction
+
+Weighting methods (equal / score / risk-adjusted)
+
+Below is a simple, elegant TypeScript module you can drop into your project (works with Node + your existing DB layer). It assumes you already store:
+
+factor_snapshots
+
+price_history
+
+This module is intentionally minimal and readable so Replit can extend it easily.
+
+Portfolio + Backtest Engine
+
+Create file:
+
+lib/portfolio/backtest_engine.ts
+import { db } from "../db";
+import { factorSnapshots, priceHistory } from "../db/schema";
+
+type Strategy = "fortress" | "rocket" | "wave";
+type WeightMethod = "equal" | "score" | "risk";
+
+interface BacktestConfig {
+  strategy: Strategy;
+  startDate: string;
+  endDate: string;
+  portfolioSize: number;
+  rebalanceDays: number;
+  weightMethod: WeightMethod;
+}
+
+interface Position {
+  ticker: string;
+  score: number;
+  weight: number;
+  volatility?: number;
+}
+
+interface PortfolioResult {
+  date: string;
+  value: number;
+}
+
+export class PortfolioEngine {
+
+  // --- Get score column based on strategy
+  private getScoreColumn(strategy: Strategy) {
+    if (strategy === "fortress") return "fortress_score";
+    if (strategy === "rocket") return "rocket_score";
+    return "wave_score";
+  }
+
+  // --- Fetch top stocks
+  async getTopStocks(date: string, strategy: Strategy, limit: number) {
+
+    const scoreCol = this.getScoreColumn(strategy);
+
+    const rows = await db.query.factorSnapshots.findMany({
+      where: (f: any, { eq }: any) => eq(f.date, date),
+      orderBy: (f: any, { desc }: any) => desc(f[scoreCol]),
+      limit
+    });
+
+    return rows.map((r: any) => ({
+      ticker: r.ticker,
+      score: r[scoreCol]
+    }));
+  }
+
+  // --- Compute volatility
+  async computeVolatility(ticker: string, endDate: string) {
+
+    const prices = await db.query.priceHistory.findMany({
+      where: (p: any, { eq }: any) => eq(p.ticker, ticker),
+      orderBy: (p: any, { desc }: any) => desc(p.date),
+      limit: 90
+    });
+
+    if (prices.length < 2) return 0.2;
+
+    const returns: number[] = [];
+
+    for (let i = 1; i < prices.length; i++) {
+      const r = (prices[i - 1].close - prices[i].close) / prices[i].close;
+      returns.push(r);
+    }
+
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+
+    const variance =
+      returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) /
+      returns.length;
+
+    return Math.sqrt(variance * 252);
+  }
+
+  // --- Apply weighting
+  async applyWeights(
+    positions: Position[],
+    method: WeightMethod,
+    date: string
+  ) {
+
+    if (method === "equal") {
+      const w = 1 / positions.length;
+      positions.forEach(p => (p.weight = w));
+      return positions;
+    }
+
+    if (method === "score") {
+
+      const total = positions.reduce((s, p) => s + p.score, 0);
+
+      positions.forEach(p => {
+        p.weight = p.score / total;
+      });
+
+      return positions;
+    }
+
+    if (method === "risk") {
+
+      for (const p of positions) {
+        p.volatility = await this.computeVolatility(p.ticker, date);
+      }
+
+      const raw = positions.map(p => p.score / (p.volatility || 0.2));
+      const sum = raw.reduce((a, b) => a + b, 0);
+
+      positions.forEach((p, i) => {
+        p.weight = raw[i] / sum;
+      });
+
+      return positions;
+    }
+
+    return positions;
+  }
+
+  // --- Portfolio builder (current snapshot)
+  async buildPortfolio(
+    date: string,
+    strategy: Strategy,
+    size: number,
+    weightMethod: WeightMethod
+  ) {
+
+    const stocks = await this.getTopStocks(date, strategy, size);
+
+    let positions: Position[] = stocks.map(s => ({
+      ticker: s.ticker,
+      score: s.score,
+      weight: 0
+    }));
+
+    positions = await this.applyWeights(positions, weightMethod, date);
+
+    return positions;
+  }
+
+  // --- Get price
+  async getPrice(ticker: string, date: string) {
+
+    const row = await db.query.priceHistory.findFirst({
+      where: (p: any, { and, eq }: any) =>
+        and(eq(p.ticker, ticker), eq(p.date, date))
+    });
+
+    return row?.close || 0;
+  }
+
+  // --- Backtest
+  async runBacktest(config: BacktestConfig) {
+
+    const results: PortfolioResult[] = [];
+
+    let portfolioValue = 1;
+
+    let currentDate = new Date(config.startDate);
+    const endDate = new Date(config.endDate);
+
+    while (currentDate <= endDate) {
+
+      const dateStr = currentDate.toISOString().slice(0, 10);
+
+      const portfolio = await this.buildPortfolio(
+        dateStr,
+        config.strategy,
+        config.portfolioSize,
+        config.weightMethod
+      );
+
+      let periodReturn = 0;
+
+      for (const p of portfolio) {
+
+        const priceToday = await this.getPrice(p.ticker, dateStr);
+
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(nextDate.getDate() + config.rebalanceDays);
+
+        const nextStr = nextDate.toISOString().slice(0, 10);
+
+        const priceNext = await this.getPrice(p.ticker, nextStr);
+
+        if (priceToday && priceNext) {
+          const r = (priceNext - priceToday) / priceToday;
+          periodReturn += r * p.weight;
+        }
+      }
+
+      portfolioValue *= 1 + periodReturn;
+
+      results.push({
+        date: dateStr,
+        value: portfolioValue
+      });
+
+      currentDate.setDate(currentDate.getDate() + config.rebalanceDays);
+    }
+
+    return results;
+  }
+}
+Example Usage
+
+Portfolio build (today):
+
+const engine = new PortfolioEngine();
+
+const portfolio = await engine.buildPortfolio(
+  "2025-01-01",
+  "rocket",
+  10,
+  "risk"
+);
+
+console.log(portfolio);
+
+Example output:
+
+NVDA 0.15
+MSFT 0.14
+AVGO 0.13
+LLY 0.11
+COST 0.10
+
+Companies like:
+
+NVIDIA
+
+Microsoft
+
+Broadcom
+
+Backtest:
+
+const results = await engine.runBacktest({
+  strategy: "rocket",
+  startDate: "2019-01-01",
+  endDate: "2024-01-01",
+  portfolioSize: 10,
+  rebalanceDays: 90,
+  weightMethod: "risk"
+});
+
+Output:
+
+[
+ {date:"2019-01-01", value:1.0},
+ {date:"2019-04-01", value:1.08},
+ {date:"2019-07-01", value:1.16}
+]
+Why This Module Is Elegant
+
+It is:
+
+✔ one file
+✔ simple logic
+✔ reusable
+✔ works for both backtest + portfolio
+
+And it supports:
+
+equal weighting
+score weighting
+risk weighting
+Next Small Upgrade (Very Powerful)
+
+Add sector diversification constraint:
+
+max 2 stocks per sector
+
+This prevents portfolios being dominated by sectors like Semiconductors when companies such as NVIDIA and Advanced Micro Devices score highly together.
