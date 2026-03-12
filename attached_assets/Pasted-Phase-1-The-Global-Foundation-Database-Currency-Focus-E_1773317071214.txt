@@ -1,0 +1,45 @@
+Phase 1: The Global Foundation (Database & Currency)
+Focus: Expanding the schema and handling international markets.
+
+Prompt for Replit:
+"I need to expand the Universe Manager and Schema to support global markets. Please:
+
+Extend the Companies Table: Add fields for sector, industry, market_cap, country, currency, and exchange.
+
+Multi-Market Support: Update the database to store the original currency (USD, GBP, INR). Add a currency field to the financial_metrics table.
+
+Normalization: Ensure the scoring engine pulls FX-normalized USD values for math, but the UI displays the original local currency.
+
+Universe Expansion: Populate the database with an initial 50 tickers across NYSE, NASDAQ, LSE, and Asian markets supported by FMP.
+
+API Update: Create GET /companies with filters for sector, industry, market_cap, and country."
+
+Phase 2: The Time Machine (History & Performance)
+Focus: Tracking scores over time and adding the "Worker" logic.
+
+Prompt for Replit:
+"I want to implement historical tracking and background processing:
+
+Historical Snapshots: Create a score_history table to store fortress_score, rocket_score, wave_score, and entry_score with a timestamp for every pipeline run.
+
+Batch Processing Logic: Implement a worker pattern for the pipeline. Instead of processing all tickers at once, create a queue system that processes tickers in batches of 50 to avoid timeouts.
+
+History Endpoint: Create GET /companies/:ticker/score-history to return the time-series data for these scores.
+
+Pagination: Add pagination to GET /scores and GET /companies to handle the larger universe efficiently."
+
+Phase 3: The Research Cockpit (Screener & Charts)
+Focus: Visualizing the data and building the search tools.
+
+Prompt for Replit:
+"Let's build the frontend research tools using Recharts:
+
+Company Detail Charts: On the company page, add three-year charts for Price, Fortress Score, and Rocket/Entry scores.
+
+Valuation Band Graph: Create a 'Price vs. Intrinsic Value' chart. Highlight 'BUY' (price < 75% DCF), 'HOLD' (75-110%), and 'SELL' (>110%) zones.
+
+The Screener Page: Build a new page with a table and multi-select filters for Country, Sector, and Minimum Scores (Fortress, Rocket, etc.).
+
+UI Detail: Ensure all navigation tabs turn dark when hovered over for better visual feedback.
+
+Sector Heatmap: Create a panel that aggregates and displays the average Fortress and Rocket scores by sector."
