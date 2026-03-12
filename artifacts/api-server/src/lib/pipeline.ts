@@ -18,6 +18,7 @@ import { computeEntryTimingScore } from "./entry-timing";
 import { detectDrift, detectOpportunities, detectRisks } from "./detectors";
 import { generateAiMemo } from "./ai-memo";
 import { calibrateUniverseScores } from "./normalizer";
+import { writeFactorSnapshot } from "./factor-warehouse";
 import { db } from "@workspace/db";
 import { companiesTable } from "@workspace/db/schema";
 
@@ -111,6 +112,14 @@ export async function runPipeline(tickers?: string[]) {
 
         currentStep = "entry-timing";
         const entryTimingScore = await computeEntryTimingScore(ticker);
+
+        // ── Factor Warehouse snapshot (additive, never blocks pipeline) ──────
+        currentStep = "warehouse";
+        try {
+          await writeFactorSnapshot(ticker, scores, entryTimingScore);
+        } catch (whErr: any) {
+          console.warn(`[Pipeline] Warehouse snapshot skipped for ${ticker}: ${whErr.message}`);
+        }
 
         currentStep = "detecting";
         await detectDrift(ticker);
