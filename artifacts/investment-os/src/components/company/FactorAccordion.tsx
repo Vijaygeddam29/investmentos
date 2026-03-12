@@ -1,6 +1,9 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MetricSnapshot, ScoreItem } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
+import { getMetricInfo } from "@/lib/metrics-glossary";
+import { HelpCircle } from "lucide-react";
 
 interface FactorAccordionProps {
   metrics: MetricSnapshot;
@@ -131,7 +134,7 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4 px-1">
-        120+ factors across 9 families. Each family contributes weighted sub-scores to the three engine scores.
+        120+ factors across 9 families. Hover any metric name to learn what it means.
       </p>
       <Accordion type="multiple" className="w-full space-y-2">
         {families.map((family) => {
@@ -164,16 +167,55 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
                   <p className="text-xs text-muted-foreground py-2 text-center">No data available for this period.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 pt-3 border-t border-border/50">
-                    {entries.map(([key, value]) => (
-                      <div key={key} className="flex justify-between items-center py-1 group border-b border-border/20 last:border-0">
-                        <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%]">
-                          {formatKey(key)}
-                        </span>
-                        <span className="text-[11px] font-mono font-medium text-foreground">
-                          {formatValue(key, value)}
-                        </span>
-                      </div>
-                    ))}
+                    {entries.map(([key, value]) => {
+                      const info = getMetricInfo(key);
+                      return (
+                        <div key={key} className="flex justify-between items-center py-1 group border-b border-border/20 last:border-0">
+                          {info ? (
+                            <Tooltip delayDuration={200}>
+                              <TooltipTrigger asChild>
+                                <span className="flex items-center gap-1 text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%] cursor-help underline decoration-dotted underline-offset-2">
+                                  {formatKey(key)}
+                                  <HelpCircle className="w-2.5 h-2.5 shrink-0 opacity-50" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="left"
+                                align="start"
+                                className="max-w-[280px] p-0 bg-card border border-border shadow-xl rounded-xl overflow-hidden z-[9999]"
+                              >
+                                <div className="px-3.5 py-2.5 border-b border-border bg-secondary/50">
+                                  <p className="text-xs font-semibold text-foreground">{info.label}</p>
+                                  {info.category && (
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">{info.category}</p>
+                                  )}
+                                </div>
+                                <div className="px-3.5 py-2.5">
+                                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    {info.explanation}
+                                  </p>
+                                  <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">
+                                      Target
+                                    </span>
+                                    <span className="text-[10px] text-emerald-300/80 leading-snug">
+                                      {info.good}
+                                    </span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%]">
+                              {formatKey(key)}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-mono font-medium text-foreground">
+                            {formatValue(key, value)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </AccordionContent>

@@ -2,6 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, TrendingUp, AlertCircle, ShieldAlert, Target, BarChart2 } from "lucide-react";
 import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
@@ -323,12 +324,54 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   );
 }
 
+const SCORE_DESCRIPTIONS: Record<string, { title: string; explanation: string; good: string }> = {
+  fortress: {
+    title: "Fortress Score",
+    explanation: "Measures business quality and durability: profitability (30%), capital efficiency (20%), financial strength (20%), and cash flow quality (15%). Named after Warren Buffett's 'economic moat' concept. A high Fortress score means the business can sustain high returns and withstand downturns.",
+    good: "> 0.7 = exceptional quality. 0.5–0.7 = solid business. < 0.5 = quality concerns.",
+  },
+  rocket: {
+    title: "Rocket Score",
+    explanation: "Identifies high-growth compounders: weights growth trajectory (35%), innovation signals (20%), profitability trends (20%), and sentiment (15%). Finds companies on a steep growth curve with sustainable unit economics — the kind that 10× in 5 years.",
+    good: "> 0.7 = high-conviction growth. 0.5–0.7 = moderate growth. < 0.5 = limited growth momentum.",
+  },
+  wave: {
+    title: "Wave Score",
+    explanation: "Captures medium-term price momentum and technical trend strength: 12-month price momentum (30%), trend signals (30%), momentum quality (20%), and valuation reasonableness (20%). Rides 3–12 month price waves aligned with fundamental improvement.",
+    good: "> 0.7 = strong trend. 0.5–0.7 = moderate. < 0.5 = weak or deteriorating momentum.",
+  },
+};
+
 function ScorePanel({ label, score, type }: { label: string; score?: number; type: "fortress" | "rocket" | "wave" | "neutral" }) {
-  return (
-    <div className="bg-secondary/50 rounded-lg p-3 border border-border">
+  const desc = SCORE_DESCRIPTIONS[type];
+  const inner = (
+    <div className="bg-secondary/50 rounded-lg p-3 border border-border cursor-help">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{label}</div>
       <ScoreBadge score={score} type={type} className="text-lg px-3 py-1" />
     </div>
+  );
+
+  if (!desc) return inner;
+
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{inner}</TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="max-w-[260px] p-0 bg-card border border-border shadow-xl rounded-xl overflow-hidden z-[9999]"
+      >
+        <div className="px-3.5 py-2.5 border-b border-border bg-secondary/50">
+          <p className="text-xs font-semibold text-foreground">{desc.title}</p>
+        </div>
+        <div className="px-3.5 py-2.5">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{desc.explanation}</p>
+          <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">Target</span>
+            <span className="text-[10px] text-emerald-300/80 leading-snug">{desc.good}</span>
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
