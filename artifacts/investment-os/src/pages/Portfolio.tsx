@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
+import * as XLSX from "xlsx";
 import {
   Upload, Plus, Trash2, RefreshCw, TrendingUp, TrendingDown, Minus,
   AlertTriangle, CheckCircle2, XCircle, ChevronDown, FileText, X
@@ -147,27 +148,52 @@ function ActionBadge({ action }: { action: Action }) {
   );
 }
 
+// ─── Shared row parsing ────────────────────────────────────────────────────────
+type ParsedRow = { ticker: string; shares: number; purchasePrice: number; purchaseDate?: string };
+
+function findColIdx(headers: string[], patterns: string[]): number {
+  return headers.findIndex((h) => patterns.some((p) => h.includes(p) || h === p));
+}
+
+function rowsFromObjects(objects: Record<string, unknown>[]): ParsedRow[] {
+  if (!objects.length) return [];
+  const keys = Object.keys(objects[0]).map((k) => k.toLowerCase().trim());
+  const tickerIdx = findColIdx(keys, ["ticker", "symbol", "stock", "code"]);
+  const sharesIdx = findColIdx(keys, ["share", "qty", "quantity", "units", "amount"]);
+  const priceIdx  = findColIdx(keys, ["price", "cost", "purchase_price", "buyprice", "avg price", "avgprice", "average"]);
+  const dateIdx   = findColIdx(keys, ["date", "purchase date", "buy date"]);
+  if (tickerIdx < 0 || sharesIdx < 0 || priceIdx < 0) return [];
+  const origKeys = Object.keys(objects[0]);
+  return objects.map((obj) => {
+    const vals = origKeys.map((k) => String(obj[k] ?? "").trim());
+    return {
+      ticker:        vals[tickerIdx]?.toUpperCase() ?? "",
+      shares:        parseFloat(vals[sharesIdx] ?? "0"),
+      purchasePrice: parseFloat(vals[priceIdx] ?? "0"),
+      purchaseDate:  dateIdx >= 0 ? vals[dateIdx] : undefined,
+    };
+  }).filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0);
+}
+
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
-function parseCSV(text: string): Array<{ ticker: string; shares: number; purchasePrice: number; purchaseDate?: string }> {
+function parseCSV(text: string): ParsedRow[] {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return [];
   const headers = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/['"]/g, ""));
-  const tickerIdx        = headers.findIndex((h) => h.includes("ticker") || h === "symbol" || h === "stock");
-  const sharesIdx        = headers.findIndex((h) => h.includes("share") || h.includes("qty") || h.includes("quantity") || h === "units");
-  const priceIdx         = headers.findIndex((h) => h.includes("price") || h.includes("cost") || h.includes("purchase_price") || h.includes("buyprice"));
-  const dateIdx          = headers.findIndex((h) => h.includes("date"));
-
-  if (tickerIdx < 0 || sharesIdx < 0 || priceIdx < 0) return [];
-
-  return lines.slice(1).map((line) => {
+  const objects: Record<string, unknown>[] = lines.slice(1).map((line) => {
     const cols = line.split(",").map((c) => c.trim().replace(/['"]/g, ""));
-    return {
-      ticker:        cols[tickerIdx] ?? "",
-      shares:        parseFloat(cols[sharesIdx] ?? "0"),
-      purchasePrice: parseFloat(cols[priceIdx] ?? "0"),
-      purchaseDate:  dateIdx >= 0 ? cols[dateIdx] : undefined,
-    };
-  }).filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0);
+    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? ""]));
+  });
+  return rowsFromObjects(objects);
+}
+
+// ─── Excel parsing ────────────────────────────────────────────────────────────
+function parseExcel(buffer: ArrayBuffer): ParsedRow[] {
+  const workbook   = XLSX.read(buffer, { type: "array", cellDates: true });
+  const sheetName  = workbook.SheetNames[0];
+  const sheet      = workbook.Sheets[sheetName];
+  const objects    = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  return rowsFromObjects(objects);
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -216,23 +242,44 @@ export default function Portfolio() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
   });
 
-  // ── CSV handling ─────────────────────────────────────────────────────────────
-  const handleCSVText = useCallback((text: string) => {
-    setCsvError(null);
-    const rows = parseCSV(text);
+  // ── File handling — supports CSV, TSV and Excel (.xlsx / .xls) ───────────────
+  const handleRows = useCallback((rows: ParsedRow[]) => {
     if (!rows.length) {
-      setCsvError("Could not parse CSV. Expected columns: Ticker, Shares, PurchasePrice (and optional Date).");
+      setCsvError(
+        "Could not read any holdings from that file. Make sure it has columns named Ticker (or Symbol), Shares (or Qty), and Price (or PurchasePrice)."
+      );
       return;
     }
+    setCsvError(null);
     uploadPortfolio.mutate(rows);
   }, [uploadPortfolio]);
+
+  const isExcel = (name: string) => /\.(xlsx|xls|xlsm)$/i.test(name);
+
+  const handleFile = useCallback((file: File) => {
+    setCsvError(null);
+    if (isExcel(file.name)) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const buffer = ev.target?.result as ArrayBuffer;
+          handleRows(parseExcel(buffer));
+        } catch {
+          setCsvError("Could not read the Excel file. Please check the format and try again.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => handleRows(parseCSV(ev.target?.result as string));
+      reader.readAsText(file);
+    }
+  }, [handleRows]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => handleCSVText(ev.target?.result as string);
-    reader.readAsText(file);
+    handleFile(file);
     e.target.value = "";
   };
 
@@ -241,10 +288,8 @@ export default function Portfolio() {
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => handleCSVText(ev.target?.result as string);
-    reader.readAsText(file);
-  }, [handleCSVText]);
+    handleFile(file);
+  }, [handleFile]);
 
   // ── Submit manual form ────────────────────────────────────────────────────────
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -353,12 +398,12 @@ export default function Portfolio() {
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFileChange} />
+          <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls,.xlsm" className="hidden" onChange={handleFileChange} />
           <Upload className="w-7 h-7 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">Drop a CSV file here, or click to browse</p>
+          <p className="text-sm font-medium text-foreground">Drop an Excel or CSV file here, or click to browse</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Columns needed: <span className="font-mono text-primary">Ticker, Shares, PurchasePrice</span> — Date is optional.
-            Importing replaces your existing portfolio.
+            Supports <span className="font-mono text-primary">.xlsx</span>, <span className="font-mono text-primary">.xls</span>, and <span className="font-mono text-primary">.csv</span> files.
+            Columns needed: <span className="font-mono text-primary">Ticker</span> (or Symbol), <span className="font-mono text-primary">Shares</span> (or Qty), <span className="font-mono text-primary">Price</span> — Date is optional. Importing replaces your existing portfolio.
           </p>
           {csvError && <p className="text-xs text-destructive mt-2">{csvError}</p>}
           {uploadPortfolio.isPending && <p className="text-xs text-muted-foreground mt-2 animate-pulse">Uploading & analysing…</p>}
