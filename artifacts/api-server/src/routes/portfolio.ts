@@ -326,31 +326,57 @@ function cleanTicker(raw: string): string {
 }
 
 /** Normalize any date string to YYYY-MM-DD.
- *  Handles: DD/MM/YYYY [HH:MM:SS], MM/DD/YYYY, YYYY-MM-DD, ISO strings.
+ *  Always assumes European day-first ordering (DD/MM or DD-MM) for ambiguous dates,
+ *  since this platform is used by UK-based investors.
  *  Returns null if it can't parse. */
 function normalizeDate(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const s = String(raw).trim();
   if (!s) return null;
 
-  // Already ISO YYYY-MM-DD
+  // Already ISO YYYY-MM-DD (or ISO datetime)
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
 
-  // DD/MM/YYYY or DD/MM/YYYY HH:MM:SS  (European — day first)
-  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (dmyMatch) {
-    const [, d, m, y] = dmyMatch;
-    // Heuristic: if day part > 12, it must be DD/MM/YYYY
-    // If both ≤ 12, assume DD/MM/YYYY (European) since user is likely UK-based
-    const dd = d.padStart(2, "0");
-    const mm = m.padStart(2, "0");
-    return `${y}-${mm}-${dd}`;
+  // DD/MM/YYYY or DD/MM/YYYY HH:MM:SS (slashes, 4-digit year)
+  const slashFull = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashFull) {
+    const [, d, m, y] = slashFull;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
 
-  // Try native Date parse as last resort
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  // DD/MM/YY (slashes, 2-digit year)
+  const slashShort = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (slashShort) {
+    const [, d, m, y] = slashShort;
+    const year = parseInt(y) < 50 ? `20${y}` : `19${y}`;
+    return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
 
+  // DD-MM-YYYY (dashes, 4-digit year) — must come before native Date parse
+  // because new Date("04-03-2026") gives April 3 (American), not March 4
+  const dashFull = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (dashFull) {
+    const [, d, m, y] = dashFull;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // DD-MM-YY (dashes, 2-digit year)
+  const dashShort = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/);
+  if (dashShort) {
+    const [, d, m, y] = dashShort;
+    const year = parseInt(y) < 50 ? `20${y}` : `19${y}`;
+    return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // M/D/YYYY or D/M/YYYY with single-digit components — last resort slash fallback
+  const slashLoose = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashLoose) {
+    const [, d, m, y] = slashLoose;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // Avoid native Date parse — it treats "MM-DD-YYYY" as American and
+  // "DD Mon YYYY" strings inconsistently. Return null for unrecognised formats.
   return null;
 }
 

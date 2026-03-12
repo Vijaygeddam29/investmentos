@@ -160,18 +160,29 @@ function findColIdx(headers: string[], patterns: string[]): number {
 function rowsFromObjects(objects: Record<string, unknown>[]): ParsedRow[] {
   if (!objects.length) return [];
   const keys = Object.keys(objects[0]).map((k) => k.toLowerCase().trim());
-  const tickerIdx = findColIdx(keys, ["ticker", "symbol", "stock", "code"]);
-  const sharesIdx = findColIdx(keys, ["share", "qty", "quantity", "units", "amount"]);
-  const priceIdx  = findColIdx(keys, ["price", "cost", "purchase_price", "buyprice", "avg price", "avgprice", "average"]);
-  const dateIdx   = findColIdx(keys, ["date", "purchase date", "buy date"]);
+  const tickerIdx   = findColIdx(keys, ["ticker", "symbol", "stock", "code"]);
+  const sharesIdx   = findColIdx(keys, ["share", "qty", "quantity", "units", "amount"]);
+  const priceIdx    = findColIdx(keys, ["price", "cost", "purchase_price", "buyprice", "avg price", "avgprice", "average"]);
+  const dateIdx     = findColIdx(keys, ["date", "purchase date", "buy date"]);
+  const currencyIdx = findColIdx(keys, ["currency", "curr", "ccy", "fx"]);
   if (tickerIdx < 0 || sharesIdx < 0 || priceIdx < 0) return [];
   const origKeys = Object.keys(objects[0]);
   return objects.map((obj) => {
     const vals = origKeys.map((k) => String(obj[k] ?? "").trim());
+    let price = parseFloat(vals[priceIdx] ?? "0");
+
+    // GBX = British pence — divide by 100 to get GBP
+    if (currencyIdx >= 0) {
+      const ccy = (vals[currencyIdx] ?? "").toUpperCase().trim();
+      if (ccy === "GBX" || ccy === "GBP PENCE" || ccy === "PENCE") {
+        price = price / 100;
+      }
+    }
+
     return {
       ticker:        vals[tickerIdx]?.toUpperCase() ?? "",
       shares:        parseFloat(vals[sharesIdx] ?? "0"),
-      purchasePrice: parseFloat(vals[priceIdx] ?? "0"),
+      purchasePrice: price,
       purchaseDate:  dateIdx >= 0 ? vals[dateIdx] : undefined,
     };
   }).filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0);
