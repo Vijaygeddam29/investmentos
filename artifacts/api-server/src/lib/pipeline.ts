@@ -54,21 +54,8 @@ export function getPipelineStatus() {
   };
 }
 
-// ─── AI Memo Threshold (Gap 9: cost control) ────────────────────────────────
-// Only generate AI memos for tickers with meaningful signal
-const AI_MEMO_MIN_SCORE = 0.45;
-
-function shouldGenerateMemo(scores: {
-  fortressScore: number;
-  rocketScore: number;
-  waveScore: number;
-}): boolean {
-  return (
-    scores.fortressScore >= AI_MEMO_MIN_SCORE ||
-    scores.rocketScore >= AI_MEMO_MIN_SCORE ||
-    scores.waveScore >= AI_MEMO_MIN_SCORE
-  );
-}
+// AI memos are generated for every ticker on each pipeline run.
+// Errors are caught and logged — they never abort the per-ticker loop.
 
 // ─── Pipeline ────────────────────────────────────────────────────────────────
 
@@ -127,14 +114,10 @@ export async function runPipeline(tickers?: string[]) {
         await detectRisks(ticker);  // aggregates signals → risk_alerts table
 
         currentStep = "ai-memo";
-        if (shouldGenerateMemo(scores)) {
-          try {
-            await generateAiMemo(ticker);
-          } catch (aiErr: any) {
-            console.warn(`[Pipeline] AI memo skipped for ${ticker}: ${aiErr.message}`);
-          }
-        } else {
-          console.log(`[Pipeline] Skipping AI memo for ${ticker} (scores below threshold)`);
+        try {
+          await generateAiMemo(ticker);
+        } catch (aiErr: any) {
+          console.warn(`[Pipeline] AI memo failed for ${ticker}: ${aiErr.message}`);
         }
 
         pipelineResults.push({
