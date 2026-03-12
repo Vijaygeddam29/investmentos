@@ -1,0 +1,252 @@
+One Important Adjustment (Very Important)
+
+Your categories are correct, but you should cap exposure per sector.
+
+Why?
+
+Growth universes easily become 80% tech, which creates:
+
+false factor signals
+high correlation
+fragile portfolios
+
+Recommended distribution:
+
+Category	Target
+US Growth	60
+Healthcare Innovation	25
+AI / Semiconductor Ecosystem	20
+Global Compounders	40
+Small-Cap Disruptors	30
+Diversifiers (industrial / niche)	25
+
+Total:
+
+~200 tickers
+2️⃣ Correct Metadata Structure for seed-tickers.ts
+
+Each ticker should look like this:
+
+{
+  ticker: "CRWD",
+  name: "CrowdStrike Holdings",
+  sector: "Technology",
+  industry: "Cybersecurity",
+  country: "USA",
+  exchange: "NASDAQ",
+  currency: "USD"
+}
+
+For example:
+
+CrowdStrike
+
+Snowflake
+
+Datadog
+
+This metadata allows your screener filters to work properly.
+
+3️⃣ US Mid-Cap Growth (Strong Category)
+
+Your picks are excellent. I’d include:
+
+Cybersecurity
+
+CrowdStrike
+
+Palo Alto Networks
+
+Zscaler
+
+SentinelOne
+
+Data / Cloud
+
+Snowflake
+
+Datadog
+
+MongoDB
+
+Cloudflare
+
+Platforms
+
+Trade Desk
+
+HubSpot
+
+Shopify
+
+Fintech
+
+Block
+
+Adyen
+
+Nu Holdings
+
+Consumer Growth
+
+Celsius Holdings
+
+DraftKings
+
+4️⃣ Healthcare Innovation (Very Important)
+
+Healthcare has produced many historical 10× stocks.
+
+Add:
+
+Eli Lilly
+
+Novo Nordisk
+
+Intuitive Surgical
+
+DexCom
+
+Vertex Pharmaceuticals
+
+Alnylam Pharmaceuticals
+
+BioMarin Pharmaceutical
+
+These companies often score well on:
+
+gross margins
+patent protection
+pricing power
+5️⃣ AI / Semiconductor Ecosystem
+
+Good selections.
+
+Add:
+
+Advanced Micro Devices
+
+ASML
+
+Applied Materials
+
+Lam Research
+
+KLA Corporation
+
+Arm Holdings
+
+Synopsys
+
+Cadence Design Systems
+
+AI software layer:
+
+Palantir Technologies
+
+C3.ai
+
+6️⃣ Global Compounders
+
+These provide quality stability.
+
+UK
+
+RELX
+
+London Stock Exchange Group
+
+Halma
+
+Rightmove
+
+Europe
+
+SAP
+
+Hermès
+
+LVMH
+
+Ferrari
+
+Asia
+
+Taiwan Semiconductor Manufacturing Company
+
+Samsung Electronics
+
+Sea Limited
+
+Meituan
+
+7️⃣ Small-Cap Disruptors
+
+This is where future 10× winners originate.
+
+Add:
+
+GitLab
+
+Samsara
+
+Monday.com
+
+AppLovin
+
+Sprinklr
+
+CRISPR Therapeutics
+
+Exact Sciences
+
+Dutch Bros
+
+Warby Parker
+
+8️⃣ Universe Page Feature (Very Good Idea)
+
+Add this small widget on the Universe page:
+
+Universe Size: 204 stocks
+Markets: US / UK / EU / Asia
+Last Seeded: 2026-03-12
+
+Filters:
+
+Country
+Sector
+Market Cap
+Strategy Score
+9️⃣ One More Important Feature
+
+Add market cap classification.
+
+This improves factor analysis.
+
+mega_cap
+large_cap
+mid_cap
+small_cap
+
+Example rule:
+
+Mega > $200B
+Large $50B–$200B
+Mid $10B–$50B
+Small < $10B
+🔟 Final Result
+
+Your universe becomes:
+
+200 growth-biased companies
+multi-region
+multi-sector
+
+Which dramatically improves the ability of your system to discover future compounders like
+
+NVIDIA
+
+Tesla
+
+before they become mega-caps.

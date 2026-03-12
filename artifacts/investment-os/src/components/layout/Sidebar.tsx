@@ -8,6 +8,7 @@ import {
   Filter,
   LayoutGrid,
   Briefcase,
+  Wand2,
   Settings
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
@@ -33,7 +34,8 @@ const navGroups = [
   {
     label: "My Portfolio",
     items: [
-      { icon: Briefcase, label: "Portfolio", href: "/portfolio" },
+      { icon: Briefcase, label: "Portfolio",         href: "/portfolio" },
+      { icon: Wand2,     label: "Portfolio Builder", href: "/portfolio/builder" },
     ],
   },
 ];

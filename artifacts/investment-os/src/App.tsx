@@ -10,6 +10,7 @@ import Universe from "@/pages/Universe";
 import Screener from "@/pages/Screener";
 import SectorHeatmap from "@/pages/SectorHeatmap";
 import Portfolio from "@/pages/Portfolio";
+import PortfolioBuilder from "@/pages/PortfolioBuilder";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/screener" component={Screener} />
       <Route path="/sector-heatmap" component={SectorHeatmap} />
       <Route path="/portfolio" component={Portfolio} />
+      <Route path="/portfolio/builder" component={PortfolioBuilder} />
       <Route component={NotFound} />
     </Switch>
   );

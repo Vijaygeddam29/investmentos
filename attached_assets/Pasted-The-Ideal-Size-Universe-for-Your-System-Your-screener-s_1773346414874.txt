@@ -1,0 +1,169 @@
+The Ideal Size Universe for Your System
+
+Your screener should eventually hold roughly:
+
+Category	Number
+Large quality compounders	50
+Mid-cap growth	200
+Small-cap disruptors	150
+Emerging market leaders	100
+
+Total target:
+
+400–500 tickers
+
+Your factor engine becomes much more powerful with that universe.
+
+2️⃣ The Most Important Category: Mid-Cap Growth
+
+This is where most 10× winners start.
+
+Market cap range:
+
+$2B – $30B
+
+Examples to add:
+
+Company	Why
+CrowdStrike	cybersecurity leader
+Snowflake	data cloud platform
+Datadog	cloud monitoring
+Trade Desk	advertising platform
+MercadoLibre	Latin American ecommerce
+
+These are classic scalable software / platform businesses.
+
+3️⃣ High-Growth Healthcare
+
+Healthcare produces many 10× outcomes due to innovation.
+
+Add companies like:
+
+Eli Lilly
+
+Intuitive Surgical
+
+Vertex Pharmaceuticals
+
+DexCom
+
+Look for:
+
+revenue growth > 20%
+high gross margins
+patent moat
+4️⃣ AI & Semiconductor Ecosystem
+
+The AI stack has multiple winners, not just chip makers.
+
+Add:
+
+Advanced Micro Devices
+
+Broadcom
+
+ASML
+
+Arm Holdings
+
+These benefit from structural AI demand.
+
+5️⃣ Small-Cap Disruptors
+
+Small caps create the largest multiples.
+
+Look for:
+
+$500M – $5B market cap
+
+Examples:
+
+Samsara
+
+GitLab
+
+Celsius Holdings
+
+Small caps have higher failure rates, but they are necessary for finding 10× stocks.
+
+6️⃣ Global Leaders Outside the US
+
+Many compounders come from outside the US.
+
+Examples:
+
+UK
+
+RELX
+
+London Stock Exchange Group
+
+India
+
+Reliance Industries
+
+Tata Consultancy Services
+
+Asia
+
+Taiwan Semiconductor Manufacturing Company
+
+Samsung Electronics
+
+7️⃣ Avoid These if Hunting 10×
+
+These almost never produce 10× returns:
+
+utilities
+telecom
+traditional banks
+slow industrial conglomerates
+
+For example:
+
+AT&T
+
+Verizon Communications
+
+They are income stocks, not exponential growth stocks.
+
+8️⃣ The Best Starter Universe for Your System
+
+Tell your system to load:
+
+NASDAQ 100
+S&P 500
+Top 200 mid-cap growth
+Top 100 global leaders
+
+This gives:
+
+~500 companies
+
+Perfect for factor ranking.
+
+9️⃣ Key Filters for Finding 10×
+
+Your screener should prioritize:
+
+Revenue growth > 20%
+Gross margin > 50%
+ROIC > 15%
+Positive operating leverage
+Founder leadership
+
+Those signals appear repeatedly in big winners like Tesla and NVIDIA.
+
+🔟 My Strong Recommendation
+
+Expand your universe to:
+
+300–500 tickers
+
+But focus on:
+
+growth sectors
+mid-caps
+global innovators
+
+That’s where future 10× companies emerge.

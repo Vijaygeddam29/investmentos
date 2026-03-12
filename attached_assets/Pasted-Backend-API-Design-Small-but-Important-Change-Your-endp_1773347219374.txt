@@ -1,0 +1,200 @@
+Backend API Design (Small but Important Change)
+
+Your endpoint:
+
+GET /api/portfolio/builder
+
+is correct, but add two optional parameters now so you don’t need a breaking change later.
+
+Recommended API:
+
+GET /api/portfolio/builder
+
+Query params:
+
+strategy=rocket|fortress|wave
+size=10
+weightMethod=equal|score|risk
+sectorCap=2
+country=all|usa|uk|india
+marketCap=all|large|mid|small
+
+Why?
+
+This allows the Portfolio Builder to act like a mini institutional portfolio constructor.
+
+Example request:
+
+/api/portfolio/builder?strategy=rocket&size=15&weightMethod=risk&country=usa
+2️⃣ Ranking Logic (Critical Detail)
+
+Your spec says:
+
+rank stocks by the chosen strategy score
+
+Correct — but add a minimum liquidity filter.
+
+Many small caps will otherwise dominate.
+
+Add this rule:
+
+avg_daily_volume > $2M
+market_cap > $500M
+
+Otherwise the portfolio may include extremely illiquid names.
+
+Example companies that pass easily:
+
+CrowdStrike
+
+MongoDB
+
+Datadog
+
+3️⃣ Sector Cap Algorithm (Needs One Extra Step)
+
+Your current logic:
+
+max 2 stocks per sector
+
+But if the top 10 list has many tech companies, you could end up with too few selections.
+
+Better algorithm:
+
+1. Rank all stocks
+2. Iterate through list
+3. Add stock if sector_count < sectorCap
+4. Continue until portfolio_size reached
+
+Example:
+
+sectorCap = 2
+portfolioSize = 10
+
+Final portfolio might look like:
+
+Tech: 2
+Healthcare: 2
+Consumer: 2
+Financial: 2
+Industrial: 2
+4️⃣ Risk-Adjusted Weighting (Your Best Feature)
+
+Your volatility logic is good, but use this formula:
+
+weight = score / volatility
+
+Then normalize.
+
+Example:
+
+Stock	Score	Volatility	Raw Weight
+NVDA	0.92	0.40	2.3
+MSFT	0.85	0.25	3.4
+
+Normalized weights reduce risk concentration.
+
+Example companies:
+
+NVIDIA
+
+Microsoft
+
+5️⃣ Portfolio Builder UI (Simple but Powerful)
+
+Your table is perfect. I would add one extra visual indicator.
+
+Final table:
+
+Rank	Ticker	Company	Sector	Score	Weight	Engines
+
+Example:
+
+NVDA   NVIDIA        Tech        0.93   14%
+LLY    Eli Lilly     Healthcare  0.90   13%
+MELI   MercadoLibre  Consumer    0.88   11%
+
+Companies like:
+
+Eli Lilly
+
+MercadoLibre
+
+6️⃣ “vs My Portfolio” Section (Great Idea)
+
+This is extremely valuable.
+
+Show:
+
+Overlaps
+You already own:
+NVDA
+MSFT
+Missing High-Ranked
+Top suggestions not owned:
+MELI
+CRWD
+LLY
+
+Companies like:
+
+CrowdStrike
+
+MercadoLibre
+
+7️⃣ Pipeline Dependency (Good Handling)
+
+Your fallback message is excellent:
+
+"No factor snapshots for today.
+Run the scoring pipeline first."
+
+Also display:
+
+Last snapshot date: 2026-03-11
+8️⃣ Backtest Engine Fix (Important)
+
+Your change from relational API to Drizzle is correct.
+
+Example query pattern:
+
+const latest = await db
+  .select()
+  .from(factorSnapshots)
+  .orderBy(desc(factorSnapshots.date))
+  .limit(1)
+9️⃣ Navigation Placement
+
+Good choice:
+
+Portfolio
+Portfolio Builder
+Screener
+
+This follows the mental flow:
+
+What I own
+↓
+What I should own
+↓
+What exists in market
+🔟 Phase 1 Outcome
+
+Once this is implemented your system will have:
+
+Universe
+Factor engine
+Portfolio builder
+Portfolio comparison
+
+Which already resembles a mini institutional research platform.
+
+🚀 One Small Feature That Will Make This 10× Better
+
+Add a Portfolio Score.
+
+Example:
+
+Fortress Score: 72
+Rocket Score: 84
+Wave Score: 65

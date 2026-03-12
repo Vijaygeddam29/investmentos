@@ -77,6 +77,21 @@ artifacts-monorepo/
 7. Momentum (RSI, moving averages, volume trends)
 8. Valuation (P/E, EV/EBITDA, FCF yield, PEG)
 
+### Universe (175 Tickers)
+- US large-cap (NASDAQ/NYSE): AAPL, MSFT, NVDA, GOOGL/GOOG + 40 others
+- US mid-cap growth: cybersecurity (CRWD, PANW, ZS), cloud/SaaS (SNOW, DDOG, NET, NOW, HUBS), fintech (SQ, NU, MELI), AI/semis (ARM, ASML, PLTR, TSM), biotech (LLY, ISRG, VRTX, REGN)
+- UK LSE quality compounders: RELX.L, LSEG.L, DPLM.L, HLMA.L, RMV.L, AUTO.L, EXPN.L, BA.L, RR.L + originals
+- European ADRs: SAP, RACE, LVMUY, HESAY, LRLCY
+- India NSE: 10 large-cap + 8 mid-cap growth (TITAN, DIVISLAB, PIDILITIND, etc.)
+- marketCap stored in **billions** in factor_snapshots (e.g. 283.7 = $283.7B)
+
+### Portfolio Builder (`GET /api/portfolio/builder`)
+Constructs an optimal N-stock portfolio from the universe:
+- Parameters: `strategy` (fortress/rocket/wave), `size`, `weightMethod` (equal/score/risk), `sectorCap`, `country`, `marketCap`
+- Iterative sector-cap fill prevents over-concentration
+- Returns weighted holdings, per-engine scores, portfolio-level aggregate scores, universe metadata
+- Frontend page: `/portfolio/builder` — control panel + score summary cards + ranked results table
+
 ### Signal Detection
 - **Drift Signals**: Detects ROIC deterioration, margin compression, debt increases, FCF decline
 - **Opportunity Alerts**: Flags when companies cross engine thresholds (Fortress >0.7, Rocket >0.65, Wave >0.6)
