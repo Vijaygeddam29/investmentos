@@ -34,6 +34,10 @@ function isQuotaExhausted(): boolean {
   return true;
 }
 
+export function fmpQuotaExhausted(): boolean {
+  return isQuotaExhausted();
+}
+
 class FmpRateLimiter {
   private queue: Array<() => Promise<void>> = [];
   private running = 0;

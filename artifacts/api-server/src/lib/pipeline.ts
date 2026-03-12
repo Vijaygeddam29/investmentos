@@ -13,6 +13,8 @@
  */
 
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
+import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices } from "./yf-harvester";
+import { fmpQuotaExhausted } from "./fmp-client";
 import { calculateAllScores } from "./scoring-engines";
 import { computeEntryTimingScore } from "./entry-timing";
 import { detectDrift, detectOpportunities, detectRisks } from "./detectors";
@@ -107,11 +109,28 @@ export async function runPipeline(tickers?: string[]) {
 
         currentStep = "harvesting";
         if (await needsFmpFetch(ticker)) {
-          await fetchAndStoreCompany(ticker);
-          await fetchAndStoreMetrics(ticker);
-          await fetchAndStorePrices(ticker);
+          if (!fmpQuotaExhausted()) {
+            try {
+              await fetchAndStoreCompany(ticker);
+              await fetchAndStoreMetrics(ticker);
+              await fetchAndStorePrices(ticker);
+              console.log(`[Pipeline] ${ticker} — harvested via FMP`);
+            } catch (fmpErr: any) {
+              console.warn(`[Pipeline] ${ticker} — FMP failed (${fmpErr.message}), trying Yahoo Finance...`);
+              await yfFetchAndStoreCompany(ticker);
+              await yfFetchAndStoreMetrics(ticker);
+              await yfFetchAndStorePrices(ticker);
+              console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
+            }
+          } else {
+            console.log(`[Pipeline] ${ticker} — FMP quota exhausted, using Yahoo Finance...`);
+            await yfFetchAndStoreCompany(ticker);
+            await yfFetchAndStoreMetrics(ticker);
+            await yfFetchAndStorePrices(ticker);
+            console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
+          }
         } else {
-          console.log(`[Pipeline] ${ticker} — data fresh, skipping FMP fetch`);
+          console.log(`[Pipeline] ${ticker} — data fresh, skipping fetch`);
         }
 
         currentStep = "scoring";
