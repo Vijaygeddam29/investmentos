@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { generateAiMemo } from "../lib/ai-memo";
+import { computeMACD } from "../lib/scoring-engines";
 
 const router: IRouter = Router();
 
@@ -59,6 +60,13 @@ function computeMomentumIndicators(prices: any[]) {
   const olderVol = avg(prices.slice(20, 40).map(p => p.volume));
   const relativeVolume = recentVol && olderVol ? +(recentVol / olderVol).toFixed(2) : null;
 
+  // MACD (12/26/9) for trend-following momentum confirmation
+  const macdResult = computeMACD(closes);
+  const macdLine = macdResult ? +macdResult.macd.toFixed(4) : null;
+  const macdSignal = macdResult ? +macdResult.signal.toFixed(4) : null;
+  const macdHistogram = macdResult ? +macdResult.histogram.toFixed(4) : null;
+  const macdBullish = macdResult ? macdResult.histogram > 0 : null;
+
   return {
     currentPrice: +current.toFixed(2),
     rsi14,
@@ -78,6 +86,10 @@ function computeMomentumIndicators(prices: any[]) {
     ret6m,
     ret1y,
     relativeVolume,
+    macdLine,
+    macdSignal,
+    macdHistogram,
+    macdBullish,
   };
 }
 

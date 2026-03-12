@@ -17,6 +17,42 @@ function avg(arr: (number | null | undefined)[]): number {
   return valid.reduce((a, b) => a + b, 0) / valid.length;
 }
 
+/** Exponential Moving Average — returns array aligned with input */
+function computeEMA(values: number[], period: number): number[] {
+  if (values.length < period) return values.map(() => NaN);
+  const k = 2 / (period + 1);
+  const result: number[] = new Array(values.length).fill(NaN);
+  // Seed with simple average of first `period` values
+  let ema = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result[period - 1] = ema;
+  for (let i = period; i < values.length; i++) {
+    ema = values[i] * k + ema * (1 - k);
+    result[i] = ema;
+  }
+  return result;
+}
+
+/**
+ * MACD = EMA(12) − EMA(26); Signal = EMA(9) of MACD; Histogram = MACD − Signal.
+ * Returns the latest histogram value (positive = bullish momentum).
+ */
+function computeMACD(closes: number[]): { macd: number; signal: number; histogram: number } | null {
+  if (closes.length < 35) return null; // need at least 26 + 9 points
+  const ema12 = computeEMA(closes, 12);
+  const ema26 = computeEMA(closes, 26);
+  // MACD line: only valid where both EMAs are valid (from index 25 onward)
+  const macdLine: number[] = closes.map((_, i) =>
+    isNaN(ema12[i]) || isNaN(ema26[i]) ? NaN : ema12[i] - ema26[i]
+  );
+  const validMacd = macdLine.filter(v => !isNaN(v));
+  if (validMacd.length < 9) return null;
+  const signalEma = computeEMA(validMacd, 9);
+  const lastMacd = validMacd[validMacd.length - 1];
+  const lastSignal = signalEma[signalEma.length - 1];
+  if (isNaN(lastSignal)) return null;
+  return { macd: lastMacd, signal: lastSignal, histogram: lastMacd - lastSignal };
+}
+
 function stability(arr: (number | null | undefined)[]): number {
   const valid = arr.filter((v): v is number => v != null && !isNaN(v));
   if (valid.length < 2) return 0.5;
@@ -175,6 +211,9 @@ export function scoreInnovation(metrics: any[]): number {
   return avg(scores);
 }
 
+/** Export MACD calculator for use in indicator endpoints */
+export { computeMACD };
+
 export function scoreMomentum(prices: any[]): number {
   if (prices.length < 50) return 0.5;
 
@@ -212,6 +251,18 @@ export function scoreMomentum(prices: any[]): number {
   const ret3m = len >= 63 ? (currentPrice - closes[len - 63]) / closes[len - 63] : 0;
   const ret6m = len >= 126 ? (currentPrice - closes[len - 126]) / closes[len - 126] : 0;
 
+  // MACD momentum signal: histogram > 0 and growing = bullish; < 0 = bearish
+  const macd = computeMACD(closes);
+  const macdScore = macd != null
+    ? (macd.histogram > 0 && macd.macd > macd.signal
+        ? 0.8
+        : macd.histogram > 0
+          ? 0.65
+          : macd.histogram < 0 && macd.macd < macd.signal
+            ? 0.2
+            : 0.35)
+    : 0.5;
+
   const scores = [
     rsiScore,
     goldenCross ? 0.8 : 0.3,
@@ -228,6 +279,7 @@ export function scoreMomentum(prices: any[]): number {
     normalize(currentPrice / ma200, 0.85, 1.25),
     normalize(ma50 / ma200, 0.95, 1.1),
     normalize(rangePos, 0.2, 0.9),
+    macdScore, // MACD momentum confirmation
   ];
   return avg(scores);
 }

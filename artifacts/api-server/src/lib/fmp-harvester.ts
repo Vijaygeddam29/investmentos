@@ -156,6 +156,14 @@ function computeDerivedMetrics(
     ? 1 - (inc.incomeTaxExpense / inc.incomeBeforeTax)
     : null;
 
+  // Deferred revenue growth = (current deferred revenue − prior) / |prior|
+  // Positive growth = accelerating prepaid commitments from customers (bullish SaaS signal)
+  const deferredRevCur = bs.deferredRevenue ?? 0;
+  const deferredRevPrev = prevBs.deferredRevenue ?? 0;
+  const deferredRevenueGrowth = deferredRevPrev !== 0
+    ? (deferredRevCur - deferredRevPrev) / Math.abs(deferredRevPrev)
+    : (deferredRevCur > 0 ? 1 : null);
+
   // ── Capital Allocation ────────────────────────────────────────────────────
   // Reinvestment rate = 1 − (dividends / net income)
   const dividendsPaid = Math.abs(cf.commonDividendsPaid ?? 0);
@@ -167,6 +175,21 @@ function computeDerivedMetrics(
   const shareholderYield = dividendYield != null || buybackYield != null
     ? (dividendYield ?? 0) + Math.abs(buybackYield ?? 0)
     : null;
+
+  // Capital Allocation Discipline — composite 0..1 metric measuring quality of
+  // how management deploys capital:
+  //   - ROIC vs WACC (10%): value creation above cost of capital
+  //   - Buyback yield quality: returning cash to shareholders
+  //   - Dividend coverage: safety of dividend payout
+  //   - SBC penalty: avoiding excessive dilution
+  const roicVsWacc = roic != null ? Math.min(1, Math.max(0, (roic - 0.05) / 0.20)) : 0.5;
+  const buybackAbs = Math.abs(cf.commonStockRepurchased ?? 0);
+  const buybackScore = mktCap > 0 ? Math.min(1, (buybackAbs / mktCap) / 0.03) : 0.5;
+  const dividendCoverage = netIncome > 0 && dividendsPaid > 0
+    ? Math.min(1, netIncome / (dividendsPaid * 3))
+    : (dividendsPaid === 0 ? 0.6 : 0.3);
+  const sbcPenalty = stockBasedCompPct != null ? Math.max(0, 1 - stockBasedCompPct * 6) : 0.5;
+  const capitalAllocationDiscipline = (roicVsWacc + buybackScore + dividendCoverage + sbcPenalty) / 4;
 
   // ── Capital Efficiency ────────────────────────────────────────────────────
   const assetTurnover = rt.assetTurnover ?? safeDiv(revenue, totalAssets);
@@ -237,14 +260,14 @@ function computeDerivedMetrics(
     roa,
     freeCashFlow: fcf,
     fcfYield,
-    fcfStability: null,
+    fcfStability: null,    // computed post-loop across periods
     fcfToNetIncome,
     operatingCfToRevenue,
     accrualRatio,
     cashConversionCycle,
-    cashFlowVolatility: null,
+    cashFlowVolatility: null,  // computed post-loop across periods
     stockBasedCompPct,
-    capitalAllocationDiscipline: null,
+    capitalAllocationDiscipline,
     debtToEquity: rt.debtToEquityRatio ?? null,
     netDebtEbitda: km.netDebtToEBITDA ?? null,
     interestCoverage: rt.interestCoverageRatio ?? null,
@@ -280,7 +303,7 @@ function computeDerivedMetrics(
     daysOutstanding: km.daysOfSalesOutstanding ?? null,
     receivablesGrowthVsRevenue,
     inventoryGrowthVsRevenue,
-    deferredRevenueGrowth: null,
+    deferredRevenueGrowth,
     taxEfficiency,
     earningsSurprises: null, // filled from analyst estimates
     dividendYield,
@@ -354,27 +377,27 @@ async function fetchInstitutionalOwnership(ticker: string): Promise<number | nul
   }
 }
 
-async function fetchAnalystData(ticker: string): Promise<{
+async function fetchAnalystData(ticker: string, currentPrice: number | null): Promise<{
   forwardPe: number | null;
   earningsSurprises: number | null;
+  analystUpside: number | null;
 }> {
   try {
-    const [estimates, surprises] = await Promise.all([
+    const [estimates, surprises, pricetarget] = await Promise.all([
       fmpFetch("analyst-estimates", { symbol: ticker, period: "annual" }).catch(() => []),
       fmpFetch("earnings-surprises", { symbol: ticker }).catch(() => []),
+      fmpFetch("price-target-consensus", { symbol: ticker }).catch(() => null),
     ]);
 
-    // Forward P/E: use latest analyst EPS estimate vs current price
+    // Forward P/E: analyst consensus EPS estimate for next year / current stock price
     let forwardPe: number | null = null;
-    if (estimates?.length) {
+    if (estimates?.length && currentPrice != null && currentPrice > 0) {
       const nextYr = estimates.find((e: any) => {
         const yr = new Date(e.date).getFullYear();
         return yr >= new Date().getFullYear();
       });
       if (nextYr?.estimatedEpsAvg && nextYr.estimatedEpsAvg > 0) {
-        // We don't have current price here; store the EPS estimate and compute FwdPE elsewhere
-        // FMP key-metrics sometimes has forwardPE; fall back to that
-        forwardPe = null; // will be overridden if FMP provides it directly
+        forwardPe = +(currentPrice / nextYr.estimatedEpsAvg).toFixed(2);
       }
     }
 
@@ -390,9 +413,19 @@ async function fetchAnalystData(ticker: string): Promise<{
       earningsSurprises = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
     }
 
-    return { forwardPe, earningsSurprises };
+    // Analyst upside: (median consensus price target - current price) / current price
+    let analystUpside: number | null = null;
+    if (pricetarget && currentPrice != null && currentPrice > 0) {
+      const pt = Array.isArray(pricetarget) ? pricetarget[0] : pricetarget;
+      const targetPrice = pt?.targetMedianPrice ?? pt?.targetMeanPrice ?? pt?.targetConsensus ?? null;
+      if (targetPrice != null && targetPrice > 0) {
+        analystUpside = (targetPrice - currentPrice) / currentPrice;
+      }
+    }
+
+    return { forwardPe, earningsSurprises, analystUpside };
   } catch {
-    return { forwardPe: null, earningsSurprises: null };
+    return { forwardPe: null, earningsSurprises: null, analystUpside: null };
   }
 }
 
@@ -449,37 +482,61 @@ export async function fetchPeerBenchmarks(ticker: string): Promise<{
 // ─── Main Financial Metrics Harvester ────────────────────────────────────────
 
 export async function fetchAndStoreMetrics(ticker: string) {
-  // Fetch 5 annual periods (max for free FMP plan; covers 5yr ROIC, 3yr CAGR)
+  // Fetch up to 10 annual periods (covers 10yr history, 5yr ROIC avg, 3yr CAGR)
+  const limit10 = { limit: "10" };
   const [keyMetrics, ratios, incomeStmt, balanceSheet, cashFlow, growth] = await Promise.all([
-    fmpFetch("key-metrics", { symbol: ticker, period: "annual" }).catch(() => []),
-    fmpFetch("ratios", { symbol: ticker, period: "annual" }).catch(() => []),
-    fmpFetch("income-statement", { symbol: ticker, period: "annual" }).catch(() => []),
-    fmpFetch("balance-sheet-statement", { symbol: ticker, period: "annual" }).catch(() => []),
-    fmpFetch("cash-flow-statement", { symbol: ticker, period: "annual" }).catch(() => []),
-    fmpFetch("financial-growth", { symbol: ticker, period: "annual" }).catch(() => []),
+    fmpFetch("key-metrics", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
+    fmpFetch("ratios", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
+    fmpFetch("income-statement", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
+    fmpFetch("balance-sheet-statement", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
+    fmpFetch("cash-flow-statement", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
+    fmpFetch("financial-growth", { symbol: ticker, period: "annual", ...limit10 }).catch(() => []),
   ]);
 
   if (!keyMetrics.length && !incomeStmt.length) {
     throw new Error(`No financial data found for ${ticker}`);
   }
 
-  // Insider, institutional, analyst, and peer benchmark data
+  // Current stock price for forward P/E computation (from key-metrics latest row)
+  const currentStockPrice: number | null = keyMetrics[0]?.stockPrice ?? keyMetrics[0]?.price ?? null;
+
+  // Insider, institutional, analyst (with forward P/E + upside), and peer benchmark data
   const [insiderData, institutionalOwnership, analystData, peerBenchmarks] = await Promise.all([
     fetchInsiderData(ticker),
     fetchInstitutionalOwnership(ticker),
-    fetchAnalystData(ticker),
+    fetchAnalystData(ticker, currentStockPrice),
     fetchPeerBenchmarks(ticker),
   ]);
 
   const count = Math.min(10, Math.max(keyMetrics.length, incomeStmt.length, 1));
   let inserted = 0;
+  let latestRowId: number | null = null;
 
-  // Compute ROIC 5yr average across all periods
+  // ── Cross-period aggregates (computed before the per-period loop) ──────────
   const roicValues = keyMetrics.map((km: any) => km.returnOnInvestedCapital).filter((v: any) => v != null);
   const roic5yrAvg = roicValues.length
     ? roicValues.slice(0, 5).reduce((a: number, b: number) => a + b, 0) / Math.min(roicValues.length, 5)
     : null;
   const roicStability = roicValues.length >= 2 ? computeStability(roicValues.slice(0, 5)) : null;
+
+  // FCF and operating CF across all available periods for stability/volatility
+  const fcfValues: number[] = cashFlow
+    .map((cf: any) => {
+      const opCF = cf.netCashProvidedByOperatingActivities ?? 0;
+      const capex = cf.investmentsInPropertyPlantAndEquipment ?? 0;
+      return opCF + capex;
+    })
+    .filter((v: number) => v !== 0);
+  const opCfValues: number[] = cashFlow
+    .map((cf: any) => cf.netCashProvidedByOperatingActivities)
+    .filter((v: any) => v != null && v !== 0) as number[];
+
+  // FCF Stability = 1 − (stddev / |mean|) capped to [0,1], null if < 2 periods
+  const fcfStabilityGlobal = fcfValues.length >= 2 ? computeStability(fcfValues.slice(0, 5)) : null;
+  // Cash Flow Volatility = coefficient of variation of operating CF (lower = better, inverted)
+  const cashFlowVolatilityGlobal = opCfValues.length >= 2
+    ? computeCoV(opCfValues.slice(0, 5))
+    : null;
 
   for (let i = 0; i < count; i++) {
     const km = keyMetrics[i] || {};
@@ -495,7 +552,7 @@ export async function fetchAndStoreMetrics(ticker: string) {
 
     const derived = computeDerivedMetrics(km, rt, inc, bs, cf, gr, prevInc, prevBs, ticker);
 
-    // Only the most recent period gets insider/analyst data
+    // Only the most recent period gets insider/analyst/peer/cross-period data
     const isLatest = i === 0;
     const row = {
       ...derived,
@@ -503,12 +560,15 @@ export async function fetchAndStoreMetrics(ticker: string) {
       date,
       roic5yrAvg: isLatest ? roic5yrAvg : null,
       roicStability: isLatest ? roicStability : null,
+      fcfStability: isLatest ? fcfStabilityGlobal : null,
+      cashFlowVolatility: isLatest ? cashFlowVolatilityGlobal : null,
       insiderOwnership: isLatest ? insiderData.insiderOwnership : null,
       insiderBuying: isLatest ? insiderData.insiderBuying : null,
       institutionalOwnership: isLatest ? institutionalOwnership : null,
       earningsSurprises: isLatest ? analystData.earningsSurprises : null,
       forwardPe: isLatest ? analystData.forwardPe : null,
-      // Peer-relative valuation (Fix 2: P/E vs peers)
+      analystUpside: isLatest ? analystData.analystUpside : null,
+      // Peer-relative valuation
       pePeerMedian: isLatest ? peerBenchmarks.pePeerMedian : null,
       evEbitdaPeerMedian: isLatest ? peerBenchmarks.evEbitdaPeerMedian : null,
       peVsPeerMedian: isLatest && peerBenchmarks.pePeerMedian && derived.peRatio
@@ -523,13 +583,26 @@ export async function fetchAndStoreMetrics(ticker: string) {
 
     if (existing.length) {
       await db.update(financialMetricsTable).set(row).where(eq(financialMetricsTable.id, existing[0].id));
+      if (isLatest) latestRowId = existing[0].id;
     } else {
-      await db.insert(financialMetricsTable).values(row);
+      const result = await db.insert(financialMetricsTable).values(row).returning({ id: financialMetricsTable.id });
+      if (isLatest && result.length) latestRowId = result[0].id;
     }
     inserted++;
   }
 
   return inserted;
+}
+
+// ── Helpers for cross-period volatility ──────────────────────────────────────
+
+/** Coefficient of variation = stddev / |mean|. Lower = more stable cash flows. */
+function computeCoV(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  if (mean === 0) return null;
+  const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+  return Math.sqrt(variance) / Math.abs(mean);
 }
 
 // ─── Price History (Gap 5: 3 years of daily prices) ─────────────────────────

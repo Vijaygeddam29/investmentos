@@ -75,6 +75,7 @@ export const financialMetricsTable = pgTable("financial_metrics", {
   workingCapitalDrift: real("working_capital_drift"),
   taxEfficiency: real("tax_efficiency"),
   earningsSurprises: real("earnings_surprises"),
+  analystUpside: real("analyst_upside"),
 
   dividendYield: real("dividend_yield"),
   dividendGrowth: real("dividend_growth"),

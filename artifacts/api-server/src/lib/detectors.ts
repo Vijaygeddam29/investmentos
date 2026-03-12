@@ -170,6 +170,26 @@ export async function detectDrift(ticker: string) {
     });
   }
 
+  // Insider-selling drift: net insider activity skewed heavily toward selling
+  // insiderBuying is a 0-1 ratio where 1 = all buys, 0 = all sells
+  if (latest.insiderBuying != null && latest.insiderBuying <= 0.15) {
+    // Aggravated signal if paired with deteriorating fundamentals
+    const fundamentalsDeteriorating =
+      (latest.roic != null && historicalAvgs.roic && latest.roic < historicalAvgs.roic * 0.85) ||
+      (latest.operatingMargin != null && historicalAvgs.operatingMargin &&
+        latest.operatingMargin < historicalAvgs.operatingMargin * 0.85);
+    signals.push({
+      signalType: "drift",
+      description: `Heavy insider selling detected (buy ratio: ${(latest.insiderBuying * 100).toFixed(0)}%)${
+        fundamentalsDeteriorating ? " — compounded by fundamental deterioration" : ""
+      }`,
+      severity: (latest.insiderBuying <= 0.05 || fundamentalsDeteriorating) ? "high" : "medium",
+      factorName: "Insider Selling",
+      currentValue: latest.insiderBuying,
+      historicalAvg: null,
+    });
+  }
+
   const today = new Date().toISOString().split("T")[0];
 
   await db.delete(driftSignalsTable).where(
