@@ -1,13 +1,24 @@
+import { useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompanyTable } from "@/components/dashboard/CompanyTable";
+import { TopMovers } from "@/components/dashboard/TopMovers";
 import { useListScores, ListScoresEngine } from "@workspace/api-client-react";
+import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { Shield, Rocket, Waves } from "lucide-react";
 
 export default function Dashboard() {
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6 });
   const { data: rocketData, isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket, minScore: 0.6 });
   const { data: waveData, isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave, minScore: 0.5 });
+
+  function handleTickerClick(ticker: string) {
+    setSelectedTicker(ticker);
+    setDrawerOpen(true);
+  }
 
   return (
     <Layout>
@@ -69,7 +80,15 @@ export default function Dashboard() {
             <CompanyTable data={waveData?.scores || []} isLoading={wLoading} />
           </TabsContent>
         </Tabs>
+
+        <TopMovers onTickerClick={handleTickerClick} />
       </div>
+
+      <CompanyDrawer
+        ticker={selectedTicker}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </Layout>
   );
 }

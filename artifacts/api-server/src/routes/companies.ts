@@ -8,7 +8,7 @@ import {
   driftSignalsTable,
   priceHistoryTable,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc, and, ilike, gte, lte } from "drizzle-orm";
 import { generateAiMemo } from "../lib/ai-memo";
 import { computeMACD } from "../lib/scoring-engines";
 
@@ -93,9 +93,25 @@ function computeMomentumIndicators(prices: any[]) {
   };
 }
 
-router.get("/companies", async (_req, res) => {
+router.get("/companies", async (req, res) => {
   try {
-    const companies = await db.select().from(companiesTable);
+    const { sector, industry, country, market_cap_min, market_cap_max } = req.query as Record<string, string | undefined>;
+    const limit = Math.min(Number(req.query.limit ?? 200), 500);
+    const offset = Number(req.query.offset ?? 0);
+
+    const conditions = [];
+    if (sector) conditions.push(ilike(companiesTable.sector, `%${sector}%`));
+    if (industry) conditions.push(ilike(companiesTable.industry, `%${industry}%`));
+    if (country) conditions.push(ilike(companiesTable.country, `%${country}%`));
+    if (market_cap_min) conditions.push(gte(companiesTable.marketCap, Number(market_cap_min)));
+    if (market_cap_max) conditions.push(lte(companiesTable.marketCap, Number(market_cap_max)));
+
+    const companies = await db.select().from(companiesTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(asc(companiesTable.ticker))
+      .limit(limit)
+      .offset(offset);
+
     res.json({
       companies: companies.map(({ createdAt, updatedAt, ...rest }) => ({
         ...rest,
@@ -103,6 +119,8 @@ router.get("/companies", async (_req, res) => {
         industry: rest.industry ?? undefined,
         country: rest.country ?? undefined,
         exchange: rest.exchange ?? undefined,
+        currency: rest.currency ?? undefined,
+        marketCap: rest.marketCap ?? undefined,
       })),
     });
   } catch (error: any) {
@@ -128,7 +146,7 @@ router.get("/companies/:ticker", async (req, res) => {
       db.select().from(aiVerdictsTable).where(eq(aiVerdictsTable.ticker, ticker)).orderBy(desc(aiVerdictsTable.date)).limit(1),
       db.select().from(financialMetricsTable).where(eq(financialMetricsTable.ticker, ticker)).orderBy(desc(financialMetricsTable.date)).limit(1),
       db.select().from(driftSignalsTable).where(eq(driftSignalsTable.ticker, ticker)).orderBy(desc(driftSignalsTable.date)).limit(10),
-      db.select().from(priceHistoryTable).where(eq(priceHistoryTable.ticker, ticker)).orderBy(desc(priceHistoryTable.date)).limit(252),
+      db.select().from(priceHistoryTable).where(eq(priceHistoryTable.ticker, ticker)).orderBy(desc(priceHistoryTable.date)).limit(750),
     ]);
 
     const c = company[0];
@@ -136,6 +154,7 @@ router.get("/companies/:ticker", async (req, res) => {
     const s = latestScores[0];
     const v = latestVerdict[0];
     const momentumIndicators = computeMomentumIndicators(prices);
+    const priceHistory = [...prices].reverse().map(p => ({ date: p.date, close: p.close }));
 
     res.json({
       company: {
@@ -145,7 +164,10 @@ router.get("/companies/:ticker", async (req, res) => {
         industry: c.industry,
         country: c.country,
         exchange: c.exchange,
+        currency: c.currency ?? undefined,
+        marketCap: c.marketCap ?? undefined,
       },
+      priceHistory,
       latestScores: s ? {
         ticker: s.ticker,
         date: s.date,
@@ -344,6 +366,27 @@ router.get("/companies/:ticker/metrics", async (req, res) => {
     }));
 
     res.json({ ticker, metrics: grouped });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/companies/:ticker/score-history", async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const history = await db.select({
+      date: scoresTable.date,
+      fortressScore: scoresTable.fortressScore,
+      rocketScore: scoresTable.rocketScore,
+      waveScore: scoresTable.waveScore,
+      entryTimingScore: scoresTable.entryTimingScore,
+    })
+      .from(scoresTable)
+      .where(eq(scoresTable.ticker, ticker))
+      .orderBy(asc(scoresTable.date))
+      .limit(200);
+
+    res.json({ ticker, history });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

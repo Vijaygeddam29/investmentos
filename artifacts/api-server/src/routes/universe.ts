@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { companiesTable } from "@workspace/db/schema";
 import { eq, ilike, and } from "drizzle-orm";
+import { SEED_TICKERS } from "../data/seed-tickers";
 
 const router: IRouter = Router();
 
@@ -62,6 +63,33 @@ router.post("/universe", async (req, res) => {
     }).returning();
 
     res.json(stripTimestamps(company));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/universe/seed", async (req, res) => {
+  try {
+    let added = 0;
+    let skipped = 0;
+    for (const t of SEED_TICKERS) {
+      const existing = await db.select({ ticker: companiesTable.ticker })
+        .from(companiesTable)
+        .where(eq(companiesTable.ticker, t.ticker))
+        .limit(1);
+      if (existing.length) { skipped++; continue; }
+      await db.insert(companiesTable).values({
+        ticker: t.ticker,
+        name: t.name,
+        sector: t.sector,
+        industry: t.industry,
+        country: t.country,
+        exchange: t.exchange,
+        currency: t.currency,
+      });
+      added++;
+    }
+    res.json({ success: true, added, skipped, total: SEED_TICKERS.length });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

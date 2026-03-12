@@ -79,6 +79,8 @@ export interface CompanyItem {
   industry?: string;
   country?: string;
   exchange?: string;
+  currency?: string;
+  marketCap?: number;
 }
 
 export interface CompaniesListResponse {
@@ -125,12 +127,18 @@ export interface DriftSignalItem {
   historicalAvg?: number;
 }
 
+export interface PricePoint {
+  date: string;
+  close: number;
+}
+
 export interface CompanyDetail {
   company: CompanyItem;
   latestScores?: ScoreItem;
   latestVerdict?: AiVerdictItem;
   valuation?: ValuationSignals;
   driftSignals?: DriftSignalItem[];
+  priceHistory?: PricePoint[];
 }
 
 export type MetricSnapshotProfitability = { [key: string]: number };
@@ -222,6 +230,86 @@ export interface SuccessResponse {
   message?: string;
 }
 
+export interface SeedUniverseResponse {
+  success: boolean;
+  added: number;
+  skipped: number;
+  total: number;
+}
+
+export interface ScoreHistoryPoint {
+  date: string;
+  fortressScore?: number;
+  rocketScore?: number;
+  waveScore?: number;
+  entryTimingScore?: number;
+}
+
+export interface ScoreHistoryResponse {
+  ticker: string;
+  history: ScoreHistoryPoint[];
+}
+
+export interface FactorSnapshotItem {
+  id?: number;
+  ticker: string;
+  date: string;
+  name?: string;
+  sector?: string;
+  industry?: string;
+  country?: string;
+  currency?: string;
+  marketCap?: number;
+  fortressScore?: number;
+  rocketScore?: number;
+  waveScore?: number;
+  entryScore?: number;
+  profitabilityScore?: number;
+  growthScore?: number;
+  capitalEfficiencyScore?: number;
+  financialStrengthScore?: number;
+  cashFlowQualityScore?: number;
+  momentumScore?: number;
+  valuationScore?: number;
+  sentimentScore?: number;
+  rsi?: number;
+  macdHistogram?: number;
+  ret3m?: number;
+  marginOfSafety?: number;
+  fortressDelta?: number;
+  rocketDelta?: number;
+  waveDelta?: number;
+  entryDelta?: number;
+}
+
+export interface FactorSnapshotsResponse {
+  count: number;
+  snapshots: FactorSnapshotItem[];
+}
+
+export interface TopMoverItem {
+  ticker: string;
+  date: string;
+  name?: string;
+  sector?: string;
+  country?: string;
+  delta?: number;
+  engine: string;
+  fortressScore?: number;
+  rocketScore?: number;
+  waveScore?: number;
+  entryScore?: number;
+  momentumScore?: number;
+  rsi?: number;
+  macdHistogram?: number;
+}
+
+export interface TopMoversResponse {
+  engine: string;
+  count: number;
+  movers: TopMoverItem[];
+}
+
 export type ListScoresParams = {
   engine?: ListScoresEngine;
   minScore?: number;
@@ -238,9 +326,49 @@ export const ListScoresEngine = {
   wave: "wave",
 } as const;
 
+export type ListCompaniesParams = {
+  sector?: string;
+  industry?: string;
+  country?: string;
+  market_cap_min?: number;
+  market_cap_max?: number;
+  limit?: number;
+  offset?: number;
+};
+
 export type GetCompanyMetricsParams = {
   limit?: number;
 };
+
+export type ListFactorSnapshotsParams = {
+  min_fortress?: number;
+  min_rocket?: number;
+  min_wave?: number;
+  min_entry?: number;
+  sector?: string;
+  industry?: string;
+  country?: string;
+  market_cap_min?: number;
+  market_cap_max?: number;
+  limit?: number;
+  date?: string;
+};
+
+export type ListTopMoversParams = {
+  engine?: ListTopMoversEngine;
+  limit?: number;
+  min_delta?: number;
+};
+
+export type ListTopMoversEngine =
+  (typeof ListTopMoversEngine)[keyof typeof ListTopMoversEngine];
+
+export const ListTopMoversEngine = {
+  fortress: "fortress",
+  rocket: "rocket",
+  wave: "wave",
+  entry: "entry",
+} as const;
 
 export type ListDriftSignalsParams = {
   ticker?: string;

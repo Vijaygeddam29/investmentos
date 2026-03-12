@@ -6,13 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CompanyItem {
-  ticker: string;
-  name: string;
+export type ListCompaniesParams = {
   sector?: string;
   industry?: string;
   country?: string;
-  exchange?: string;
-  currency?: string;
-  marketCap?: number;
-}
+  market_cap_min?: number;
+  market_cap_max?: number;
+  limit?: number;
+  offset?: number;
+};

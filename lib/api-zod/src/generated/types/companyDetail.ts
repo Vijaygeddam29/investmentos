@@ -8,6 +8,7 @@
 import type { AiVerdictItem } from "./aiVerdictItem";
 import type { CompanyItem } from "./companyItem";
 import type { DriftSignalItem } from "./driftSignalItem";
+import type { PricePoint } from "./pricePoint";
 import type { ScoreItem } from "./scoreItem";
 import type { ValuationSignals } from "./valuationSignals";
 
@@ -17,4 +18,5 @@ export interface CompanyDetail {
   latestVerdict?: AiVerdictItem;
   valuation?: ValuationSignals;
   driftSignals?: DriftSignalItem[];
+  priceHistory?: PricePoint[];
 }

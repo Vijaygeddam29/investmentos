@@ -1,9 +1,11 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useGetCompany, useGetCompanyMetrics } from "@workspace/api-client-react";
+import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, Target } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, Target, BarChart2 } from "lucide-react";
 import { FactorAccordion } from "./FactorAccordion";
+import { PriceScoreChart } from "./PriceScoreChart";
+import { ValuationBandChart } from "./ValuationBandChart";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,6 +21,10 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   });
 
   const { data: metricsData } = useGetCompanyMetrics(ticker || "", { limit: 1 }, {
+    query: { enabled: !!ticker }
+  });
+
+  const { data: scoreHistoryData } = useGetCompanyScoreHistory(ticker || "", {
     query: { enabled: !!ticker }
   });
 
@@ -86,10 +92,13 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
             <ScrollArea className="flex-1">
               <div className="p-6">
                 <Tabs defaultValue="overview" className="w-full">
-                  <TabsList className="w-full grid grid-cols-4 mb-6 bg-secondary/50">
+                  <TabsList className="w-full grid grid-cols-5 mb-6 bg-secondary/50">
                     <TabsTrigger value="overview">AI Memo</TabsTrigger>
                     <TabsTrigger value="factors">120 Factors</TabsTrigger>
                     <TabsTrigger value="valuation">Entry/Exit</TabsTrigger>
+                    <TabsTrigger value="charts" className="flex items-center gap-1">
+                      <BarChart2 className="w-3 h-3" />Charts
+                    </TabsTrigger>
                     <TabsTrigger value="signals">
                       Signals
                       {driftSignals.length > 0 && (
@@ -241,6 +250,28 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                         No valuation data available. Run the pipeline first.
                       </div>
                     )}
+                  </TabsContent>
+
+                  {/* ── Charts ── */}
+                  <TabsContent value="charts" className="animate-in fade-in duration-300 space-y-6">
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <BarChart2 className="w-3.5 h-3.5" />Price vs Strategy Scores (3yr)
+                      </h4>
+                      <PriceScoreChart
+                        priceHistory={data?.priceHistory ?? []}
+                        scoreHistory={scoreHistoryData?.history ?? []}
+                      />
+                    </div>
+                    <div className="border-t border-border pt-6">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <BarChart2 className="w-3.5 h-3.5" />Price vs Intrinsic Value
+                      </h4>
+                      <ValuationBandChart
+                        priceHistory={data?.priceHistory ?? []}
+                        marginOfSafety={data?.valuation?.marginOfSafety}
+                      />
+                    </div>
                   </TabsContent>
 
                   {/* ── Drift Signals ── */}

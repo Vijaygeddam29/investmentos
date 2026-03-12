@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/Dashboard";
 import { DriftSignals, OpportunityAlerts, RiskAlerts } from "@/pages/Signals";
 import Universe from "@/pages/Universe";
+import Screener from "@/pages/Screener";
+import SectorHeatmap from "@/pages/SectorHeatmap";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,6 +28,8 @@ function Router() {
       <Route path="/signals/opportunities" component={OpportunityAlerts} />
       <Route path="/signals/risk" component={RiskAlerts} />
       <Route path="/universe" component={Universe} />
+      <Route path="/screener" component={Screener} />
+      <Route path="/sector-heatmap" component={SectorHeatmap} />
       <Route component={NotFound} />
     </Switch>
   );

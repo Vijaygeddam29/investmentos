@@ -24,19 +24,26 @@ import type {
   CompanyItem,
   CompanyMetricsResponse,
   DriftSignalsResponse,
+  FactorSnapshotsResponse,
   GetCompanyMetricsParams,
   HealthStatus,
+  ListCompaniesParams,
   ListDriftSignalsParams,
+  ListFactorSnapshotsParams,
   ListOpportunityAlertsParams,
   ListScoresParams,
+  ListTopMoversParams,
   ListUniverseParams,
   OpportunityAlertsResponse,
   PipelineRunRequest,
   PipelineRunResponse,
   PipelineStatus,
   RiskAlertsResponse,
+  ScoreHistoryResponse,
   ScoresListResponse,
+  SeedUniverseResponse,
   SuccessResponse,
+  TopMoversResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -381,41 +388,57 @@ export function useListScores<
 /**
  * @summary List companies in universe
  */
-export const getListCompaniesUrl = () => {
-  return `/api/companies`;
+export const getListCompaniesUrl = (params?: ListCompaniesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/companies?${stringifiedParams}`
+    : `/api/companies`;
 };
 
 export const listCompanies = async (
+  params?: ListCompaniesParams,
   options?: RequestInit,
 ): Promise<CompaniesListResponse> => {
-  return customFetch<CompaniesListResponse>(getListCompaniesUrl(), {
+  return customFetch<CompaniesListResponse>(getListCompaniesUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListCompaniesQueryKey = () => {
-  return [`/api/companies`] as const;
+export const getListCompaniesQueryKey = (params?: ListCompaniesParams) => {
+  return [`/api/companies`, ...(params ? [params] : [])] as const;
 };
 
 export const getListCompaniesQueryOptions = <
   TData = Awaited<ReturnType<typeof listCompanies>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCompanies>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListCompaniesQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListCompaniesQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listCompanies>>> = ({
     signal,
-  }) => listCompanies({ signal, ...requestOptions });
+  }) => listCompanies(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listCompanies>>,
@@ -436,15 +459,18 @@ export type ListCompaniesQueryError = ErrorType<unknown>;
 export function useListCompanies<
   TData = Awaited<ReturnType<typeof listCompanies>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCompanies>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListCompaniesQueryOptions(options);
+>(
+  params?: ListCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCompaniesQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -831,6 +857,295 @@ export const useGenerateCompanyVerdict = <
 > => {
   return useMutation(getGenerateCompanyVerdictMutationOptions(options));
 };
+
+/**
+ * @summary Get historical score snapshots for a company
+ */
+export const getGetCompanyScoreHistoryUrl = (ticker: string) => {
+  return `/api/companies/${ticker}/score-history`;
+};
+
+export const getCompanyScoreHistory = async (
+  ticker: string,
+  options?: RequestInit,
+): Promise<ScoreHistoryResponse> => {
+  return customFetch<ScoreHistoryResponse>(
+    getGetCompanyScoreHistoryUrl(ticker),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetCompanyScoreHistoryQueryKey = (ticker: string) => {
+  return [`/api/companies/${ticker}/score-history`] as const;
+};
+
+export const getGetCompanyScoreHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompanyScoreHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  ticker: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCompanyScoreHistoryQueryKey(ticker);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCompanyScoreHistory>>
+  > = ({ signal }) =>
+    getCompanyScoreHistory(ticker, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!ticker,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyScoreHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCompanyScoreHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompanyScoreHistory>>
+>;
+export type GetCompanyScoreHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get historical score snapshots for a company
+ */
+
+export function useGetCompanyScoreHistory<
+  TData = Awaited<ReturnType<typeof getCompanyScoreHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  ticker: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCompanyScoreHistoryQueryOptions(ticker, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Screener — filter factor warehouse by score thresholds and company attributes
+ */
+export const getListFactorSnapshotsUrl = (
+  params?: ListFactorSnapshotsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/factor-snapshots?${stringifiedParams}`
+    : `/api/factor-snapshots`;
+};
+
+export const listFactorSnapshots = async (
+  params?: ListFactorSnapshotsParams,
+  options?: RequestInit,
+): Promise<FactorSnapshotsResponse> => {
+  return customFetch<FactorSnapshotsResponse>(
+    getListFactorSnapshotsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListFactorSnapshotsQueryKey = (
+  params?: ListFactorSnapshotsParams,
+) => {
+  return [`/api/factor-snapshots`, ...(params ? [params] : [])] as const;
+};
+
+export const getListFactorSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFactorSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFactorSnapshotsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFactorSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListFactorSnapshotsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFactorSnapshots>>
+  > = ({ signal }) =>
+    listFactorSnapshots(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFactorSnapshots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFactorSnapshotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFactorSnapshots>>
+>;
+export type ListFactorSnapshotsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Screener — filter factor warehouse by score thresholds and company attributes
+ */
+
+export function useListFactorSnapshots<
+  TData = Awaited<ReturnType<typeof listFactorSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFactorSnapshotsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFactorSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFactorSnapshotsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Tickers with largest score improvement vs prior snapshot
+ */
+export const getListTopMoversUrl = (params?: ListTopMoversParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/top-movers?${stringifiedParams}`
+    : `/api/top-movers`;
+};
+
+export const listTopMovers = async (
+  params?: ListTopMoversParams,
+  options?: RequestInit,
+): Promise<TopMoversResponse> => {
+  return customFetch<TopMoversResponse>(getListTopMoversUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTopMoversQueryKey = (params?: ListTopMoversParams) => {
+  return [`/api/top-movers`, ...(params ? [params] : [])] as const;
+};
+
+export const getListTopMoversQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTopMovers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListTopMoversParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTopMovers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTopMoversQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTopMovers>>> = ({
+    signal,
+  }) => listTopMovers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTopMovers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTopMoversQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTopMovers>>
+>;
+export type ListTopMoversQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Tickers with largest score improvement vs prior snapshot
+ */
+
+export function useListTopMovers<
+  TData = Awaited<ReturnType<typeof listTopMovers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListTopMoversParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTopMovers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTopMoversQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List factor drift signals
@@ -1285,6 +1600,87 @@ export const useAddToUniverse = <
   TContext
 > => {
   return useMutation(getAddToUniverseMutationOptions(options));
+};
+
+/**
+ * @summary Seed universe with default 60-ticker list (US/UK/India)
+ */
+export const getSeedUniverseUrl = () => {
+  return `/api/universe/seed`;
+};
+
+export const seedUniverse = async (
+  options?: RequestInit,
+): Promise<SeedUniverseResponse> => {
+  return customFetch<SeedUniverseResponse>(getSeedUniverseUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSeedUniverseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedUniverse>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof seedUniverse>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["seedUniverse"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof seedUniverse>>,
+    void
+  > = () => {
+    return seedUniverse(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SeedUniverseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof seedUniverse>>
+>;
+
+export type SeedUniverseMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Seed universe with default 60-ticker list (US/UK/India)
+ */
+export const useSeedUniverse = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedUniverse>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof seedUniverse>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSeedUniverseMutationOptions(options));
 };
 
 /**

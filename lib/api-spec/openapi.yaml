@@ -96,6 +96,35 @@ paths:
       operationId: listCompanies
       tags: [companies]
       summary: List companies in universe
+      parameters:
+        - name: sector
+          in: query
+          schema:
+            type: string
+        - name: industry
+          in: query
+          schema:
+            type: string
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: market_cap_min
+          in: query
+          schema:
+            type: number
+        - name: market_cap_max
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: offset
+          in: query
+          schema:
+            type: number
       responses:
         "200":
           description: Companies list
@@ -180,6 +209,107 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiVerdictResponse"
+  /companies/{ticker}/score-history:
+    get:
+      operationId: getCompanyScoreHistory
+      tags: [companies]
+      summary: Get historical score snapshots for a company
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Score history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreHistoryResponse"
+  /factor-snapshots:
+    get:
+      operationId: listFactorSnapshots
+      tags: [scores]
+      summary: Screener — filter factor warehouse by score thresholds and company attributes
+      parameters:
+        - name: min_fortress
+          in: query
+          schema:
+            type: number
+        - name: min_rocket
+          in: query
+          schema:
+            type: number
+        - name: min_wave
+          in: query
+          schema:
+            type: number
+        - name: min_entry
+          in: query
+          schema:
+            type: number
+        - name: sector
+          in: query
+          schema:
+            type: string
+        - name: industry
+          in: query
+          schema:
+            type: string
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: market_cap_min
+          in: query
+          schema:
+            type: number
+        - name: market_cap_max
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: date
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Factor snapshots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactorSnapshotsResponse"
+  /top-movers:
+    get:
+      operationId: listTopMovers
+      tags: [scores]
+      summary: Tickers with largest score improvement vs prior snapshot
+      parameters:
+        - name: engine
+          in: query
+          schema:
+            type: string
+            enum: [fortress, rocket, wave, entry]
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: min_delta
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Top movers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopMoversResponse"
   /drift-signals:
     get:
       operationId: listDriftSignals
@@ -269,6 +399,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CompanyItem"
+  /universe/seed:
+    post:
+      operationId: seedUniverse
+      tags: [universe]
+      summary: Seed universe with default 60-ticker list (US/UK/India)
+      responses:
+        "200":
+          description: Seed result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedUniverseResponse"
   /universe/{ticker}:
     delete:
       operationId: removeFromUniverse
@@ -451,6 +593,10 @@ components:
           type: string
         exchange:
           type: string
+        currency:
+          type: string
+        marketCap:
+          type: number
       required:
         - ticker
         - name
@@ -469,6 +615,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DriftSignalItem"
+        priceHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/PricePoint"
       required:
         - company
     CompanyMetricsResponse:
@@ -721,3 +871,182 @@ components:
           type: string
       required:
         - success
+    SeedUniverseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        added:
+          type: number
+        skipped:
+          type: number
+        total:
+          type: number
+      required:
+        - success
+        - added
+        - skipped
+        - total
+    PricePoint:
+      type: object
+      properties:
+        date:
+          type: string
+        close:
+          type: number
+      required:
+        - date
+        - close
+    ScoreHistoryPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        fortressScore:
+          type: number
+        rocketScore:
+          type: number
+        waveScore:
+          type: number
+        entryTimingScore:
+          type: number
+      required:
+        - date
+    ScoreHistoryResponse:
+      type: object
+      properties:
+        ticker:
+          type: string
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreHistoryPoint"
+      required:
+        - ticker
+        - history
+    FactorSnapshotItem:
+      type: object
+      properties:
+        id:
+          type: number
+        ticker:
+          type: string
+        date:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        country:
+          type: string
+        currency:
+          type: string
+        marketCap:
+          type: number
+        fortressScore:
+          type: number
+        rocketScore:
+          type: number
+        waveScore:
+          type: number
+        entryScore:
+          type: number
+        profitabilityScore:
+          type: number
+        growthScore:
+          type: number
+        capitalEfficiencyScore:
+          type: number
+        financialStrengthScore:
+          type: number
+        cashFlowQualityScore:
+          type: number
+        momentumScore:
+          type: number
+        valuationScore:
+          type: number
+        sentimentScore:
+          type: number
+        rsi:
+          type: number
+        macdHistogram:
+          type: number
+        ret3m:
+          type: number
+        marginOfSafety:
+          type: number
+        fortressDelta:
+          type: number
+        rocketDelta:
+          type: number
+        waveDelta:
+          type: number
+        entryDelta:
+          type: number
+      required:
+        - ticker
+        - date
+    FactorSnapshotsResponse:
+      type: object
+      properties:
+        count:
+          type: number
+        snapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/FactorSnapshotItem"
+      required:
+        - count
+        - snapshots
+    TopMoverItem:
+      type: object
+      properties:
+        ticker:
+          type: string
+        date:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        country:
+          type: string
+        delta:
+          type: number
+        engine:
+          type: string
+        fortressScore:
+          type: number
+        rocketScore:
+          type: number
+        waveScore:
+          type: number
+        entryScore:
+          type: number
+        momentumScore:
+          type: number
+        rsi:
+          type: number
+        macdHistogram:
+          type: number
+      required:
+        - ticker
+        - date
+        - engine
+    TopMoversResponse:
+      type: object
+      properties:
+        engine:
+          type: string
+        count:
+          type: number
+        movers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopMoverItem"
+      required:
+        - engine
+        - count
+        - movers

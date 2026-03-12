@@ -5,6 +5,8 @@ import {
   Lightbulb, 
   AlertTriangle, 
   Globe,
+  Filter,
+  LayoutGrid,
   Settings
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
@@ -15,11 +17,13 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboards", href: "/" },
-  { icon: Activity, label: "Drift Signals", href: "/signals/drift" },
-  { icon: Lightbulb, label: "Opportunities", href: "/signals/opportunities" },
-  { icon: AlertTriangle, label: "Risk Alerts", href: "/signals/risk" },
-  { icon: Globe, label: "Universe", href: "/universe" },
+  { icon: LayoutDashboard, label: "Dashboards",     href: "/" },
+  { icon: Activity,        label: "Drift Signals",  href: "/signals/drift" },
+  { icon: Lightbulb,       label: "Opportunities",  href: "/signals/opportunities" },
+  { icon: AlertTriangle,   label: "Risk Alerts",    href: "/signals/risk" },
+  { icon: Globe,           label: "Universe",        href: "/universe" },
+  { icon: Filter,          label: "Screener",        href: "/screener" },
+  { icon: LayoutGrid,      label: "Sector Heatmap", href: "/sector-heatmap" },
 ];
 
 export function Sidebar() {
@@ -49,12 +53,12 @@ export function Sidebar() {
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
                 isActive 
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm" 
-                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
               <item.icon className={cn(
-                "w-4 h-4 transition-colors", 
-                isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                "w-4 h-4 transition-colors flex-shrink-0", 
+                isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
               )} />
               {item.label}
               {isActive && (
@@ -66,7 +70,7 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-border">
-        <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition-all">
+        <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150">
           <Settings className="w-4 h-4" />
           Settings
         </button>

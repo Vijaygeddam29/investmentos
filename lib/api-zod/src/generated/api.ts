@@ -94,6 +94,16 @@ export const ListScoresResponse = zod.object({
 /**
  * @summary List companies in universe
  */
+export const ListCompaniesQueryParams = zod.object({
+  sector: zod.coerce.string().optional(),
+  industry: zod.coerce.string().optional(),
+  country: zod.coerce.string().optional(),
+  market_cap_min: zod.coerce.number().optional(),
+  market_cap_max: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+  offset: zod.coerce.number().optional(),
+});
+
 export const ListCompaniesResponse = zod.object({
   companies: zod.array(
     zod.object({
@@ -103,6 +113,8 @@ export const ListCompaniesResponse = zod.object({
       industry: zod.string().optional(),
       country: zod.string().optional(),
       exchange: zod.string().optional(),
+      currency: zod.string().optional(),
+      marketCap: zod.number().optional(),
     }),
   ),
 });
@@ -122,6 +134,8 @@ export const GetCompanyResponse = zod.object({
     industry: zod.string().optional(),
     country: zod.string().optional(),
     exchange: zod.string().optional(),
+    currency: zod.string().optional(),
+    marketCap: zod.number().optional(),
   }),
   latestScores: zod
     .object({
@@ -195,6 +209,14 @@ export const GetCompanyResponse = zod.object({
       }),
     )
     .optional(),
+  priceHistory: zod
+    .array(
+      zod.object({
+        date: zod.string(),
+        close: zod.number(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -258,6 +280,112 @@ export const GenerateCompanyVerdictResponse = zod.object({
     classification: zod.string().optional(),
     memo: zod.string(),
   }),
+});
+
+/**
+ * @summary Get historical score snapshots for a company
+ */
+export const GetCompanyScoreHistoryParams = zod.object({
+  ticker: zod.coerce.string(),
+});
+
+export const GetCompanyScoreHistoryResponse = zod.object({
+  ticker: zod.string(),
+  history: zod.array(
+    zod.object({
+      date: zod.string(),
+      fortressScore: zod.number().optional(),
+      rocketScore: zod.number().optional(),
+      waveScore: zod.number().optional(),
+      entryTimingScore: zod.number().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Screener — filter factor warehouse by score thresholds and company attributes
+ */
+export const ListFactorSnapshotsQueryParams = zod.object({
+  min_fortress: zod.coerce.number().optional(),
+  min_rocket: zod.coerce.number().optional(),
+  min_wave: zod.coerce.number().optional(),
+  min_entry: zod.coerce.number().optional(),
+  sector: zod.coerce.string().optional(),
+  industry: zod.coerce.string().optional(),
+  country: zod.coerce.string().optional(),
+  market_cap_min: zod.coerce.number().optional(),
+  market_cap_max: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+  date: zod.coerce.string().optional(),
+});
+
+export const ListFactorSnapshotsResponse = zod.object({
+  count: zod.number(),
+  snapshots: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      ticker: zod.string(),
+      date: zod.string(),
+      name: zod.string().optional(),
+      sector: zod.string().optional(),
+      industry: zod.string().optional(),
+      country: zod.string().optional(),
+      currency: zod.string().optional(),
+      marketCap: zod.number().optional(),
+      fortressScore: zod.number().optional(),
+      rocketScore: zod.number().optional(),
+      waveScore: zod.number().optional(),
+      entryScore: zod.number().optional(),
+      profitabilityScore: zod.number().optional(),
+      growthScore: zod.number().optional(),
+      capitalEfficiencyScore: zod.number().optional(),
+      financialStrengthScore: zod.number().optional(),
+      cashFlowQualityScore: zod.number().optional(),
+      momentumScore: zod.number().optional(),
+      valuationScore: zod.number().optional(),
+      sentimentScore: zod.number().optional(),
+      rsi: zod.number().optional(),
+      macdHistogram: zod.number().optional(),
+      ret3m: zod.number().optional(),
+      marginOfSafety: zod.number().optional(),
+      fortressDelta: zod.number().optional(),
+      rocketDelta: zod.number().optional(),
+      waveDelta: zod.number().optional(),
+      entryDelta: zod.number().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Tickers with largest score improvement vs prior snapshot
+ */
+export const ListTopMoversQueryParams = zod.object({
+  engine: zod.enum(["fortress", "rocket", "wave", "entry"]).optional(),
+  limit: zod.coerce.number().optional(),
+  min_delta: zod.coerce.number().optional(),
+});
+
+export const ListTopMoversResponse = zod.object({
+  engine: zod.string(),
+  count: zod.number(),
+  movers: zod.array(
+    zod.object({
+      ticker: zod.string(),
+      date: zod.string(),
+      name: zod.string().optional(),
+      sector: zod.string().optional(),
+      country: zod.string().optional(),
+      delta: zod.number().optional(),
+      engine: zod.string(),
+      fortressScore: zod.number().optional(),
+      rocketScore: zod.number().optional(),
+      waveScore: zod.number().optional(),
+      entryScore: zod.number().optional(),
+      momentumScore: zod.number().optional(),
+      rsi: zod.number().optional(),
+      macdHistogram: zod.number().optional(),
+    }),
+  ),
 });
 
 /**
@@ -346,6 +474,8 @@ export const ListUniverseResponse = zod.object({
       industry: zod.string().optional(),
       country: zod.string().optional(),
       exchange: zod.string().optional(),
+      currency: zod.string().optional(),
+      marketCap: zod.number().optional(),
     }),
   ),
 });
@@ -369,6 +499,18 @@ export const AddToUniverseResponse = zod.object({
   industry: zod.string().optional(),
   country: zod.string().optional(),
   exchange: zod.string().optional(),
+  currency: zod.string().optional(),
+  marketCap: zod.number().optional(),
+});
+
+/**
+ * @summary Seed universe with default 60-ticker list (US/UK/India)
+ */
+export const SeedUniverseResponse = zod.object({
+  success: zod.boolean(),
+  added: zod.number(),
+  skipped: zod.number(),
+  total: zod.number(),
 });
 
 /**
