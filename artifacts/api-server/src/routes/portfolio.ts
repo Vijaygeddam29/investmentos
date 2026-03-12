@@ -231,6 +231,7 @@ router.get("/portfolio", async (_req, res) => {
         shares:        h.shares,
         purchasePrice: h.purchasePrice,
         purchaseDate:  h.purchaseDate,
+        currency:      h.currency ?? "USD",
         notes:         h.notes,
         currentPrice:  price,
         priceSource,
@@ -291,7 +292,7 @@ router.get("/portfolio", async (_req, res) => {
 // ─── POST /api/portfolio/holdings ────────────────────────────────────────────
 router.post("/portfolio/holdings", async (req, res) => {
   try {
-    const { ticker, shares, purchasePrice, purchaseDate, notes } = req.body;
+    const { ticker, shares, purchasePrice, purchaseDate, currency, notes } = req.body;
     if (!ticker || !shares || !purchasePrice) {
       res.status(400).json({ error: "ticker, shares, and purchasePrice are required" });
       return;
@@ -303,6 +304,7 @@ router.post("/portfolio/holdings", async (req, res) => {
         shares:        Number(shares),
         purchasePrice: Number(purchasePrice),
         purchaseDate:  purchaseDate ?? null,
+        currency:      currency ? String(currency).toUpperCase().trim() : "USD",
         notes:         notes ?? null,
       })
       .returning();
@@ -396,6 +398,7 @@ router.post("/portfolio/upload", async (req, res) => {
         shares:        Number(r.shares),
         purchasePrice: Number(r.purchasePrice ?? r.purchase_price ?? r.price),
         purchaseDate:  normalizeDate(r.purchaseDate ?? r.purchase_date ?? null),
+        currency:      r.currency ? String(r.currency).toUpperCase().trim() : "USD",
         notes:         r.notes ?? null,
       }))
       .filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0 && isFinite(r.shares) && isFinite(r.purchasePrice));
@@ -406,7 +409,7 @@ router.post("/portfolio/upload", async (req, res) => {
     }
 
     // Consolidate multiple transactions per ticker → one holding with WACP
-    const grouped = new Map<string, { totalShares: number; totalCost: number; earliestDate: string | null; notes: string | null }>();
+    const grouped = new Map<string, { totalShares: number; totalCost: number; earliestDate: string | null; currency: string; notes: string | null }>();
     for (const r of parsed) {
       const existing = grouped.get(r.ticker);
       if (!existing) {
@@ -414,6 +417,7 @@ router.post("/portfolio/upload", async (req, res) => {
           totalShares:  r.shares,
           totalCost:    r.shares * r.purchasePrice,
           earliestDate: r.purchaseDate,
+          currency:     r.currency,
           notes:        r.notes,
         });
       } else {
@@ -431,6 +435,7 @@ router.post("/portfolio/upload", async (req, res) => {
       shares:        +g.totalShares.toFixed(6),
       purchasePrice: +(g.totalCost / g.totalShares).toFixed(6),  // weighted avg
       purchaseDate:  g.earliestDate,
+      currency:      g.currency,
       notes:         g.notes,
     }));
 

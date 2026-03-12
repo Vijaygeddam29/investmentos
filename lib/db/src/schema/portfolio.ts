@@ -8,6 +8,7 @@ export const portfolioHoldingsTable = pgTable("portfolio_holdings", {
   shares:        real("shares").notNull(),
   purchasePrice: real("purchase_price").notNull(),
   purchaseDate:  date("purchase_date"),
+  currency:      text("currency").default("USD").notNull(),
   notes:         text("notes"),
   createdAt:     timestamp("created_at").defaultNow().notNull(),
   updatedAt:     timestamp("updated_at").defaultNow().notNull(),

@@ -24,6 +24,7 @@ interface HoldingAnalysis {
   shares: number;
   purchasePrice: number;
   purchaseDate: string | null;
+  currency: string;
   notes: string | null;
   currentPrice: number | null;
   priceSource: "live" | "cache" | "none";
@@ -69,6 +70,23 @@ function fmtPct(n: number | null | undefined) {
   if (n == null || isNaN(n)) return "—";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${(n * 100).toFixed(2)}%`;
+}
+
+/** Format a monetary value using the holding's own currency symbol. */
+function fmtMoney(n: number | null | undefined, currency = "USD") {
+  if (n == null || isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  const num = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ccy = (currency ?? "USD").toUpperCase();
+  if (ccy === "USD") return `${sign}$${num}`;
+  if (ccy === "GBP") return `${sign}£${num}`;
+  if (ccy === "EUR") return `${sign}€${num}`;
+  if (ccy === "CAD") return `${sign}CA$${num}`;
+  if (ccy === "AUD") return `${sign}A$${num}`;
+  if (ccy === "CHF") return `${sign}CHF ${num}`;
+  if (ccy === "JPY") return `${sign}¥${Math.round(abs).toLocaleString("en-US")}`;
+  return `${sign}${num} ${ccy}`;
 }
 
 function fmtCurrency(n: number | null | undefined) {
@@ -151,7 +169,7 @@ function ActionBadge({ action }: { action: Action }) {
 }
 
 // ─── Shared row parsing ────────────────────────────────────────────────────────
-type ParsedRow = { ticker: string; shares: number; purchasePrice: number; purchaseDate?: string };
+type ParsedRow = { ticker: string; shares: number; purchasePrice: number; purchaseDate?: string; currency?: string };
 
 function findColIdx(headers: string[], patterns: string[]): number {
   return headers.findIndex((h) => patterns.some((p) => h.includes(p) || h === p));
@@ -170,13 +188,12 @@ function rowsFromObjects(objects: Record<string, unknown>[]): ParsedRow[] {
   return objects.map((obj) => {
     const vals = origKeys.map((k) => String(obj[k] ?? "").trim());
     let price = parseFloat(vals[priceIdx] ?? "0");
+    let currency = currencyIdx >= 0 ? (vals[currencyIdx] ?? "USD").toUpperCase().trim() : "USD";
 
-    // GBX = British pence — divide by 100 to get GBP
-    if (currencyIdx >= 0) {
-      const ccy = (vals[currencyIdx] ?? "").toUpperCase().trim();
-      if (ccy === "GBX" || ccy === "GBP PENCE" || ccy === "PENCE") {
-        price = price / 100;
-      }
+    // GBX = British pence — divide by 100 to get GBP, then store as GBP
+    if (currency === "GBX" || currency === "GBP PENCE" || currency === "PENCE") {
+      price = price / 100;
+      currency = "GBP";
     }
 
     return {
@@ -184,6 +201,7 @@ function rowsFromObjects(objects: Record<string, unknown>[]): ParsedRow[] {
       shares:        parseFloat(vals[sharesIdx] ?? "0"),
       purchasePrice: price,
       purchaseDate:  dateIdx >= 0 ? vals[dateIdx] : undefined,
+      currency,
     };
   }).filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0);
 }
@@ -573,13 +591,13 @@ export default function Portfolio() {
                       {/* P&L */}
                       <div className="text-right">
                         <p className={`text-sm font-semibold font-mono ${pnlColor}`}>{fmtPct(h.pnlPct)}</p>
-                        <p className={`text-xs font-mono ${pnlColor}`}>{fmtCurrency(h.unrealisedPnl)}</p>
+                        <p className={`text-xs font-mono ${pnlColor}`}>{fmtMoney(h.unrealisedPnl, h.currency)}</p>
                       </div>
 
                       {/* Cost basis & current value */}
                       <div className="text-right hidden md:block">
-                        <p className="text-xs text-muted-foreground">{h.shares} @ {fmt(h.purchasePrice, 2, "$")}</p>
-                        <p className="text-xs text-foreground font-mono">{fmtCurrency(h.costBasis)}</p>
+                        <p className="text-xs text-muted-foreground">{h.shares} @ {fmtMoney(h.purchasePrice, h.currency)}</p>
+                        <p className="text-xs text-foreground font-mono">{fmtMoney(h.costBasis, h.currency)}</p>
                       </div>
 
                       {/* Current price */}
@@ -590,7 +608,7 @@ export default function Portfolio() {
                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 leading-none">LIVE</span>
                           )}
                         </div>
-                        <p className="text-xs font-mono text-foreground">{h.currentPrice != null ? `$${h.currentPrice.toFixed(2)}` : "—"}</p>
+                        <p className="text-xs font-mono text-foreground">{h.currentPrice != null ? fmtMoney(h.currentPrice, h.currency) : "—"}</p>
                       </div>
 
                       {/* Quality score */}
