@@ -6,4 +6,6 @@ export * from "./ai-verdicts";
 export * from "./signals";
 export * from "./factor-snapshots";
 export * from "./portfolio";
+export * from "./conversations";
+export * from "./messages";
 export type { RiskAlert } from "./signals";
