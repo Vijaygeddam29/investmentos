@@ -6,6 +6,7 @@ import scoresRouter from "./scores";
 import signalsRouter from "./signals";
 import universeRouter from "./universe";
 import factorSnapshotsRouter from "./factor-snapshots";
+import portfolioRouter from "./portfolio";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(scoresRouter);
 router.use(signalsRouter);
 router.use(universeRouter);
 router.use(factorSnapshotsRouter);
+router.use(portfolioRouter);
 
 export default router;

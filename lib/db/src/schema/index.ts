@@ -5,4 +5,5 @@ export * from "./scores";
 export * from "./ai-verdicts";
 export * from "./signals";
 export * from "./factor-snapshots";
+export * from "./portfolio";
 export type { RiskAlert } from "./signals";

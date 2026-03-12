@@ -9,6 +9,7 @@ import { DriftSignals, OpportunityAlerts, RiskAlerts } from "@/pages/Signals";
 import Universe from "@/pages/Universe";
 import Screener from "@/pages/Screener";
 import SectorHeatmap from "@/pages/SectorHeatmap";
+import Portfolio from "@/pages/Portfolio";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/universe" component={Universe} />
       <Route path="/screener" component={Screener} />
       <Route path="/sector-heatmap" component={SectorHeatmap} />
+      <Route path="/portfolio" component={Portfolio} />
       <Route component={NotFound} />
     </Switch>
   );
