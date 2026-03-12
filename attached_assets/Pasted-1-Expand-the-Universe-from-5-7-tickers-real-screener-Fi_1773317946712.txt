@@ -1,0 +1,250 @@
+1️⃣ Expand the Universe (from 5–7 tickers → real screener)
+
+First instruction:
+
+Extend the existing Universe Manager.
+
+Requirements:
+- Support at least 500+ tickers.
+- Add fields to companies table:
+  ticker
+  company_name
+  sector
+  industry
+  market_cap
+  country
+  currency
+  exchange
+
+Populate universe with:
+- US companies (NYSE + NASDAQ)
+- UK companies (LSE)
+- India/Asia companies where supported by FMP.
+
+Add filters in API:
+GET /companies?sector=&industry=&market_cap_min=&market_cap_max=&country=
+
+Do not modify the scoring pipeline.
+Only extend the universe management and query filtering.
+
+This turns your system into a basic screener.
+
+Example companies:
+
+Apple
+
+Microsoft
+
+Unilever
+
+Reliance Industries
+
+2️⃣ Add Multi-Market Currency Support
+
+Next instruction:
+
+Extend the companies schema and metrics pipeline to support multi-currency.
+
+Requirements:
+- Store original currency from FMP (USD, GBP, INR etc).
+- Store FX-normalized values in USD for scoring.
+- Display original currency in the UI.
+
+Add currency field to financial_metrics table.
+
+Scoring engines must use normalized USD values.
+Frontend must display values in local currency.
+
+This allows comparisons across:
+
+United States
+
+United Kingdom
+
+India
+
+3️⃣ Add Historical Score Tracking (very important)
+
+You already save snapshots — now visualize them.
+
+Instruction:
+
+Extend the pipeline to persist historical score snapshots.
+
+Requirements:
+Store for each pipeline run:
+ticker
+timestamp
+fortress_score
+rocket_score
+wave_score
+entry_score
+
+Create endpoint:
+GET /companies/:ticker/score-history
+
+This enables trend charts.
+
+4️⃣ Add Charts in the Dashboard
+
+Next instruction:
+
+Add charts to the company detail page.
+
+Charts required:
+
+1. Price history (3 years)
+2. Fortress score history
+3. Rocket score history
+4. Entry timing score
+
+Use Recharts.
+
+Each chart must fetch from:
+GET /companies/:ticker/score-history
+
+Now you can visually see changes over time.
+
+5️⃣ Add Valuation Entry / Exit Graph
+
+Instruction:
+
+Add valuation band visualization.
+
+Compute:
+- intrinsic_value (DCF)
+- current_price
+- margin_of_safety
+
+Create valuation chart:
+Price vs intrinsic value band.
+
+Highlight:
+BUY zone (price < 75% intrinsic value)
+HOLD zone (75–110%)
+SELL zone (>110%)
+
+This gives a visual entry/exit signal.
+
+6️⃣ Build the Screener Page
+
+Instruction:
+
+Create a Screener page.
+
+Filters:
+Country
+Sector
+Industry
+Market cap range
+Fortress score min
+Rocket score min
+Wave score min
+Entry score min
+
+Display results in table:
+Ticker
+Price
+Market cap
+Fortress score
+Rocket score
+Entry score
+Country
+
+Clicking a row opens company detail.
+
+Now your system becomes a research platform instead of just a dashboard.
+
+7️⃣ Increase Universe Gradually (important for cost)
+
+Instruction:
+
+Increase development universe size to 50 tickers.
+
+Add pagination to:
+GET /scores
+GET /companies
+
+Limit pipeline runs to selected tickers until full scaling.
+
+Later you can go:
+
+50 → 200 → 500 → 2000
+8️⃣ Improve Entry/Exit Timing (small but powerful)
+
+Instruction:
+
+Enhance entry timing score with technical signals.
+
+Add MACD crossover signal.
+
+Entry score formula:
+Valuation 35%
+Momentum 30%
+MACD signal 20%
+Earnings revision 15%
+
+This improves Wave trading signals.
+
+9️⃣ Add Sector Heatmap (Professional Feature)
+
+Instruction:
+
+Create a sector performance panel.
+
+For each sector:
+average fortress score
+average rocket score
+average momentum
+
+Display as heatmap.
+
+This helps identify sector rotation like:
+
+Semiconductors
+
+Energy
+
+Healthcare
+
+🔟 The Final Feature (Later)
+
+Eventually add portfolio simulation.
+
+Example output:
+
+If buying top 10 Rocket stocks:
+expected volatility
+expected return
+max drawdown
+
+That moves you closer to tools used at firms like:
+
+Bridgewater Associates
+
+Two Sigma
+
+⚠️ One Important Warning
+
+When you expand to 500+ stocks, you must add:
+
+batch pipeline execution
+queue processing
+database pipeline status
+
+Otherwise the pipeline will crash.
+
+🧠 Smart Build Order
+
+Give Replit instructions in this order:
+
+1️⃣ Universe expansion
+2️⃣ Currency support
+3️⃣ Historical score tracking
+4️⃣ Charts
+5️⃣ Screener filters
+6️⃣ Sector heatmap
+
+Each step builds on the current system without breaking it.
+
+✅ If you want, I can also show you one architectural upgrade that would make your platform capable of scanning 10,000 stocks daily without slowing down Replit (this is the trick most retail quant builders miss)
