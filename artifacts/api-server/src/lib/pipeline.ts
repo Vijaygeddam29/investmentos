@@ -20,7 +20,23 @@ import { generateAiMemo } from "./ai-memo";
 import { calibrateUniverseScores } from "./normalizer";
 import { writeFactorSnapshot } from "./factor-warehouse";
 import { db } from "@workspace/db";
-import { companiesTable } from "@workspace/db/schema";
+import { companiesTable, financialMetricsTable } from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+
+const CACHE_TTL_MS = 23 * 60 * 60 * 1000; // 23 hours — refresh once per day
+
+async function needsFmpFetch(ticker: string): Promise<boolean> {
+  const rows = await db
+    .select({ createdAt: financialMetricsTable.createdAt })
+    .from(financialMetricsTable)
+    .where(eq(financialMetricsTable.ticker, ticker))
+    .orderBy(desc(financialMetricsTable.createdAt))
+    .limit(1);
+
+  if (!rows.length) return true;
+  const age = Date.now() - new Date(rows[0].createdAt).getTime();
+  return age > CACHE_TTL_MS;
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -90,9 +106,13 @@ export async function runPipeline(tickers?: string[]) {
         console.log(`[Pipeline] ── ${ticker} (${processed + 1}/${tickerList.length}) ──`);
 
         currentStep = "harvesting";
-        await fetchAndStoreCompany(ticker);
-        await fetchAndStoreMetrics(ticker);
-        await fetchAndStorePrices(ticker);
+        if (await needsFmpFetch(ticker)) {
+          await fetchAndStoreCompany(ticker);
+          await fetchAndStoreMetrics(ticker);
+          await fetchAndStorePrices(ticker);
+        } else {
+          console.log(`[Pipeline] ${ticker} — data fresh, skipping FMP fetch`);
+        }
 
         currentStep = "scoring";
         const scores = await calculateAllScores(ticker);

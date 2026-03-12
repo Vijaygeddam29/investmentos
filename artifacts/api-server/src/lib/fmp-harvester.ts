@@ -497,16 +497,12 @@ export async function fetchAndStoreMetrics(ticker: string) {
     throw new Error(`No financial data found for ${ticker}`);
   }
 
-  // Current stock price for forward P/E computation (from key-metrics latest row)
-  const currentStockPrice: number | null = keyMetrics[0]?.stockPrice ?? keyMetrics[0]?.price ?? null;
-
-  // Insider, institutional, analyst (with forward P/E + upside), and peer benchmark data
-  const [insiderData, institutionalOwnership, analystData, peerBenchmarks] = await Promise.all([
-    fetchInsiderData(ticker),
-    fetchInstitutionalOwnership(ticker),
-    fetchAnalystData(ticker, currentStockPrice),
-    fetchPeerBenchmarks(ticker),
-  ]);
+  // Insider/institutional/analyst/peer calls are skipped to conserve API quota.
+  // These fields remain null until a premium FMP plan is available.
+  const insiderData = { insiderOwnership: null, insiderBuying: null };
+  const institutionalOwnership = null;
+  const analystData = { forwardPe: null, earningsSurprises: null, analystUpside: null };
+  const peerBenchmarks = { pePeerMedian: null, evEbitdaPeerMedian: null, revenueGrowthPeerMedian: null, grossMarginPeerMedian: null };
 
   const count = Math.min(10, Math.max(keyMetrics.length, incomeStmt.length, 1));
   let inserted = 0;
