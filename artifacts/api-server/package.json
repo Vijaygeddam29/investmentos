@@ -16,7 +16,9 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "multer": "^2.1.1",
     "openai": "^6.27.0",
+    "pdf-parse": "^2.4.5",
     "yahoo-finance2": "^3.13.2"
   },
   "devDependencies": {
