@@ -71,6 +71,51 @@ export function CompanyTable({ data, isLoading }: CompanyTableProps) {
       cell: ({ row }: any) => <ScoreBadge score={row.getValue("waveScore")} type="wave" />,
     },
     {
+      accessorKey: "roic",
+      header: ({ column }: any) => (
+        <button className="flex items-center gap-1 hover:text-indigo-400 transition-colors" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+          ROIC <ArrowUpDown className="w-3 h-3" />
+        </button>
+      ),
+      cell: ({ row }: any) => {
+        const v = row.getValue("roic") as number | undefined;
+        if (v == null) return <span className="text-xs text-muted-foreground">—</span>;
+        const pct = (v * 100).toFixed(1);
+        const color = v >= 0.15 ? "text-emerald-400" : v >= 0.08 ? "text-yellow-400" : "text-red-400";
+        return <span className={`text-xs font-mono font-semibold ${color}`}>{pct}%</span>;
+      },
+    },
+    {
+      accessorKey: "revenueGrowth1y",
+      header: ({ column }: any) => (
+        <button className="flex items-center gap-1 hover:text-indigo-400 transition-colors" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+          Rev Growth <ArrowUpDown className="w-3 h-3" />
+        </button>
+      ),
+      cell: ({ row }: any) => {
+        const v = row.getValue("revenueGrowth1y") as number | undefined;
+        if (v == null) return <span className="text-xs text-muted-foreground">—</span>;
+        const pct = (v * 100).toFixed(1);
+        const color = v >= 0.15 ? "text-emerald-400" : v >= 0.05 ? "text-yellow-400" : "text-red-400";
+        return <span className={`text-xs font-mono font-semibold ${color}`}>{v >= 0 ? "+" : ""}{pct}%</span>;
+      },
+    },
+    {
+      accessorKey: "fcfYield",
+      header: ({ column }: any) => (
+        <button className="flex items-center gap-1 hover:text-indigo-400 transition-colors" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+          FCF Yield <ArrowUpDown className="w-3 h-3" />
+        </button>
+      ),
+      cell: ({ row }: any) => {
+        const v = row.getValue("fcfYield") as number | undefined;
+        if (v == null) return <span className="text-xs text-muted-foreground">—</span>;
+        const pct = (v * 100).toFixed(1);
+        const color = v >= 0.04 ? "text-emerald-400" : v >= 0.02 ? "text-yellow-400" : "text-red-400";
+        return <span className={`text-xs font-mono font-semibold ${color}`}>{pct}%</span>;
+      },
+    },
+    {
       accessorKey: "verdict",
       header: "AI Verdict",
       cell: ({ row }: any) => {

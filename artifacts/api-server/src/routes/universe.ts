@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { companiesTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -16,9 +16,18 @@ function stripTimestamps(company: any) {
   };
 }
 
-router.get("/universe", async (_req, res) => {
+router.get("/universe", async (req, res) => {
   try {
-    const companies = await db.select().from(companiesTable);
+    const { sector, country } = req.query as Record<string, string | undefined>;
+
+    const conditions = [];
+    if (sector) conditions.push(ilike(companiesTable.sector, `%${sector}%`));
+    if (country) conditions.push(ilike(companiesTable.country, `%${country}%`));
+
+    const companies = conditions.length
+      ? await db.select().from(companiesTable).where(and(...conditions))
+      : await db.select().from(companiesTable);
+
     res.json({ companies: companies.map(stripTimestamps) });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

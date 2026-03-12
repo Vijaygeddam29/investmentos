@@ -5,8 +5,5 @@
  * Investment OS API
  * OpenAPI spec version: 0.1.0
  */
-import type { RiskAlertItem } from "./riskAlertItem";
 
-export interface RiskAlertsResponse {
-  alerts: RiskAlertItem[];
-}
+export type RiskAlertItemSignalsItem = { [key: string]: unknown };

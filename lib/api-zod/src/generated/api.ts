@@ -74,6 +74,12 @@ export const ListScoresResponse = zod.object({
       innovationScore: zod.number().optional(),
       momentumScore: zod.number().optional(),
       valuationScore: zod.number().optional(),
+      sentimentScore: zod.number().optional(),
+      entryTimingScore: zod.number().optional(),
+      roic: zod.number().optional(),
+      revenueGrowth1y: zod.number().optional(),
+      grossMargin: zod.number().optional(),
+      fcfYield: zod.number().optional(),
       verdict: zod.string().optional(),
       classification: zod.string().optional(),
     }),
@@ -130,6 +136,12 @@ export const GetCompanyResponse = zod.object({
       innovationScore: zod.number().optional(),
       momentumScore: zod.number().optional(),
       valuationScore: zod.number().optional(),
+      sentimentScore: zod.number().optional(),
+      entryTimingScore: zod.number().optional(),
+      roic: zod.number().optional(),
+      revenueGrowth1y: zod.number().optional(),
+      grossMargin: zod.number().optional(),
+      fcfYield: zod.number().optional(),
       verdict: zod.string().optional(),
       classification: zod.string().optional(),
     })
@@ -293,12 +305,11 @@ export const ListRiskAlertsResponse = zod.object({
       id: zod.number().optional(),
       ticker: zod.string(),
       date: zod.string(),
-      signalType: zod.string(),
+      riskLevel: zod.string(),
+      activeSignalCount: zod.number(),
+      highSeverityCount: zod.number(),
       description: zod.string(),
-      severity: zod.string(),
-      factorName: zod.string().optional(),
-      currentValue: zod.number().optional(),
-      historicalAvg: zod.number().optional(),
+      signals: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
     }),
   ),
 });
@@ -306,6 +317,17 @@ export const ListRiskAlertsResponse = zod.object({
 /**
  * @summary List tickers in universe
  */
+export const ListUniverseQueryParams = zod.object({
+  sector: zod.coerce
+    .string()
+    .optional()
+    .describe("Filter by sector (case-insensitive partial match)"),
+  country: zod.coerce
+    .string()
+    .optional()
+    .describe("Filter by country (case-insensitive partial match)"),
+});
+
 export const ListUniverseResponse = zod.object({
   companies: zod.array(
     zod.object({

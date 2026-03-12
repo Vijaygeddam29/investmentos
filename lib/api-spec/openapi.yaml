@@ -235,6 +235,17 @@ paths:
       operationId: listUniverse
       tags: [universe]
       summary: List tickers in universe
+      parameters:
+        - name: sector
+          in: query
+          schema:
+            type: string
+          description: Filter by sector (case-insensitive partial match)
+        - name: country
+          in: query
+          schema:
+            type: string
+          description: Filter by country (case-insensitive partial match)
       responses:
         "200":
           description: Universe tickers
@@ -383,6 +394,18 @@ components:
         momentumScore:
           type: number
         valuationScore:
+          type: number
+        sentimentScore:
+          type: number
+        entryTimingScore:
+          type: number
+        roic:
+          type: number
+        revenueGrowth1y:
+          type: number
+        grossMargin:
+          type: number
+        fcfYield:
           type: number
         verdict:
           type: string
@@ -608,13 +631,42 @@ components:
         - alertType
         - engineType
         - description
+    RiskAlertItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticker:
+          type: string
+        date:
+          type: string
+        riskLevel:
+          type: string
+        activeSignalCount:
+          type: number
+        highSeverityCount:
+          type: number
+        description:
+          type: string
+        signals:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required:
+        - ticker
+        - date
+        - riskLevel
+        - activeSignalCount
+        - highSeverityCount
+        - description
     RiskAlertsResponse:
       type: object
       properties:
         alerts:
           type: array
           items:
-            $ref: "#/components/schemas/DriftSignalItem"
+            $ref: "#/components/schemas/RiskAlertItem"
       required:
         - alerts
     AddTickerRequest:

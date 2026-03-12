@@ -29,6 +29,7 @@ import type {
   ListDriftSignalsParams,
   ListOpportunityAlertsParams,
   ListScoresParams,
+  ListUniverseParams,
   OpportunityAlertsResponse,
   PipelineRunRequest,
   PipelineRunResponse,
@@ -1109,41 +1110,57 @@ export function useListRiskAlerts<
 /**
  * @summary List tickers in universe
  */
-export const getListUniverseUrl = () => {
-  return `/api/universe`;
+export const getListUniverseUrl = (params?: ListUniverseParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/universe?${stringifiedParams}`
+    : `/api/universe`;
 };
 
 export const listUniverse = async (
+  params?: ListUniverseParams,
   options?: RequestInit,
 ): Promise<CompaniesListResponse> => {
-  return customFetch<CompaniesListResponse>(getListUniverseUrl(), {
+  return customFetch<CompaniesListResponse>(getListUniverseUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListUniverseQueryKey = () => {
-  return [`/api/universe`] as const;
+export const getListUniverseQueryKey = (params?: ListUniverseParams) => {
+  return [`/api/universe`, ...(params ? [params] : [])] as const;
 };
 
 export const getListUniverseQueryOptions = <
   TData = Awaited<ReturnType<typeof listUniverse>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listUniverse>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListUniverseParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniverse>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListUniverseQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListUniverseQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listUniverse>>> = ({
     signal,
-  }) => listUniverse({ signal, ...requestOptions });
+  }) => listUniverse(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listUniverse>>,
@@ -1164,15 +1181,18 @@ export type ListUniverseQueryError = ErrorType<unknown>;
 export function useListUniverse<
   TData = Awaited<ReturnType<typeof listUniverse>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listUniverse>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListUniverseQueryOptions(options);
+>(
+  params?: ListUniverseParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniverse>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUniverseQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -51,6 +51,12 @@ export interface ScoreItem {
   innovationScore?: number;
   momentumScore?: number;
   valuationScore?: number;
+  sentimentScore?: number;
+  entryTimingScore?: number;
+  roic?: number;
+  revenueGrowth1y?: number;
+  grossMargin?: number;
+  fcfYield?: number;
   verdict?: string;
   classification?: string;
 }
@@ -170,8 +176,21 @@ export interface OpportunityAlertsResponse {
   alerts: OpportunityAlertItem[];
 }
 
+export type RiskAlertItemSignalsItem = { [key: string]: unknown };
+
+export interface RiskAlertItem {
+  id?: number;
+  ticker: string;
+  date: string;
+  riskLevel: string;
+  activeSignalCount: number;
+  highSeverityCount: number;
+  description: string;
+  signals?: RiskAlertItemSignalsItem[];
+}
+
 export interface RiskAlertsResponse {
-  alerts: DriftSignalItem[];
+  alerts: RiskAlertItem[];
 }
 
 export interface AddTickerRequest {
@@ -215,4 +234,15 @@ export type ListDriftSignalsParams = {
 
 export type ListOpportunityAlertsParams = {
   engineType?: string;
+};
+
+export type ListUniverseParams = {
+  /**
+   * Filter by sector (case-insensitive partial match)
+   */
+  sector?: string;
+  /**
+   * Filter by country (case-insensitive partial match)
+   */
+  country?: string;
 };

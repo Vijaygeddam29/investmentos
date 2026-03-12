@@ -4,13 +4,18 @@ import { useListUniverse, useAddToUniverse, useRemoveFromUniverse } from "@works
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus, Loader2, Globe } from "lucide-react";
+import { Trash2, Plus, Loader2, Globe, Search, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Universe() {
-  const { data, isLoading } = useListUniverse();
+  const [sectorFilter, setSectorFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+  const [appliedSector, setAppliedSector] = useState<string | undefined>(undefined);
+  const [appliedCountry, setAppliedCountry] = useState<string | undefined>(undefined);
+
+  const { data, isLoading } = useListUniverse({ sector: appliedSector, country: appliedCountry });
   const removeMutation = useRemoveFromUniverse();
   const addMutation = useAddToUniverse();
   const queryClient = useQueryClient();
@@ -18,6 +23,20 @@ export default function Universe() {
   
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({ ticker: "", name: "", sector: "" });
+
+  const handleApplyFilters = () => {
+    setAppliedSector(sectorFilter.trim() || undefined);
+    setAppliedCountry(countryFilter.trim() || undefined);
+  };
+
+  const handleClearFilters = () => {
+    setSectorFilter("");
+    setCountryFilter("");
+    setAppliedSector(undefined);
+    setAppliedCountry(undefined);
+  };
+
+  const hasActiveFilters = !!appliedSector || !!appliedCountry;
 
   const handleRemove = (ticker: string) => {
     removeMutation.mutate(
@@ -111,6 +130,39 @@ export default function Universe() {
               </form>
             </DialogContent>
           </Dialog>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border border-border bg-card/50">
+          <div className="flex-1 min-w-[160px] space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sector</label>
+            <Input
+              placeholder="e.g. Technology"
+              value={sectorFilter}
+              onChange={e => setSectorFilter(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleApplyFilters()}
+              className="bg-secondary/50 border-border h-8 text-sm"
+            />
+          </div>
+          <div className="flex-1 min-w-[160px] space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Country</label>
+            <Input
+              placeholder="e.g. US"
+              value={countryFilter}
+              onChange={e => setCountryFilter(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleApplyFilters()}
+              className="bg-secondary/50 border-border h-8 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleApplyFilters} className="h-8 gap-1.5">
+              <Search className="w-3.5 h-3.5" /> Filter
+            </Button>
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" onClick={handleClearFilters} className="h-8 gap-1.5 text-muted-foreground hover:text-foreground">
+                <X className="w-3.5 h-3.5" /> Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="rounded-xl border border-border bg-card overflow-hidden shadow-lg shadow-black/20">

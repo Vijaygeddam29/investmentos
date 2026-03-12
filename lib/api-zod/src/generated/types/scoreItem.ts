@@ -22,6 +22,12 @@ export interface ScoreItem {
   innovationScore?: number;
   momentumScore?: number;
   valuationScore?: number;
+  sentimentScore?: number;
+  entryTimingScore?: number;
+  roic?: number;
+  revenueGrowth1y?: number;
+  grossMargin?: number;
+  fcfYield?: number;
   verdict?: string;
   classification?: string;
 }
