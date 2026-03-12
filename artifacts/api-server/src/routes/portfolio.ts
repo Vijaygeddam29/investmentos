@@ -279,32 +279,105 @@ router.post("/portfolio/holdings", async (req, res) => {
   }
 });
 
-// ─── POST /api/portfolio/upload (CSV bulk import) ────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Strip exchange/currency suffixes: "QYLD/USD" → "QYLD", "SAP.DE" → "SAP" */
+function cleanTicker(raw: string): string {
+  return raw
+    .toUpperCase()
+    .trim()
+    .replace(/[/:](USD|GBP|EUR|AUD|CAD|CHF|JPY|HKD|SGD|NZD|INR|CNY|MXN|BRL|ZAR|NOK|SEK|DKK|PLN|CZK|HUF)$/i, "")
+    .replace(/\.(L|AS|PA|DE|MI|MC|HK|AX|TO|SI|KS|T|HM|NS|BO|SW|VI|BR|LS|OL|ST|CO|HE|IC|AT|CL|LM|SN|SA|MX|BA|AM|WA)$/i, "")
+    .trim();
+}
+
+/** Normalize any date string to YYYY-MM-DD.
+ *  Handles: DD/MM/YYYY [HH:MM:SS], MM/DD/YYYY, YYYY-MM-DD, ISO strings.
+ *  Returns null if it can't parse. */
+function normalizeDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  // Already ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+
+  // DD/MM/YYYY or DD/MM/YYYY HH:MM:SS  (European — day first)
+  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    // Heuristic: if day part > 12, it must be DD/MM/YYYY
+    // If both ≤ 12, assume DD/MM/YYYY (European) since user is likely UK-based
+    const dd = d.padStart(2, "0");
+    const mm = m.padStart(2, "0");
+    return `${y}-${mm}-${dd}`;
+  }
+
+  // Try native Date parse as last resort
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+
+  return null;
+}
+
+// ─── POST /api/portfolio/upload (CSV / Excel bulk import) ─────────────────────
 router.post("/portfolio/upload", async (req, res) => {
   try {
-    // Expects JSON body: { rows: [{ticker, shares, purchasePrice, purchaseDate?}] }
     const { rows } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
       res.status(400).json({ error: "rows array is required" });
       return;
     }
-    const inserts = rows.map((r: any) => ({
-      ticker:        String(r.ticker ?? "").toUpperCase().trim(),
-      shares:        Number(r.shares),
-      purchasePrice: Number(r.purchasePrice ?? r.purchase_price ?? r.price),
-      purchaseDate:  r.purchaseDate ?? r.purchase_date ?? null,
-      notes:         r.notes ?? null,
-    })).filter((r) => r.ticker && !isNaN(r.shares) && !isNaN(r.purchasePrice));
 
-    if (!inserts.length) {
+    // Parse and clean each raw row
+    const parsed = rows
+      .map((r: any) => ({
+        ticker:        cleanTicker(String(r.ticker ?? "")),
+        shares:        Number(r.shares),
+        purchasePrice: Number(r.purchasePrice ?? r.purchase_price ?? r.price),
+        purchaseDate:  normalizeDate(r.purchaseDate ?? r.purchase_date ?? null),
+        notes:         r.notes ?? null,
+      }))
+      .filter((r) => r.ticker && r.shares > 0 && r.purchasePrice > 0 && isFinite(r.shares) && isFinite(r.purchasePrice));
+
+    if (!parsed.length) {
       res.status(400).json({ error: "No valid rows found in upload" });
       return;
     }
 
+    // Consolidate multiple transactions per ticker → one holding with WACP
+    const grouped = new Map<string, { totalShares: number; totalCost: number; earliestDate: string | null; notes: string | null }>();
+    for (const r of parsed) {
+      const existing = grouped.get(r.ticker);
+      if (!existing) {
+        grouped.set(r.ticker, {
+          totalShares:  r.shares,
+          totalCost:    r.shares * r.purchasePrice,
+          earliestDate: r.purchaseDate,
+          notes:        r.notes,
+        });
+      } else {
+        existing.totalShares += r.shares;
+        existing.totalCost   += r.shares * r.purchasePrice;
+        // Keep earliest date
+        if (r.purchaseDate && (!existing.earliestDate || r.purchaseDate < existing.earliestDate)) {
+          existing.earliestDate = r.purchaseDate;
+        }
+      }
+    }
+
+    const inserts = Array.from(grouped.entries()).map(([ticker, g]) => ({
+      ticker,
+      shares:        +g.totalShares.toFixed(6),
+      purchasePrice: +(g.totalCost / g.totalShares).toFixed(6),  // weighted avg
+      purchaseDate:  g.earliestDate,
+      notes:         g.notes,
+    }));
+
     // Clear existing portfolio before importing
     await db.delete(portfolioHoldingsTable);
     const inserted = await db.insert(portfolioHoldingsTable).values(inserts).returning();
-    res.status(201).json({ imported: inserted.length, holdings: inserted });
+    res.status(201).json({ imported: inserted.length, consolidated: grouped.size, rawRows: parsed.length, holdings: inserted });
   } catch (err) {
     console.error("[Portfolio] Upload error", err);
     res.status(500).json({ error: "Failed to upload portfolio" });

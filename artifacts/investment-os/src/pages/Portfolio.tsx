@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import * as XLSX from "xlsx";
+import { Layout } from "@/components/layout/Layout";
 import {
   Upload, Plus, Trash2, RefreshCw, TrendingUp, TrendingDown, Minus,
   AlertTriangle, CheckCircle2, XCircle, ChevronDown, FileText, X
@@ -317,6 +318,7 @@ export default function Portfolio() {
   });
 
   return (
+    <Layout>
     <div className="flex-1 overflow-auto bg-background">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
@@ -691,5 +693,6 @@ export default function Portfolio() {
 
       </div>
     </div>
+    </Layout>
   );
 }
