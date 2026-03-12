@@ -3,7 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, Target, BarChart2 } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2 } from "lucide-react";
+import { EntryExitPanel } from "./EntryExitPanel";
 import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
@@ -158,99 +159,13 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                     )}
                   </TabsContent>
 
-                  {/* ── Entry/Exit Signals ── */}
+                  {/* ── Entry/Exit Intelligence ── */}
                   <TabsContent value="valuation" className="animate-in fade-in duration-300">
-                    {valuation ? (
-                      <div className="space-y-6">
-                        {/* Entry timing banner */}
-                        {entryTimingScore != null && (
-                          <div className={`p-4 rounded-xl border flex items-center justify-between
-                            ${entryTimingScore >= 0.70 ? 'border-success/30 bg-success/5' :
-                              entryTimingScore >= 0.55 ? 'border-warning/30 bg-warning/5' :
-                              'border-destructive/30 bg-destructive/5'}`}>
-                            <div className="flex items-center gap-3">
-                              <Target className={`w-5 h-5 ${
-                                entryTimingScore >= 0.70 ? 'text-success' :
-                                entryTimingScore >= 0.55 ? 'text-warning' : 'text-destructive'
-                              }`} />
-                              <div>
-                                <div className="text-sm font-semibold">Entry Timing Score</div>
-                                <div className="text-xs text-muted-foreground">Valuation + Momentum + Earnings Revision</div>
-                              </div>
-                            </div>
-                            <div className="text-2xl font-mono font-bold">{entryTimingScore.toFixed(2)}</div>
-                          </div>
-                        )}
-
-                        {/* DCF & intrinsic value signals */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Intrinsic Value Signals</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            <ValuationCard title="Margin of Safety" value={valuation.marginOfSafety} isPercentage optimal="> 20%" highlight />
-                            <ValuationCard title="DCF Discount" value={valuation.dcfDiscount} isPercentage optimal="> 0%" highlight />
-                            <ValuationCard title="Rule of 40" value={valuation.ruleOf40} optimal="> 40" isRaw />
-                            <ValuationCard title="Shareholder Yield" value={valuation.shareholderYield} isPercentage optimal="> 3%" />
-                          </div>
-                        </div>
-
-                        {/* Relative valuation */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Relative Valuation Multiples</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            <ValuationCard title="P/E Ratio" value={valuation.peRatio} optimal="< 25" />
-                            <ValuationCard title="Forward P/E" value={valuation.forwardPe} optimal="< 20" />
-                            <ValuationCard title="PEG Ratio" value={valuation.pegRatio} optimal="< 1.5" />
-                            <ValuationCard title="EV / EBITDA" value={valuation.evToEbitda} optimal="< 15" />
-                            <ValuationCard title="EV / Sales" value={valuation.evToSales} optimal="< 5" />
-                            <ValuationCard title="Price / FCF" value={valuation.priceToFcf} optimal="< 20" />
-                            <ValuationCard title="Price / Book" value={valuation.priceToBook} optimal="< 5" />
-                            <ValuationCard title="FCF Yield" value={valuation.fcfYield} isPercentage optimal="> 4%" />
-                          </div>
-                        </div>
-
-                        {/* Peer-relative valuation */}
-                        {(valuation.peVsPeerMedian != null || valuation.pePeerMedian != null) && (
-                          <div>
-                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">P/E vs Peers</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                              {valuation.peVsPeerMedian != null && (
-                                <div className="rounded-lg border border-border bg-secondary/30 p-3">
-                                  <div className="text-[10px] text-muted-foreground mb-1">P/E vs Peer Median</div>
-                                  <div className={`text-sm font-bold font-mono ${valuation.peVsPeerMedian > 1.2 ? "text-amber-400" : valuation.peVsPeerMedian < 0.85 ? "text-emerald-400" : "text-foreground"}`}>
-                                    {(valuation.peVsPeerMedian * 100).toFixed(0)}%
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                                    {valuation.peVsPeerMedian > 1.2 ? "Premium to peers" : valuation.peVsPeerMedian < 0.85 ? "Discount to peers ✓" : "In-line with peers"}
-                                  </div>
-                                </div>
-                              )}
-                              {valuation.pePeerMedian != null && (
-                                <div className="rounded-lg border border-border bg-secondary/30 p-3">
-                                  <div className="text-[10px] text-muted-foreground mb-1">Peer Median P/E</div>
-                                  <div className="text-sm font-bold font-mono">
-                                    {valuation.pePeerMedian.toFixed(1)}x
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground mt-0.5">Sector benchmark</div>
-                                </div>
-                              )}
-                              {valuation.evEbitdaPeerMedian != null && (
-                                <div className="rounded-lg border border-border bg-secondary/30 p-3">
-                                  <div className="text-[10px] text-muted-foreground mb-1">Peer Median EV/EBITDA</div>
-                                  <div className="text-sm font-bold font-mono">
-                                    {valuation.evEbitdaPeerMedian.toFixed(1)}x
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground mt-0.5">Sector benchmark</div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No valuation data available. Run the pipeline first.
-                      </div>
-                    )}
+                    <EntryExitPanel
+                      entryTimingScore={entryTimingScore ?? null}
+                      momentumIndicators={(data as any)?.momentumIndicators ?? null}
+                      valuation={valuation ?? null}
+                    />
                   </TabsContent>
 
                   {/* ── Charts ── */}
