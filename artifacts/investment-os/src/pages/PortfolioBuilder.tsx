@@ -6,7 +6,7 @@ import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
-  TrendingUp, Globe, ChevronDown, AlertCircle,
+  TrendingUp, Globe, ChevronDown, ChevronRight, AlertCircle,
   Zap, AlertTriangle, Sparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +118,7 @@ export default function PortfolioBuilder() {
 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen]         = useState(false);
+  const [methodologyOpen, setMethodologyOpen] = useState(false);
 
   const { data: countriesData } = useQuery<{ countries: CountryOption[] }>({
     queryKey: ["portfolio-builder-countries"],
@@ -362,14 +363,25 @@ export default function PortfolioBuilder() {
             )}
 
             {isPowerLaw && holdings.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-4">
-                <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Power Law Methodology</h3>
-                <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>Selection uses <strong className="text-foreground">regime-weighted composite</strong> scores ({regimeInfo?.name ?? "NEUTRAL"} regime) rather than single-strategy rank.</p>
-                  <p>Weights are <strong className="text-foreground">sector-percentile normalised</strong> (score vs. sector peers) then raised to exponent <strong className="text-foreground">α=1.8</strong>.</p>
-                  <p>Companies with PE &gt; 1.5× sector median receive a <strong className="text-foreground">30% weight haircut</strong>.</p>
-                  <p>Tickers in secular breakout themes (AI, GLP-1, next-gen platforms) receive a <strong className="text-foreground">15% premium</strong>.</p>
-                </div>
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setMethodologyOpen(!methodologyOpen)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"
+                >
+                  <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Power Law Methodology</h3>
+                  {methodologyOpen
+                    ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  }
+                </button>
+                {methodologyOpen && (
+                  <div className="px-4 pb-4 space-y-2 text-xs text-muted-foreground border-t border-border pt-3">
+                    <p>Selection uses <strong className="text-foreground">regime-weighted composite</strong> scores ({regimeInfo?.name ?? "NEUTRAL"} regime) rather than single-strategy rank.</p>
+                    <p>Weights are <strong className="text-foreground">sector-percentile normalised</strong> (score vs. sector peers) then raised to exponent <strong className="text-foreground">α=1.8</strong>.</p>
+                    <p>Companies with PE &gt; 1.5× sector median receive a <strong className="text-foreground">30% weight haircut</strong>.</p>
+                    <p>Tickers in secular breakout themes (AI, GLP-1, next-gen platforms) receive a <strong className="text-foreground">15% premium</strong>.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

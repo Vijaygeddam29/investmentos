@@ -22,28 +22,21 @@ const MARKET_CAP_RANGES: Record<MarketCapTier, [number, number]> = {
   small: [0.5,    2],
 };
 
-const COUNTRY_MAP: Record<string, string> = {
-  all:              "",
-  "united-states":  "United States",
-  "united-kingdom": "United Kingdom",
-  india:            "India",
-  france:           "France",
-  china:            "China",
-  netherlands:      "Netherlands",
-  australia:        "Australia",
-  brazil:           "Brazil",
-  canada:           "Canada",
-  denmark:          "Denmark",
-  germany:          "Germany",
-  "hong-kong":      "Hong Kong",
-  ireland:          "Ireland",
-  israel:           "Israel",
-  italy:            "Italy",
-  singapore:        "Singapore",
-  switzerland:      "Switzerland",
-  taiwan:           "Taiwan",
-  uruguay:          "Uruguay",
+const COUNTRY_ABBREVIATION_MAP: Record<string, string> = {
+  US: "United States", UK: "United Kingdom", IL: "Israel",
 };
+
+function normalizeCountry(raw: string | null | undefined): string {
+  if (!raw) return "Unknown";
+  return COUNTRY_ABBREVIATION_MAP[raw] ?? raw;
+}
+
+function slugToCountryName(slug: string): string {
+  return slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 const INNOVATION_TIER: Record<string, string> = {
   NVDA: "AI Infrastructure",
@@ -145,13 +138,26 @@ function computeSectorPercentile(
 async function fetchSectorPeMedians(tickers: string[], companyMap: Record<string, { sector?: string | null }>): Promise<Record<string, number>> {
   if (!tickers.length) return {};
 
+  const [latestMetric] = await db
+    .select({ date: financialMetricsTable.date })
+    .from(financialMetricsTable)
+    .orderBy(desc(financialMetricsTable.date))
+    .limit(1);
+
+  if (!latestMetric) return {};
+
   const metricsRows = await db
     .select({
       ticker: financialMetricsTable.ticker,
       peRatio: financialMetricsTable.peRatio,
     })
     .from(financialMetricsTable)
-    .where(inArray(financialMetricsTable.ticker, tickers));
+    .where(
+      and(
+        inArray(financialMetricsTable.ticker, tickers),
+        eq(financialMetricsTable.date, latestMetric.date)
+      )
+    );
 
   const sectorPEs: Record<string, number[]> = {};
   const tickerPE: Record<string, number> = {};
@@ -192,7 +198,7 @@ router.get("/portfolio/builder", async (req, res) => {
     const mktCapKey   = (req.query.marketCap   as MarketCapTier) ?? "all";
 
     const [mktMin, mktMax] = MARKET_CAP_RANGES[mktCapKey] ?? MARKET_CAP_RANGES.all;
-    const countryFilter    = COUNTRY_MAP[countryKey] ?? null;
+    const countryFilter    = countryKey === "all" ? null : slugToCountryName(countryKey);
 
     const [latestRow] = await db
       .select({ date: factorSnapshotsTable.date })
@@ -229,14 +235,6 @@ router.get("/portfolio/builder", async (req, res) => {
 
     const companyMap: Record<string, typeof companies[0]> = {};
     for (const c of companies) companyMap[c.ticker] = c;
-
-    const normalizeCountry = (raw: string | null | undefined): string => {
-      if (!raw) return "Unknown";
-      const map: Record<string, string> = {
-        US: "United States", UK: "United Kingdom", IL: "Israel",
-      };
-      return map[raw] ?? raw;
-    };
 
     const filtered = snapshots.filter((s) => {
       const co = companyMap[s.ticker];
@@ -419,16 +417,10 @@ router.get("/portfolio/builder/countries", async (_req, res) => {
       .select({ country: companiesTable.country })
       .from(companiesTable);
 
-    const normalize = (raw: string | null): string => {
-      if (!raw) return "";
-      const map: Record<string, string> = { US: "United States", UK: "United Kingdom", IL: "Israel" };
-      return map[raw] ?? raw;
-    };
-
     const countMap: Record<string, number> = {};
     for (const r of rows) {
-      const c = normalize(r.country);
-      if (!c) continue;
+      const c = normalizeCountry(r.country);
+      if (!c || c === "Unknown") continue;
       countMap[c] = (countMap[c] ?? 0) + 1;
     }
 
