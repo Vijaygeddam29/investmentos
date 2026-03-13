@@ -10,6 +10,7 @@ import {
   ReferenceArea,
 } from "recharts";
 import type { PricePoint } from "@workspace/api-client-react";
+import { useTheme } from "@/lib/theme";
 
 interface Props {
   priceHistory: PricePoint[];
@@ -17,6 +18,16 @@ interface Props {
 }
 
 export function ValuationBandChart({ priceHistory, marginOfSafety }: Props) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const gridColor     = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)";
+  const tickColor     = isDark ? "#6b7280" : "#4b5563";
+  const axisLineColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)";
+  const tooltipBg     = isDark ? "#1a1f2e" : "#ffffff";
+  const tooltipBorder = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.12)";
+  const ivLineColor   = isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)";
+  const ivLabelColor  = isDark ? "#9ca3af" : "#4b5563";
+
   if (!priceHistory.length) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
@@ -87,26 +98,26 @@ export function ValuationBandChart({ priceHistory, marginOfSafety }: Props) {
 
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={priceHistory} margin={{ top: 4, right: 12, left: 8, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
           <XAxis
             dataKey="date"
             tickFormatter={formatDate}
             interval={tickInterval}
-            tick={{ fill: "#6b7280", fontSize: 10 }}
-            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+            tick={{ fill: tickColor, fontSize: 10 }}
+            axisLine={{ stroke: axisLineColor }}
             tickLine={false}
           />
           <YAxis
             domain={[minY, maxY]}
             tickFormatter={v => `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)}`}
-            tick={{ fill: "#6b7280", fontSize: 10 }}
+            tick={{ fill: tickColor, fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             width={56}
           />
           <Tooltip
-            contentStyle={{ background: "#1a1f2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
-            labelStyle={{ color: "#9ca3af" }}
+            contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: 8, fontSize: 11 }}
+            labelStyle={{ color: ivLabelColor }}
             formatter={(value: number) => [`$${value.toFixed(2)}`, "Price"]}
           />
 
@@ -126,9 +137,9 @@ export function ValuationBandChart({ priceHistory, marginOfSafety }: Props) {
           {intrinsicValue != null && (
             <ReferenceLine
               y={intrinsicValue}
-              stroke="rgba(255,255,255,0.3)"
+              stroke={ivLineColor}
               strokeDasharray="5 3"
-              label={{ value: `IV $${intrinsicValue.toFixed(0)}`, fill: "#9ca3af", fontSize: 9, position: "right" }}
+              label={{ value: `IV $${intrinsicValue.toFixed(0)}`, fill: ivLabelColor, fontSize: 9, position: "right" }}
             />
           )}
           {buyThreshold != null && (

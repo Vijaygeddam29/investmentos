@@ -8,10 +8,11 @@ import {
 import { format } from "date-fns";
 import {
   ShieldAlert, TrendingUp, AlertTriangle, Activity, ChevronDown, ChevronUp,
-  Shield, Rocket, Waves, Info, Zap, Flag, Building2, Globe,
+  Shield, Rocket, Waves, Info, Zap, Flag, Building2, Globe, Users, Lock, AlertCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getCompanyIntel } from "@/lib/company-intel";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +96,77 @@ const SECTOR_MACRO: Record<string, string> = {
   "Real Estate": "Rate sensitivity remains high; cap rate compression reversing. Data centres and industrial REITs outperforming.",
   "Utilities": "AI data centre power demand is a genuine secular tailwind. Regulated utilities benefiting from higher allowed returns.",
 };
+
+function CompanyIntelPanel({ ticker, co }: { ticker: string; co?: any }) {
+  const intel = getCompanyIntel(ticker, co?.sector, co?.industry);
+
+  if (intel) {
+    return (
+      <div className="space-y-2.5">
+        <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
+            <Info className="w-3.5 h-3.5 text-blue-400" /> About {ticker}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{intel.description}</p>
+          <div className="mt-2 text-xs text-muted-foreground/70 font-mono">CEO: {intel.ceo}</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
+              <Flag className="w-3 h-3 text-primary" /> Key Products
+            </div>
+            <ul className="space-y-0.5">
+              {intel.keyProducts.slice(0, 4).map((p, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                  <span className="text-primary/60 mt-0.5 shrink-0">•</span>{p}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
+              <Users className="w-3 h-3 text-orange-400" /> Competitors
+            </div>
+            <ul className="space-y-0.5">
+              {intel.competitors.slice(0, 3).map((c, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                  <span className="text-orange-400/60 mt-0.5 shrink-0">•</span>{c}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-500 mb-1.5 uppercase tracking-wider">
+            <Lock className="w-3 h-3" /> Competitive Moat
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{intel.moat}</p>
+        </div>
+
+        <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-500 mb-1.5 uppercase tracking-wider">
+            <AlertCircle className="w-3 h-3" /> Key Risk
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{intel.keyRisk}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const macro = co?.sector ? SECTOR_MACRO[co.sector] : null;
+  if (!macro) return null;
+
+  return (
+    <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
+        <Globe className="w-3.5 h-3.5 text-violet-400" /> {co?.sector ?? ""} sector context
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">{macro}</p>
+    </div>
+  );
+}
 
 function SignalsLayout({ title, description, icon: Icon, color, children, count }: any) {
   return (
@@ -253,14 +325,7 @@ export function DriftSignals() {
                           </div>
                         </>
                       )}
-                      {co && SECTOR_MACRO[co.sector] && (
-                        <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
-                            <Globe className="w-3.5 h-3.5 text-violet-400" /> {co.sector} sector macro context
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{SECTOR_MACRO[co.sector]}</p>
-                        </div>
-                      )}
+                      <CompanyIntelPanel ticker={signal.ticker} co={co} />
                       {co && (co.fortressScore != null || co.rocketScore != null || co.waveScore != null) && (
                         <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
                           <div className="text-xs font-semibold text-foreground mb-2">Engine scores</div>
@@ -406,14 +471,7 @@ export function OpportunityAlerts() {
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed">{cfg.why}</p>
                       </div>
-                      {co && SECTOR_MACRO[co.sector] && (
-                        <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
-                            <Globe className="w-3.5 h-3.5 text-violet-400" /> {co.sector} macro
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{SECTOR_MACRO[co.sector]}</p>
-                        </div>
-                      )}
+                      <CompanyIntelPanel ticker={alert.ticker} co={co} />
                       <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 mb-1.5">
                           <Zap className="w-3.5 h-3.5" /> Suggested action
@@ -590,15 +648,8 @@ export function RiskAlerts() {
                         </p>
                       </div>
 
-                      {/* Macro context */}
-                      {co && SECTOR_MACRO[co.sector] && (
-                        <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
-                            <Globe className="w-3.5 h-3.5 text-violet-400" /> {co.sector} macro context
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{SECTOR_MACRO[co.sector]}</p>
-                        </div>
-                      )}
+                      {/* Company intelligence */}
+                      <CompanyIntelPanel ticker={alert.ticker} co={co} />
                     </div>
                   )}
                 </CardContent>

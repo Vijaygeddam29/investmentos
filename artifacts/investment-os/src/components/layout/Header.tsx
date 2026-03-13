@@ -1,6 +1,7 @@
 import { usePipelineManager } from "@/hooks/use-pipeline-manager";
 import { Button } from "@/components/ui/button";
-import { Play, Loader2, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Play, Loader2, Clock, CheckCircle2, AlertCircle, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 import { format } from "date-fns";
 
 const STEP_LABELS: Record<string, string> = {
@@ -14,6 +15,7 @@ const STEP_LABELS: Record<string, string> = {
 
 export function Header() {
   const { triggerPipeline, isStarting, isRunning, status } = usePipelineManager();
+  const { theme, toggle } = useTheme();
 
   const results = status?.results ?? [];
   const lastTicker = results[results.length - 1];
@@ -78,6 +80,16 @@ export function Header() {
             )}
           </div>
         )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggle}
+          className="text-muted-foreground hover:text-foreground"
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </Button>
 
         <Button
           onClick={() => triggerPipeline()}
