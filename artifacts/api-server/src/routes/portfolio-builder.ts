@@ -125,14 +125,14 @@ function computeSectorPercentile(
   sectorScores: Record<string, number[]>
 ): number {
   const peers = sectorScores[sector];
-  if (!peers || peers.length <= 1) return score;
+  if (!peers || peers.length <= 1) return 0.5;
   const sorted = [...peers].sort((a, b) => a - b);
   let rank = 0;
   for (const s of sorted) {
     if (s < score) rank++;
     else break;
   }
-  return rank / (sorted.length - 1);
+  return Math.max(0.01, Math.min(1, rank / (sorted.length - 1)));
 }
 
 async function fetchSectorPeMedians(tickers: string[], companyMap: Record<string, { sector?: string | null }>): Promise<Record<string, number>> {
