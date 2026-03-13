@@ -4,30 +4,74 @@ import {
   factorSnapshotsTable,
   priceHistoryTable,
   companiesTable,
+  financialMetricsTable,
 } from "@workspace/db/schema";
 import { eq, desc, inArray, gte, and, isNotNull } from "drizzle-orm";
+import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 
 const router: IRouter = Router();
 
 type Strategy     = "fortress" | "rocket" | "wave";
 type WeightMethod = "equal" | "score" | "risk" | "power";
-type Country      = "all" | "us" | "uk" | "india";
 type MarketCapTier = "all" | "large" | "mid" | "small";
 
-// marketCap in factor_snapshots is stored in billions (e.g. 283.7 = $283.7B)
 const MARKET_CAP_RANGES: Record<MarketCapTier, [number, number]> = {
-  all:   [0.5,    Infinity], // min $500M = 0.5B
-  large: [10,     Infinity], // $10B+
-  mid:   [2,      10],       // $2B – $10B
-  small: [0.5,    2],        // $500M – $2B
+  all:   [0.5,    Infinity],
+  large: [10,     Infinity],
+  mid:   [2,      10],
+  small: [0.5,    2],
 };
 
-const COUNTRY_MAP: Record<Country, string | null> = {
-  all:   null,
-  us:    "US",
-  uk:    "UK",
-  india: "India",
+const COUNTRY_MAP: Record<string, string> = {
+  all:              "",
+  "united-states":  "United States",
+  "united-kingdom": "United Kingdom",
+  india:            "India",
+  france:           "France",
+  china:            "China",
+  netherlands:      "Netherlands",
+  australia:        "Australia",
+  brazil:           "Brazil",
+  canada:           "Canada",
+  denmark:          "Denmark",
+  germany:          "Germany",
+  "hong-kong":      "Hong Kong",
+  ireland:          "Ireland",
+  israel:           "Israel",
+  italy:            "Italy",
+  singapore:        "Singapore",
+  switzerland:      "Switzerland",
+  taiwan:           "Taiwan",
+  uruguay:          "Uruguay",
 };
+
+const INNOVATION_TIER: Record<string, string> = {
+  NVDA: "AI Infrastructure",
+  MSFT: "AI Infrastructure",
+  PLTR: "AI Infrastructure",
+  AMD:  "AI Infrastructure",
+  AVGO: "AI Infrastructure",
+  GOOGL:"AI Infrastructure",
+  META: "AI Infrastructure",
+  AMZN: "AI Infrastructure",
+  LLY:  "GLP-1 / Biotech",
+  NVO:  "GLP-1 / Biotech",
+  ISRG: "GLP-1 / Biotech",
+  NET:  "Next-Gen Platform",
+  CRM:  "Next-Gen Platform",
+  DDOG: "Next-Gen Platform",
+  SNOW: "Next-Gen Platform",
+  CRWD: "Next-Gen Platform",
+  PANW: "Next-Gen Platform",
+  NOW:  "Next-Gen Platform",
+  SHOP: "Next-Gen Platform",
+  TSLA: "Clean Energy / EV",
+};
+
+const INNOVATION_PREMIUM = 1.15;
+const POWER_ALPHA = 1.8;
+const VALUATION_PENALTY = 0.7;
+const PE_THRESHOLD_MULT = 1.5;
 
 function getScoreField(strategy: Strategy) {
   if (strategy === "fortress") return factorSnapshotsTable.fortressScore;
@@ -39,8 +83,6 @@ function clamp(n: number, min = 0.1, max = 0.5) {
   return Math.min(max, Math.max(min, n));
 }
 
-/** 90-day annualised volatility for a set of tickers, computed from a
- *  single batch price query. Returns a map ticker → vol (defaults to 0.25). */
 async function batchVolatility(tickers: string[]): Promise<Record<string, number>> {
   if (!tickers.length) return {};
 
@@ -84,20 +126,74 @@ async function batchVolatility(tickers: string[]): Promise<Record<string, number
   return result;
 }
 
-// ─── GET /api/portfolio/builder ──────────────────────────────────────────────
+function computeSectorPercentile(
+  score: number,
+  sector: string,
+  sectorScores: Record<string, number[]>
+): number {
+  const peers = sectorScores[sector];
+  if (!peers || peers.length <= 1) return score;
+  const sorted = [...peers].sort((a, b) => a - b);
+  let rank = 0;
+  for (const s of sorted) {
+    if (s < score) rank++;
+    else break;
+  }
+  return rank / (sorted.length - 1);
+}
+
+async function fetchSectorPeMedians(tickers: string[], companyMap: Record<string, { sector?: string | null }>): Promise<Record<string, number>> {
+  if (!tickers.length) return {};
+
+  const metricsRows = await db
+    .select({
+      ticker: financialMetricsTable.ticker,
+      peRatio: financialMetricsTable.peRatio,
+    })
+    .from(financialMetricsTable)
+    .where(inArray(financialMetricsTable.ticker, tickers));
+
+  const sectorPEs: Record<string, number[]> = {};
+  const tickerPE: Record<string, number> = {};
+
+  for (const r of metricsRows) {
+    if (r.peRatio == null || r.peRatio <= 0 || r.peRatio > 2000) continue;
+    tickerPE[r.ticker] = r.peRatio;
+    const sector = companyMap[r.ticker]?.sector ?? "Unknown";
+    if (!sectorPEs[sector]) sectorPEs[sector] = [];
+    sectorPEs[sector].push(r.peRatio);
+  }
+
+  const medians: Record<string, number> = {};
+  for (const [sector, pes] of Object.entries(sectorPEs)) {
+    const sorted = [...pes].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    medians[sector] = sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  }
+
+  return Object.fromEntries(
+    Object.entries(tickerPE).map(([ticker, pe]) => {
+      const sector = companyMap[ticker]?.sector ?? "Unknown";
+      const median = medians[sector];
+      return [ticker, median ? pe / median : 1.0];
+    })
+  );
+}
+
 router.get("/portfolio/builder", async (req, res) => {
   try {
     const strategy    = (req.query.strategy    as Strategy)      ?? "rocket";
     const size        = Math.min(30, Math.max(5, parseInt(req.query.size as string) || 10));
     const weightMethod = (req.query.weightMethod as WeightMethod) ?? "score";
     const sectorCap   = Math.min(5,  Math.max(1, parseInt(req.query.sectorCap  as string) || 2));
-    const countryKey  = (req.query.country     as Country)       ?? "all";
+    const countryKey  = (req.query.country     as string)        ?? "all";
     const mktCapKey   = (req.query.marketCap   as MarketCapTier) ?? "all";
 
     const [mktMin, mktMax] = MARKET_CAP_RANGES[mktCapKey] ?? MARKET_CAP_RANGES.all;
     const countryFilter    = COUNTRY_MAP[countryKey] ?? null;
 
-    // ── 1. Find the latest snapshot date ──────────────────────────────────────
     const [latestRow] = await db
       .select({ date: factorSnapshotsTable.date })
       .from(factorSnapshotsTable)
@@ -111,7 +207,6 @@ router.get("/portfolio/builder", async (req, res) => {
 
     const snapshotDate = latestRow.date;
 
-    // ── 2. Fetch all snapshots for that date ──────────────────────────────────
     const scoreField = getScoreField(strategy);
     const snapshots  = await db
       .select()
@@ -124,7 +219,6 @@ router.get("/portfolio/builder", async (req, res) => {
       )
       .orderBy(desc(scoreField));
 
-    // ── 3. Join company metadata ──────────────────────────────────────────────
     const tickers  = snapshots.map((s) => s.ticker);
     const companies = tickers.length
       ? await db
@@ -136,23 +230,51 @@ router.get("/portfolio/builder", async (req, res) => {
     const companyMap: Record<string, typeof companies[0]> = {};
     for (const c of companies) companyMap[c.ticker] = c;
 
-    // ── 4. Filter by country and market-cap tier ──────────────────────────────
+    const normalizeCountry = (raw: string | null | undefined): string => {
+      if (!raw) return "Unknown";
+      const map: Record<string, string> = {
+        US: "United States", UK: "United Kingdom", IL: "Israel",
+      };
+      return map[raw] ?? raw;
+    };
+
     const filtered = snapshots.filter((s) => {
       const co = companyMap[s.ticker];
-      if (countryFilter && co?.country !== countryFilter) return false;
-      // If mkt cap is null, only allow through when tier is "all"
+      const coCountry = normalizeCountry(co?.country);
+      if (countryFilter && coCountry !== countryFilter) return false;
       if (s.marketCap == null) return mktCapKey === "all";
-      // mktMin/mktMax are in billions (same unit as DB)
       if (s.marketCap < mktMin) return false;
       if (mktMax !== Infinity && s.marketCap > mktMax) return false;
       return true;
     });
 
-    // ── 5. Iterative sector-cap fill ─────────────────────────────────────────
+    const isPowerLaw = weightMethod === "power";
+
+    let regime = await detectMarketRegime();
+    const regimeWeights = regime.weights;
+
+    let sortedForSelection = filtered;
+    if (isPowerLaw) {
+      sortedForSelection = [...filtered].sort((a, b) => {
+        const compA = computeCompositeScore(
+          a.fortressScore ?? 0, a.rocketScore ?? 0, a.waveScore ?? 0, regimeWeights
+        );
+        const compB = computeCompositeScore(
+          b.fortressScore ?? 0, b.rocketScore ?? 0, b.waveScore ?? 0, regimeWeights
+        );
+        if (Math.abs(compB - compA) > 0.001) return compB - compA;
+        const getS = (s: typeof a) =>
+          strategy === "fortress" ? (s.fortressScore ?? 0) :
+          strategy === "rocket"  ? (s.rocketScore ?? 0) :
+                                    (s.waveScore ?? 0);
+        return getS(b) - getS(a);
+      });
+    }
+
     const sectorCount: Record<string, number> = {};
     const selected: typeof filtered = [];
 
-    for (const s of filtered) {
+    for (const s of sortedForSelection) {
       if (selected.length >= size) break;
       const sector = companyMap[s.ticker]?.sector ?? "Unknown";
       const count  = sectorCount[sector] ?? 0;
@@ -166,10 +288,29 @@ router.get("/portfolio/builder", async (req, res) => {
       return;
     }
 
-    // ── 6. Compute weights ────────────────────────────────────────────────────
     let vols: Record<string, number> = {};
     if (weightMethod === "risk") {
       vols = await batchVolatility(selected.map((s) => s.ticker));
+    }
+
+    const sectorScores: Record<string, number[]> = {};
+    if (isPowerLaw) {
+      for (const s of filtered) {
+        const sector = companyMap[s.ticker]?.sector ?? "Unknown";
+        const composite = computeCompositeScore(
+          s.fortressScore ?? 0, s.rocketScore ?? 0, s.waveScore ?? 0, regimeWeights
+        );
+        if (!sectorScores[sector]) sectorScores[sector] = [];
+        sectorScores[sector].push(composite);
+      }
+    }
+
+    let peRatios: Record<string, number> = {};
+    if (isPowerLaw) {
+      peRatios = await fetchSectorPeMedians(
+        filtered.map(s => s.ticker),
+        companyMap as Record<string, { sector?: string | null }>
+      );
     }
 
     const getScore = (s: typeof selected[0]) => {
@@ -178,12 +319,29 @@ router.get("/portfolio/builder", async (req, res) => {
       return s.waveScore ?? 0;
     };
 
-    const POWER_ALPHA = 1.8;
     const rawWeights = selected.map((s) => {
       const score = getScore(s);
       if (weightMethod === "equal") return 1;
       if (weightMethod === "score") return score;
-      if (weightMethod === "power") return Math.pow(Math.max(score, 0.01), POWER_ALPHA);
+      if (weightMethod === "power") {
+        const sector = companyMap[s.ticker]?.sector ?? "Unknown";
+        const composite = computeCompositeScore(
+          s.fortressScore ?? 0, s.rocketScore ?? 0, s.waveScore ?? 0, regimeWeights
+        );
+        const percentile = computeSectorPercentile(composite, sector, sectorScores);
+        let w = Math.pow(Math.max(percentile, 0.01), POWER_ALPHA);
+
+        const peVsMedian = peRatios[s.ticker];
+        if (peVsMedian != null && peVsMedian > PE_THRESHOLD_MULT) {
+          w *= VALUATION_PENALTY;
+        }
+
+        if (INNOVATION_TIER[s.ticker]) {
+          w *= INNOVATION_PREMIUM;
+        }
+
+        return w;
+      }
       const vol = clamp(vols[s.ticker] ?? 0.25);
       return score / vol;
     });
@@ -191,25 +349,38 @@ router.get("/portfolio/builder", async (req, res) => {
     const totalRaw = rawWeights.reduce((a, b) => a + b, 0) || 1;
     const weights  = rawWeights.map((w) => w / totalRaw);
 
-    // ── 7. Compute portfolio-level aggregate scores (weighted average) ────────
     const wFortress = selected.reduce((s, h, i) => s + (h.fortressScore ?? 0) * weights[i], 0);
     const wRocket   = selected.reduce((s, h, i) => s + (h.rocketScore   ?? 0) * weights[i], 0);
     const wWave     = selected.reduce((s, h, i) => s + (h.waveScore     ?? 0) * weights[i], 0);
 
-    // ── 8. Build response ─────────────────────────────────────────────────────
     const holdings = selected.map((s, i) => {
       const co = companyMap[s.ticker];
-      const compositeScore =
-        (s.fortressScore ?? 0) * 0.40 +
-        (s.rocketScore   ?? 0) * 0.35 +
-        (s.waveScore     ?? 0) * 0.25;
+      const compositeScore = computeCompositeScore(
+        s.fortressScore ?? 0, s.rocketScore ?? 0, s.waveScore ?? 0, regimeWeights
+      );
+      const sector = co?.sector ?? "Unknown";
+
+      const peVsMedian = peRatios[s.ticker];
+      const highValuation = isPowerLaw && peVsMedian != null && peVsMedian > PE_THRESHOLD_MULT;
+      const innovationTier = INNOVATION_TIER[s.ticker] ?? null;
+
+      let rationale = "";
+      if (isPowerLaw) {
+        const percentile = computeSectorPercentile(compositeScore, sector, sectorScores);
+        const pctRank = Math.round(percentile * 100);
+        const parts: string[] = [];
+        parts.push(`P${pctRank} composite in ${sector}`);
+        if (innovationTier) parts.push(`Innovation Tier: ${innovationTier}`);
+        if (highValuation) parts.push("⚠ High valuation haircut");
+        rationale = parts.join("; ");
+      }
 
       return {
         rank:           i + 1,
         ticker:         s.ticker,
         name:           co?.name    ?? s.ticker,
-        sector:         co?.sector  ?? "Unknown",
-        country:        co?.country ?? "Unknown",
+        sector,
+        country:        normalizeCountry(co?.country),
         weight:         weights[i],
         compositeScore,
         fortressScore:  s.fortressScore  ?? null,
@@ -218,6 +389,9 @@ router.get("/portfolio/builder", async (req, res) => {
         entryScore:     s.entryScore     ?? null,
         marketCap:      s.marketCap      ?? null,
         volatility:     weightMethod === "risk" ? (vols[s.ticker] ?? null) : null,
+        highValuation,
+        innovationTier,
+        rationale,
       };
     });
 
@@ -230,11 +404,46 @@ router.get("/portfolio/builder", async (req, res) => {
       },
       snapshotDate,
       universeSize: filtered.length,
+      regime: { name: regime.regime, confidence: regime.confidence },
       params: { strategy, size, weightMethod, sectorCap, country: countryKey, marketCap: mktCapKey },
     });
   } catch (err) {
     console.error("[PortfolioBuilder] Error", err);
     res.status(500).json({ error: "Failed to build portfolio" });
+  }
+});
+
+router.get("/portfolio/builder/countries", async (_req, res) => {
+  try {
+    const rows = await db
+      .select({ country: companiesTable.country })
+      .from(companiesTable);
+
+    const normalize = (raw: string | null): string => {
+      if (!raw) return "";
+      const map: Record<string, string> = { US: "United States", UK: "United Kingdom", IL: "Israel" };
+      return map[raw] ?? raw;
+    };
+
+    const countMap: Record<string, number> = {};
+    for (const r of rows) {
+      const c = normalize(r.country);
+      if (!c) continue;
+      countMap[c] = (countMap[c] ?? 0) + 1;
+    }
+
+    const countries = Object.entries(countMap)
+      .map(([name, count]) => ({
+        name,
+        slug: name.toLowerCase().replace(/\s+/g, "-"),
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({ countries });
+  } catch (err) {
+    console.error("[PortfolioBuilder] countries error", err);
+    res.status(500).json({ error: "Failed to fetch countries" });
   }
 });
 

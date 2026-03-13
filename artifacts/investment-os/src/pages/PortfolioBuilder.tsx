@@ -6,15 +6,13 @@ import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
-  TrendingUp, Globe, ChevronDown, AlertCircle
+  TrendingUp, Globe, ChevronDown, AlertCircle,
+  Zap, AlertTriangle, Sparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type Strategy     = "fortress" | "rocket" | "wave";
 type WeightMethod = "equal" | "score" | "risk" | "power";
-type Country      = "all" | "us" | "uk" | "india";
 type MarketCapTier = "all" | "large" | "mid" | "small";
 
 interface BuilderHolding {
@@ -31,6 +29,9 @@ interface BuilderHolding {
   entryScore:     number | null;
   marketCap:      number | null;
   volatility:     number | null;
+  highValuation:  boolean;
+  innovationTier: string | null;
+  rationale:      string;
 }
 
 interface BuilderResponse {
@@ -38,12 +39,25 @@ interface BuilderResponse {
   portfolioScore: { fortress: number; rocket: number; wave: number } | null;
   snapshotDate:   string | null;
   universeSize:   number;
+  regime:         { name: string; confidence: string } | null;
   params:         Record<string, unknown>;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+interface CountryOption {
+  name: string;
+  slug: string;
+  count: number;
+}
 
-// marketCap is in billions (e.g. 283.7 = $283.7B)
+const COUNTRY_FLAGS: Record<string, string> = {
+  "United States": "🇺🇸", "United Kingdom": "🇬🇧", India: "🇮🇳",
+  Germany: "🇩🇪", France: "🇫🇷", Italy: "🇮🇹", Japan: "🇯🇵",
+  China: "🇨🇳", Taiwan: "🇹🇼", Netherlands: "🇳🇱", Canada: "🇨🇦",
+  Australia: "🇦🇺", Brazil: "🇧🇷", Denmark: "🇩🇰", "Hong Kong": "🇭🇰",
+  Ireland: "🇮🇪", Israel: "🇮🇱", Singapore: "🇸🇬", Switzerland: "🇨🇭",
+  Uruguay: "🇺🇾",
+};
+
 function formatMktCap(v?: number | null) {
   if (v == null) return "—";
   if (v >= 1000) return `${(v / 1000).toFixed(1)}T`;
@@ -65,8 +79,7 @@ function ScoreMini({ value, color }: { value: number | null; color: string }) {
 }
 
 function CountryFlag({ country }: { country: string }) {
-  const flags: Record<string, string> = { US: "🇺🇸", UK: "🇬🇧", India: "🇮🇳", Germany: "🇩🇪", France: "🇫🇷", Italy: "🇮🇹", Japan: "🇯🇵", China: "🇨🇳", Taiwan: "🇹🇼" };
-  return <span className="text-sm">{flags[country] ?? "🌐"}</span>;
+  return <span className="text-sm">{COUNTRY_FLAGS[country] ?? "🌐"}</span>;
 }
 
 function SummaryCard({
@@ -93,14 +106,12 @@ function SummaryCard({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function PortfolioBuilder() {
   const [strategy, setStrategy]         = useState<Strategy>("rocket");
   const [size, setSize]                 = useState(10);
   const [weightMethod, setWeightMethod] = useState<WeightMethod>("score");
   const [sectorCap, setSectorCap]       = useState(2);
-  const [country, setCountry]           = useState<Country>("all");
+  const [country, setCountry]           = useState("all");
   const [marketCap, setMarketCap]       = useState<MarketCapTier>("all");
   const [hasBuilt, setHasBuilt]         = useState(false);
   const [buildParams, setBuildParams]   = useState<Record<string, unknown> | null>(null);
@@ -108,10 +119,16 @@ export default function PortfolioBuilder() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen]         = useState(false);
 
+  const { data: countriesData } = useQuery<{ countries: CountryOption[] }>({
+    queryKey: ["portfolio-builder-countries"],
+    queryFn: () => customFetch("/api/portfolio/builder/countries"),
+    staleTime: 30 * 60 * 1000,
+  });
+
   const { data, isLoading, error } = useQuery<BuilderResponse>({
     queryKey: ["portfolio-builder", buildParams],
     queryFn: () => {
-      if (!buildParams) return Promise.resolve({ holdings: [], portfolioScore: null, snapshotDate: null, universeSize: 0, params: {} });
+      if (!buildParams) return Promise.resolve({ holdings: [], portfolioScore: null, snapshotDate: null, universeSize: 0, regime: null, params: {} });
       const q = new URLSearchParams({
         strategy:     buildParams.strategy as string,
         size:         String(buildParams.size),
@@ -133,18 +150,20 @@ export default function PortfolioBuilder() {
 
   const holdings = data?.holdings ?? [];
   const score    = data?.portfolioScore;
+  const regimeInfo = data?.regime;
+  const isPowerLaw = (buildParams?.weightMethod as string) === "power";
 
-  // sector distribution for the built portfolio
   const sectorCounts: Record<string, number> = {};
   for (const h of holdings) {
     sectorCounts[h.sector] = (sectorCounts[h.sector] ?? 0) + 1;
   }
 
+  const countryOptions = countriesData?.countries ?? [];
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -155,21 +174,32 @@ export default function PortfolioBuilder() {
               Construct an optimal portfolio from our universe using your chosen strategy engine and weighting method.
             </p>
           </div>
-          {data?.snapshotDate && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30 rounded-lg border border-border">
-              <Info className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-mono">Snapshot: {data.snapshotDate}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {regimeInfo && (
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                regimeInfo.name === "BULL" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" :
+                regimeInfo.name === "BEAR" ? "bg-red-500/10 border-red-500/30 text-red-400" :
+                regimeInfo.name === "RECOVERY" ? "bg-amber-500/10 border-amber-500/30 text-amber-400" :
+                "bg-muted/30 border-border text-muted-foreground"
+              }`}>
+                <Zap className="w-3.5 h-3.5" />
+                <span className="text-xs font-mono font-semibold">{regimeInfo.name}</span>
+              </div>
+            )}
+            {data?.snapshotDate && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30 rounded-lg border border-border">
+                <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground font-mono">Snapshot: {data.snapshotDate}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
 
-          {/* ── Controls Panel ── */}
           <div className="space-y-4">
             <div className="bg-card border border-border rounded-xl p-5 space-y-5">
 
-              {/* Strategy */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Strategy Engine</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -199,7 +229,6 @@ export default function PortfolioBuilder() {
                 </p>
               </div>
 
-              {/* Portfolio Size */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">
                   Portfolio Size — <span className="text-foreground font-semibold">{size} stocks</span>
@@ -221,7 +250,6 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
 
-              {/* Weighting */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Weighting Method</label>
                 <div className="space-y-1.5">
@@ -229,7 +257,7 @@ export default function PortfolioBuilder() {
                     { id: "equal", label: "Equal weight",          desc: "Each stock gets the same allocation." },
                     { id: "score", label: "Score-proportional",    desc: "Higher scorers get a larger slice." },
                     { id: "risk",  label: "Risk-adjusted",         desc: "Score ÷ volatility — reward per unit risk." },
-                    { id: "power", label: "Power Law (α=1.8)",     desc: "Score^1.8 — concentrates in highest-conviction names." },
+                    { id: "power", label: "Power Law (α=1.8)",     desc: "Regime-composite, sector-normalised, valuation-checked. Concentrates in highest-conviction names." },
                   ] as const).map(({ id, label, desc }) => (
                     <button
                       key={id}
@@ -247,7 +275,6 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
 
-              {/* Sector Cap */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">
                   Max Stocks per Sector — <span className="text-foreground font-semibold">{sectorCap}</span>
@@ -264,25 +291,25 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
 
-              {/* Country Filter */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Country</label>
                 <div className="relative">
                   <select
                     value={country}
-                    onChange={(e) => setCountry(e.target.value as Country)}
+                    onChange={(e) => setCountry(e.target.value)}
                     className="w-full appearance-none bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="all">🌐 All Countries</option>
-                    <option value="us">🇺🇸 United States</option>
-                    <option value="uk">🇬🇧 United Kingdom</option>
-                    <option value="india">🇮🇳 India</option>
+                    {countryOptions.map((c) => (
+                      <option key={c.slug} value={c.slug}>
+                        {COUNTRY_FLAGS[c.name] ?? "🌐"} {c.name} ({c.count})
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
                 </div>
               </div>
 
-              {/* Market Cap */}
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Market Cap</label>
                 <div className="relative">
@@ -300,7 +327,6 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
 
-              {/* Build Button */}
               <button
                 onClick={handleBuild}
                 disabled={isLoading}
@@ -314,7 +340,6 @@ export default function PortfolioBuilder() {
               </button>
             </div>
 
-            {/* Sector Distribution (post-build) */}
             {holdings.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4">
                 <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Sector Distribution</h3>
@@ -335,12 +360,22 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
             )}
+
+            {isPowerLaw && holdings.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4">
+                <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Power Law Methodology</h3>
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <p>Selection uses <strong className="text-foreground">regime-weighted composite</strong> scores ({regimeInfo?.name ?? "NEUTRAL"} regime) rather than single-strategy rank.</p>
+                  <p>Weights are <strong className="text-foreground">sector-percentile normalised</strong> (score vs. sector peers) then raised to exponent <strong className="text-foreground">α=1.8</strong>.</p>
+                  <p>Companies with PE &gt; 1.5× sector median receive a <strong className="text-foreground">30% weight haircut</strong>.</p>
+                  <p>Tickers in secular breakout themes (AI, GLP-1, next-gen platforms) receive a <strong className="text-foreground">15% premium</strong>.</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* ── Results Panel ── */}
           <div className="space-y-4">
 
-            {/* Not built yet */}
             {!hasBuilt && (
               <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-20 gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -355,7 +390,6 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* Error */}
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
                 <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
@@ -368,7 +402,6 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* Loading skeleton */}
             {isLoading && (
               <div className="bg-card border border-border rounded-xl p-6 space-y-3">
                 {[...Array(10)].map((_, i) => (
@@ -382,7 +415,6 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* Portfolio Score Cards */}
             {!isLoading && hasBuilt && score && (
               <div className="grid grid-cols-3 gap-3">
                 <SummaryCard label="Fortress Score" score={score.fortress} icon={Shield} color="text-blue-400" />
@@ -391,7 +423,6 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* Universe size / metadata */}
             {!isLoading && hasBuilt && data && (
               <div className="flex items-center gap-4 text-xs text-muted-foreground px-1">
                 <div className="flex items-center gap-1.5">
@@ -405,7 +436,6 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* Results Table */}
             {!isLoading && holdings.length > 0 && (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
@@ -444,10 +474,27 @@ export default function PortfolioBuilder() {
                               <div className="flex items-center gap-1.5">
                                 <CountryFlag country={h.country} />
                                 <span className="font-mono font-semibold text-foreground text-sm">{h.ticker}</span>
+                                {h.innovationTier && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
+                                    <Sparkles className="w-2.5 h-2.5" />
+                                    {h.innovationTier}
+                                  </span>
+                                )}
+                                {h.highValuation && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px] font-semibold">
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    High PE
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <span className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">{h.name}</span>
+                              <div>
+                                <span className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">{h.name}</span>
+                                {h.rationale && (
+                                  <div className="text-[10px] text-muted-foreground/70 mt-0.5 line-clamp-1">{h.rationale}</div>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <Badge variant="outline" className="text-xs font-normal">{h.sector}</Badge>
@@ -464,11 +511,11 @@ export default function PortfolioBuilder() {
                             <td className="px-4 py-3">
                               <ScoreMini value={h.waveScore} color="bg-cyan-500" />
                             </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className="font-mono text-xs text-muted-foreground">{formatMktCap(h.marketCap)}</span>
+                            <td className="px-4 py-3 text-right text-xs font-mono text-muted-foreground">
+                              {formatMktCap(h.marketCap)}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className="font-mono font-semibold text-sm text-foreground">
+                              <span className="font-mono text-xs font-semibold text-foreground">
                                 {(h.weight * 100).toFixed(1)}%
                               </span>
                             </td>
@@ -481,14 +528,13 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
-            {/* No results */}
             {!isLoading && hasBuilt && holdings.length === 0 && !error && (
-              <div className="bg-card border border-border rounded-xl p-10 flex flex-col items-center gap-3 text-center">
+              <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-16 gap-3">
                 <AlertCircle className="w-8 h-8 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-foreground">No stocks matched your filters</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Try relaxing the market-cap tier or country filter, or run the data pipeline to generate factor snapshots.
+                <div className="text-center">
+                  <h3 className="text-sm font-semibold text-foreground">No stocks match</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Try relaxing the country, market cap, or sector cap constraints.
                   </p>
                 </div>
               </div>
@@ -497,7 +543,6 @@ export default function PortfolioBuilder() {
         </div>
       </div>
 
-      {/* Drawer */}
       <CompanyDrawer
         ticker={selectedTicker ?? ""}
         open={drawerOpen}
