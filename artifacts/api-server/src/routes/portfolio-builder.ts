@@ -10,7 +10,7 @@ import { eq, desc, inArray, gte, and, isNotNull } from "drizzle-orm";
 const router: IRouter = Router();
 
 type Strategy     = "fortress" | "rocket" | "wave";
-type WeightMethod = "equal" | "score" | "risk";
+type WeightMethod = "equal" | "score" | "risk" | "power";
 type Country      = "all" | "us" | "uk" | "india";
 type MarketCapTier = "all" | "large" | "mid" | "small";
 
@@ -178,10 +178,12 @@ router.get("/portfolio/builder", async (req, res) => {
       return s.waveScore ?? 0;
     };
 
+    const POWER_ALPHA = 1.8;
     const rawWeights = selected.map((s) => {
       const score = getScore(s);
       if (weightMethod === "equal") return 1;
       if (weightMethod === "score") return score;
+      if (weightMethod === "power") return Math.pow(Math.max(score, 0.01), POWER_ALPHA);
       const vol = clamp(vols[s.ticker] ?? 0.25);
       return score / vol;
     });

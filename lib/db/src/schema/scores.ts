@@ -23,6 +23,9 @@ export const scoresTable = pgTable("scores", {
   // Entry Timing Score (Gap 15): valuation + momentum + earnings revision signal
   entryTimingScore: real("entry_timing_score"),
 
+  // Compounder Score: 0–100 derived metric identifying compounding business characteristics
+  compounderScore: real("compounder_score"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

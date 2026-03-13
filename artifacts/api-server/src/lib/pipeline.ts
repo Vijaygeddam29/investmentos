@@ -13,7 +13,7 @@
  */
 
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
-import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices } from "./yf-harvester";
+import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices, yfPatchNullFields } from "./yf-harvester";
 import { fmpQuotaExhausted } from "./fmp-client";
 import { calculateAllScores } from "./scoring-engines";
 import { computeEntryTimingScore } from "./entry-timing";
@@ -114,6 +114,8 @@ export async function runPipeline(tickers?: string[]) {
               await fetchAndStoreCompany(ticker);
               await fetchAndStoreMetrics(ticker);
               await fetchAndStorePrices(ticker);
+              // Patch any null fields FMP left behind (runs after FMP even on success)
+              await yfPatchNullFields(ticker).catch(() => {});
               console.log(`[Pipeline] ${ticker} — harvested via FMP`);
             } catch (fmpErr: any) {
               console.warn(`[Pipeline] ${ticker} — FMP failed (${fmpErr.message}), trying Yahoo Finance...`);

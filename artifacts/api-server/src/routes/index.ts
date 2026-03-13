@@ -9,6 +9,7 @@ import factorSnapshotsRouter from "./factor-snapshots";
 import portfolioRouter from "./portfolio";
 import portfolioBuilderRouter from "./portfolio-builder";
 import anthropicRouter from "./anthropic";
+import alertsRouter from "./alerts";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(factorSnapshotsRouter);
 router.use(portfolioRouter);
 router.use(portfolioBuilderRouter);
 router.use(anthropicRouter);
+router.use(alertsRouter);
 
 export default router;

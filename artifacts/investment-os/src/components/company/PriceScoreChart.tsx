@@ -40,9 +40,12 @@ export function PriceScoreChart({ priceHistory, scoreHistory }: Props) {
   const data = priceHistory.map(p => ({
     date: p.date,
     price: p.close,
-    fortress: scoreByDate.get(p.date)?.fortressScore ?? null,
-    rocket:   scoreByDate.get(p.date)?.rocketScore ?? null,
-    wave:     scoreByDate.get(p.date)?.waveScore ?? null,
+    fortress:   scoreByDate.get(p.date)?.fortressScore ?? null,
+    rocket:     scoreByDate.get(p.date)?.rocketScore ?? null,
+    wave:       scoreByDate.get(p.date)?.waveScore ?? null,
+    compounder: scoreByDate.get(p.date)?.compounderScore != null
+                  ? (scoreByDate.get(p.date)!.compounderScore! / 100)
+                  : null,
   }));
 
   const hasScores = scoreHistory.length > 0;
@@ -51,9 +54,10 @@ export function PriceScoreChart({ priceHistory, scoreHistory }: Props) {
   const chartData = hasScores && scoreHistory.length === 1
     ? data.map(d => ({
         ...d,
-        fortress: latestScore?.fortressScore ?? null,
-        rocket:   latestScore?.rocketScore ?? null,
-        wave:     latestScore?.waveScore ?? null,
+        fortress:   latestScore?.fortressScore ?? null,
+        rocket:     latestScore?.rocketScore ?? null,
+        wave:       latestScore?.waveScore ?? null,
+        compounder: latestScore?.compounderScore != null ? latestScore.compounderScore / 100 : null,
       }))
     : data;
 
@@ -116,17 +120,18 @@ export function PriceScoreChart({ priceHistory, scoreHistory }: Props) {
             contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: 8, fontSize: 11 }}
             labelStyle={{ color: tooltipLabel }}
             formatter={(value: number, name: string) => {
-              if (name === "price") return [`$${value.toFixed(2)}`, "Price"];
-              if (name === "fortress") return [value?.toFixed(3) ?? "—", "Fortress"];
-              if (name === "rocket")   return [value?.toFixed(3) ?? "—", "Rocket"];
-              if (name === "wave")     return [value?.toFixed(3) ?? "—", "Wave"];
+              if (name === "price")      return [`$${value.toFixed(2)}`, "Price"];
+              if (name === "fortress")   return [value?.toFixed(3) ?? "—", "Fortress"];
+              if (name === "rocket")     return [value?.toFixed(3) ?? "—", "Rocket"];
+              if (name === "wave")       return [value?.toFixed(3) ?? "—", "Wave"];
+              if (name === "compounder") return [`${(value * 100).toFixed(0)}/100`, "Compounder"];
               return [value, name];
             }}
           />
           <Legend
             wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
             formatter={(value) => {
-              const map: Record<string, string> = { price: "Price", fortress: "Fortress", rocket: "Rocket", wave: "Wave" };
+              const map: Record<string, string> = { price: "Price", fortress: "Fortress", rocket: "Rocket", wave: "Wave", compounder: "Compounder" };
               return map[value] ?? value;
             }}
           />
@@ -142,9 +147,10 @@ export function PriceScoreChart({ priceHistory, scoreHistory }: Props) {
           />
           {hasScores && (
             <>
-              <Line yAxisId="score" type="monotone" dataKey="fortress" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
-              <Line yAxisId="score" type="monotone" dataKey="rocket"   stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
-              <Line yAxisId="score" type="monotone" dataKey="wave"     stroke="#06b6d4" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
+              <Line yAxisId="score" type="monotone" dataKey="fortress"   stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
+              <Line yAxisId="score" type="monotone" dataKey="rocket"     stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
+              <Line yAxisId="score" type="monotone" dataKey="wave"       stroke="#06b6d4" strokeWidth={1.5} dot={false} strokeDasharray={scoreHistory.length === 1 ? "4 2" : undefined} />
+              <Line yAxisId="score" type="monotone" dataKey="compounder" stroke="#a855f7" strokeWidth={2}   dot={false} strokeDasharray="6 2" />
             </>
           )}
         </ComposedChart>

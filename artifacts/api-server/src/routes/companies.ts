@@ -184,6 +184,10 @@ router.get("/companies/:ticker", async (req, res) => {
         momentumScore: s.momentumScore,
         valuationScore: s.valuationScore,
         entryTimingScore: s.entryTimingScore,
+        compounderScore: s.compounderScore,
+        compounderRating: s.compounderScore != null
+          ? (s.compounderScore >= 70 ? "HIGH" : s.compounderScore >= 50 ? "MEDIUM" : "LOW")
+          : undefined,
       } : undefined,
       latestVerdict: v ? {
         ticker: v.ticker,
@@ -380,6 +384,7 @@ router.get("/companies/:ticker/score-history", async (req, res) => {
       rocketScore: scoresTable.rocketScore,
       waveScore: scoresTable.waveScore,
       entryTimingScore: scoresTable.entryTimingScore,
+      compounderScore: scoresTable.compounderScore,
     })
       .from(scoresTable)
       .where(eq(scoresTable.ticker, ticker))

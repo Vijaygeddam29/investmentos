@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Strategy     = "fortress" | "rocket" | "wave";
-type WeightMethod = "equal" | "score" | "risk";
+type WeightMethod = "equal" | "score" | "risk" | "power";
 type Country      = "all" | "us" | "uk" | "india";
 type MarketCapTier = "all" | "large" | "mid" | "small";
 
@@ -229,6 +229,7 @@ export default function PortfolioBuilder() {
                     { id: "equal", label: "Equal weight",          desc: "Each stock gets the same allocation." },
                     { id: "score", label: "Score-proportional",    desc: "Higher scorers get a larger slice." },
                     { id: "risk",  label: "Risk-adjusted",         desc: "Score ÷ volatility — reward per unit risk." },
+                    { id: "power", label: "Power Law (α=1.8)",     desc: "Score^1.8 — concentrates in highest-conviction names." },
                   ] as const).map(({ id, label, desc }) => (
                     <button
                       key={id}

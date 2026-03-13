@@ -19,6 +19,7 @@ import type {
 import type {
   AddTickerRequest,
   AiVerdictResponse,
+  AlertsResponse,
   AnthropicConversation,
   AnthropicConversationWithMessages,
   AnthropicError,
@@ -32,6 +33,7 @@ import type {
   FactorSnapshotsResponse,
   GetCompanyMetricsParams,
   HealthStatus,
+  ListAlertsParams,
   ListCompaniesParams,
   ListDriftSignalsParams,
   ListFactorSnapshotsParams,
@@ -39,11 +41,13 @@ import type {
   ListScoresParams,
   ListTopMoversParams,
   ListUniverseParams,
+  MarketRegimeResponse,
   OpportunityAlertsResponse,
   PipelineRunRequest,
   PipelineRunResponse,
   PipelineStatus,
   RiskAlertsResponse,
+  RunDailyPipeline200,
   ScoreHistoryResponse,
   ScoresListResponse,
   SeedUniverseResponse,
@@ -2293,4 +2297,254 @@ export const useSendAnthropicMessage = <
   TContext
 > => {
   return useMutation(getSendAnthropicMessageMutationOptions(options));
+};
+
+/**
+ * @summary List score alerts (verdict changes, score drops/rises, compounder tier changes)
+ */
+export const getListAlertsUrl = (params?: ListAlertsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/alerts?${stringifiedParams}`
+    : `/api/alerts`;
+};
+
+export const listAlerts = async (
+  params?: ListAlertsParams,
+  options?: RequestInit,
+): Promise<AlertsResponse> => {
+  return customFetch<AlertsResponse>(getListAlertsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAlertsQueryKey = (params?: ListAlertsParams) => {
+  return [`/api/alerts`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAlertsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAlerts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAlertsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlerts>>> = ({
+    signal,
+  }) => listAlerts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAlerts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAlertsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAlerts>>
+>;
+export type ListAlertsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List score alerts (verdict changes, score drops/rises, compounder tier changes)
+ */
+
+export function useListAlerts<
+  TData = Awaited<ReturnType<typeof listAlerts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAlertsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get current market regime (Bull/Bear/Recovery/Neutral) from SPY MA50/MA200
+ */
+export const getGetMarketRegimeUrl = () => {
+  return `/api/market/regime`;
+};
+
+export const getMarketRegime = async (
+  options?: RequestInit,
+): Promise<MarketRegimeResponse> => {
+  return customFetch<MarketRegimeResponse>(getGetMarketRegimeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMarketRegimeQueryKey = () => {
+  return [`/api/market/regime`] as const;
+};
+
+export const getGetMarketRegimeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMarketRegime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMarketRegimeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarketRegime>>> = ({
+    signal,
+  }) => getMarketRegime({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMarketRegimeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMarketRegime>>
+>;
+export type GetMarketRegimeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current market regime (Bull/Bear/Recovery/Neutral) from SPY MA50/MA200
+ */
+
+export function useGetMarketRegime<
+  TData = Awaited<ReturnType<typeof getMarketRegime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMarketRegimeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Recalculate scores for all tickers and emit alerts
+ */
+export const getRunDailyPipelineUrl = () => {
+  return `/api/pipeline/run-daily`;
+};
+
+export const runDailyPipeline = async (
+  options?: RequestInit,
+): Promise<RunDailyPipeline200> => {
+  return customFetch<RunDailyPipeline200>(getRunDailyPipelineUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunDailyPipelineMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDailyPipeline>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runDailyPipeline>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runDailyPipeline"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runDailyPipeline>>,
+    void
+  > = () => {
+    return runDailyPipeline(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunDailyPipelineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runDailyPipeline>>
+>;
+
+export type RunDailyPipelineMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Recalculate scores for all tickers and emit alerts
+ */
+export const useRunDailyPipeline = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDailyPipeline>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runDailyPipeline>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunDailyPipelineMutationOptions(options));
 };

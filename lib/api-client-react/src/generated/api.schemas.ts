@@ -41,6 +41,47 @@ export interface PipelineStatus {
   results?: PipelineStatusResultsItem[];
 }
 
+export type ScoresListResponseRegime =
+  (typeof ScoresListResponseRegime)[keyof typeof ScoresListResponseRegime];
+
+export const ScoresListResponseRegime = {
+  BULL: "BULL",
+  BEAR: "BEAR",
+  RECOVERY: "RECOVERY",
+  NEUTRAL: "NEUTRAL",
+} as const;
+
+export type ScoresListResponseRegimeWeights = {
+  fortress?: number;
+  rocket?: number;
+  wave?: number;
+};
+
+export type ScoreItemCompounderRating =
+  (typeof ScoreItemCompounderRating)[keyof typeof ScoreItemCompounderRating];
+
+export const ScoreItemCompounderRating = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type ScoreItemRegime =
+  (typeof ScoreItemRegime)[keyof typeof ScoreItemRegime];
+
+export const ScoreItemRegime = {
+  BULL: "BULL",
+  BEAR: "BEAR",
+  RECOVERY: "RECOVERY",
+  NEUTRAL: "NEUTRAL",
+} as const;
+
+export type ScoreItemRegimeWeights = {
+  fortress?: number;
+  rocket?: number;
+  wave?: number;
+};
+
 export interface ScoreItem {
   ticker: string;
   name?: string;
@@ -65,11 +106,78 @@ export interface ScoreItem {
   fcfYield?: number;
   verdict?: string;
   classification?: string;
+  compounderScore?: number;
+  compounderRating?: ScoreItemCompounderRating;
+  compositeScore?: number;
+  regime?: ScoreItemRegime;
+  regimeWeights?: ScoreItemRegimeWeights;
 }
 
 export interface ScoresListResponse {
   scores: ScoreItem[];
   total: number;
+  regime?: ScoresListResponseRegime;
+  regimeWeights?: ScoresListResponseRegimeWeights;
+}
+
+export type ScoreAlertItemAlertType =
+  (typeof ScoreAlertItemAlertType)[keyof typeof ScoreAlertItemAlertType];
+
+export const ScoreAlertItemAlertType = {
+  VERDICT_CHANGE: "VERDICT_CHANGE",
+  SCORE_DROP: "SCORE_DROP",
+  SCORE_RISE: "SCORE_RISE",
+  COMPOUNDER_CHANGE: "COMPOUNDER_CHANGE",
+} as const;
+
+export interface ScoreAlertItem {
+  id: number;
+  ticker: string;
+  date: string;
+  alertType: ScoreAlertItemAlertType;
+  scoreFamily?: string;
+  previousValue?: number;
+  currentValue?: number;
+  message: string;
+  createdAt?: string;
+}
+
+export interface AlertsResponse {
+  alerts: ScoreAlertItem[];
+  count: number;
+}
+
+export type MarketRegimeResponseRegime =
+  (typeof MarketRegimeResponseRegime)[keyof typeof MarketRegimeResponseRegime];
+
+export const MarketRegimeResponseRegime = {
+  BULL: "BULL",
+  BEAR: "BEAR",
+  RECOVERY: "RECOVERY",
+  NEUTRAL: "NEUTRAL",
+} as const;
+
+export type MarketRegimeResponseConfidence =
+  (typeof MarketRegimeResponseConfidence)[keyof typeof MarketRegimeResponseConfidence];
+
+export const MarketRegimeResponseConfidence = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type MarketRegimeResponseWeights = {
+  fortress?: number;
+  rocket?: number;
+  wave?: number;
+};
+
+export interface MarketRegimeResponse {
+  regime: MarketRegimeResponseRegime;
+  ma50?: number;
+  ma200?: number;
+  confidence: MarketRegimeResponseConfidence;
+  weights: MarketRegimeResponseWeights;
 }
 
 export interface CompanyItem {
@@ -243,6 +351,7 @@ export interface ScoreHistoryPoint {
   rocketScore?: number;
   waveScore?: number;
   entryTimingScore?: number;
+  compounderScore?: number;
 }
 
 export interface ScoreHistoryResponse {
@@ -422,3 +531,11 @@ export type ListUniverseParams = {
    */
   country?: string;
 };
+
+export type ListAlertsParams = {
+  ticker?: string;
+  days?: number;
+  limit?: number;
+};
+
+export type RunDailyPipeline200 = { [key: string]: unknown };

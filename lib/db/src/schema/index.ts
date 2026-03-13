@@ -8,4 +8,5 @@ export * from "./factor-snapshots";
 export * from "./portfolio";
 export * from "./conversations";
 export * from "./messages";
+export * from "./score-alerts";
 export type { RiskAlert } from "./signals";

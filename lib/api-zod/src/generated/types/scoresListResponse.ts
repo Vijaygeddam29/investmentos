@@ -6,8 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScoreItem } from "./scoreItem";
+import type { ScoresListResponseRegime } from "./scoresListResponseRegime";
+import type { ScoresListResponseRegimeWeights } from "./scoresListResponseRegimeWeights";
 
 export interface ScoresListResponse {
   scores: ScoreItem[];
   total: number;
+  regime?: ScoresListResponseRegime;
+  regimeWeights?: ScoresListResponseRegimeWeights;
 }

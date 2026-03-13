@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { financialMetricsTable, priceHistoryTable, scoresTable } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
+import { computeLeadershipSignalScore } from "./leadership-signals";
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, value));
@@ -214,6 +215,63 @@ export function scoreInnovation(metrics: any[]): number {
 /** Export MACD calculator for use in indicator endpoints */
 export { computeMACD };
 
+/**
+ * Leadership Quality & Conviction scorer.
+ * Combines static founder/tenure/vision signals with dynamic insider ownership data.
+ * Output: 0–1
+ */
+export function scoreLeadershipConviction(ticker: string, metrics: any[]): number {
+  const latest = metrics[0] ?? {};
+  const insiderOwnership = latest.insiderOwnership ?? null;
+  const insiderBuying    = latest.insiderBuying    ?? null;
+  const ownershipTrend   = trend(metrics.map(m => m.insiderOwnership));
+  return computeLeadershipSignalScore(ticker, insiderOwnership, insiderBuying, ownershipTrend);
+}
+
+/**
+ * Compounder Score — 8-factor derived metric identifying compounding businesses.
+ * Output: 0–100 (stored and displayed as an integer-scale score)
+ *
+ * Weights:
+ *   Growth              17%
+ *   Profitability       13%
+ *   Capital Efficiency  13%
+ *   Cash Flow Quality   13%
+ *   Financial Strength  12%
+ *   Sentiment           12%
+ *   Momentum            13%
+ *   Leadership          07%
+ */
+export function computeCompounderScore(subScores: {
+  growth: number;
+  profitability: number;
+  capitalEfficiency: number;
+  cashFlowQuality: number;
+  financialStrength: number;
+  sentiment: number;
+  momentum: number;
+  leadership: number;
+}): number {
+  const raw =
+    0.17 * subScores.growth            +
+    0.13 * subScores.profitability     +
+    0.13 * subScores.capitalEfficiency +
+    0.13 * subScores.cashFlowQuality   +
+    0.12 * subScores.financialStrength +
+    0.12 * subScores.sentiment         +
+    0.13 * subScores.momentum          +
+    0.07 * subScores.leadership;
+
+  return Math.round(clamp(raw) * 100);
+}
+
+/** Get compounder rating label from 0–100 score */
+export function compounderRating(score: number): "HIGH" | "MEDIUM" | "LOW" {
+  if (score >= 70) return "HIGH";
+  if (score >= 50) return "MEDIUM";
+  return "LOW";
+}
+
 export function scoreMomentum(prices: any[]): number {
   if (prices.length < 50) return 0.5;
 
@@ -402,69 +460,86 @@ export async function calculateAllScores(ticker: string) {
     .orderBy(desc(priceHistoryTable.date))
     .limit(365);
 
-  const profitability = scoreProfitability(metrics);
-  const growth = scoreGrowth(metrics);
+  const profitability     = scoreProfitability(metrics);
+  const growth            = scoreGrowth(metrics);
   const capitalEfficiency = scoreCapitalEfficiency(metrics);
   const financialStrength = scoreFinancialStrength(metrics);
-  const cashFlowQuality = scoreCashFlowQuality(metrics);
-  const innovation = scoreInnovation(metrics);
-  const sentiment = scoreSentiment(metrics);
-  const momentum = scoreMomentum(prices);
-  const valuation = scoreValuation(metrics);
+  const cashFlowQuality   = scoreCashFlowQuality(metrics);
+  const innovation        = scoreInnovation(metrics);
+  const sentiment         = scoreSentiment(metrics);
+  const momentum          = scoreMomentum(prices);
+  const valuation         = scoreValuation(metrics);
+  const leadership        = scoreLeadershipConviction(ticker, metrics);
 
   const fortressScore = clamp(
-    profitability * FORTRESS_WEIGHTS.profitability +
+    profitability     * FORTRESS_WEIGHTS.profitability     +
     capitalEfficiency * FORTRESS_WEIGHTS.capitalEfficiency +
-    cashFlowQuality * FORTRESS_WEIGHTS.cashFlowQuality +
+    cashFlowQuality   * FORTRESS_WEIGHTS.cashFlowQuality   +
     financialStrength * FORTRESS_WEIGHTS.financialStrength +
-    valuation * FORTRESS_WEIGHTS.valuation
+    valuation         * FORTRESS_WEIGHTS.valuation
   );
 
   const rocketScore = clamp(
-    growth * ROCKET_WEIGHTS.growth +
-    innovation * ROCKET_WEIGHTS.innovation +
+    growth            * ROCKET_WEIGHTS.growth            +
+    innovation        * ROCKET_WEIGHTS.innovation        +
     capitalEfficiency * ROCKET_WEIGHTS.capitalEfficiency +
-    momentum * ROCKET_WEIGHTS.momentum +
+    momentum          * ROCKET_WEIGHTS.momentum          +
     financialStrength * ROCKET_WEIGHTS.financialStrength
   );
 
-  // Wave engine per spec: Momentum(40%) + Valuation(30%) + Growth(20%) + Sentiment(10%)
   const waveScore = clamp(
-    momentum * WAVE_WEIGHTS.momentum +
+    momentum  * WAVE_WEIGHTS.momentum  +
     valuation * WAVE_WEIGHTS.valuation +
-    growth * WAVE_WEIGHTS.growth +
+    growth    * WAVE_WEIGHTS.growth    +
     sentiment * WAVE_WEIGHTS.sentiment
   );
 
-  const today = new Date().toISOString().split("T")[0];
+  const compounderScore = computeCompounderScore({
+    growth,
+    profitability,
+    capitalEfficiency,
+    cashFlowQuality,
+    financialStrength,
+    sentiment,
+    momentum,
+    leadership,
+  });
 
+  const today = new Date().toISOString().split("T")[0];
   const r = (v: number) => Math.round(v * 100) / 100;
 
   const scoreRow = {
     ticker,
     date: today,
-    fortressScore: r(fortressScore),
-    rocketScore: r(rocketScore),
-    waveScore: r(waveScore),
-    profitabilityScore: r(profitability),
-    growthScore: r(growth),
+    fortressScore:          r(fortressScore),
+    rocketScore:            r(rocketScore),
+    waveScore:              r(waveScore),
+    profitabilityScore:     r(profitability),
+    growthScore:            r(growth),
     capitalEfficiencyScore: r(capitalEfficiency),
     financialStrengthScore: r(financialStrength),
-    cashFlowQualityScore: r(cashFlowQuality),
-    innovationScore: r(innovation),
-    sentimentScore: r(sentiment),
-    momentumScore: r(momentum),
-    valuationScore: r(valuation),
+    cashFlowQualityScore:   r(cashFlowQuality),
+    innovationScore:        r(innovation),
+    sentimentScore:         r(sentiment),
+    momentumScore:          r(momentum),
+    valuationScore:         r(valuation),
+    compounderScore,
   };
 
-  const existing = await db.select({ id: scoresTable.id })
+  // ── Immutability rule: only upsert TODAY's record, never overwrite past dates ──
+  const existing = await db.select({ id: scoresTable.id, date: scoresTable.date })
     .from(scoresTable)
-    .where(and(eq(scoresTable.ticker, ticker), eq(scoresTable.date, today)))
+    .where(eq(scoresTable.ticker, ticker))
+    .orderBy(desc(scoresTable.date))
     .limit(1);
 
-  if (existing.length) {
-    await db.update(scoresTable).set(scoreRow).where(eq(scoresTable.id, existing[0].id));
+  const latestExisting = existing[0];
+
+  if (latestExisting?.date === today) {
+    // Update today's record
+    await db.update(scoresTable).set(scoreRow).where(eq(scoresTable.id, latestExisting.id));
   } else {
+    // Insert new record — past dates are now immutable
     await db.insert(scoresTable).values(scoreRow);
   }
 

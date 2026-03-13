@@ -86,9 +86,28 @@ export const ListScoresResponse = zod.object({
       fcfYield: zod.number().optional(),
       verdict: zod.string().optional(),
       classification: zod.string().optional(),
+      compounderScore: zod.number().optional(),
+      compounderRating: zod.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
+      compositeScore: zod.number().optional(),
+      regime: zod.enum(["BULL", "BEAR", "RECOVERY", "NEUTRAL"]).optional(),
+      regimeWeights: zod
+        .object({
+          fortress: zod.number().optional(),
+          rocket: zod.number().optional(),
+          wave: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   total: zod.number(),
+  regime: zod.enum(["BULL", "BEAR", "RECOVERY", "NEUTRAL"]).optional(),
+  regimeWeights: zod
+    .object({
+      fortress: zod.number().optional(),
+      rocket: zod.number().optional(),
+      wave: zod.number().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -162,6 +181,17 @@ export const GetCompanyResponse = zod.object({
       fcfYield: zod.number().optional(),
       verdict: zod.string().optional(),
       classification: zod.string().optional(),
+      compounderScore: zod.number().optional(),
+      compounderRating: zod.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
+      compositeScore: zod.number().optional(),
+      regime: zod.enum(["BULL", "BEAR", "RECOVERY", "NEUTRAL"]).optional(),
+      regimeWeights: zod
+        .object({
+          fortress: zod.number().optional(),
+          rocket: zod.number().optional(),
+          wave: zod.number().optional(),
+        })
+        .optional(),
     })
     .optional(),
   latestVerdict: zod
@@ -298,6 +328,7 @@ export const GetCompanyScoreHistoryResponse = zod.object({
       rocketScore: zod.number().optional(),
       waveScore: zod.number().optional(),
       entryTimingScore: zod.number().optional(),
+      compounderScore: zod.number().optional(),
     }),
   ),
 });
@@ -601,3 +632,54 @@ export const SendAnthropicMessageParams = zod.object({
 export const SendAnthropicMessageBody = zod.object({
   content: zod.string(),
 });
+
+/**
+ * @summary List score alerts (verdict changes, score drops/rises, compounder tier changes)
+ */
+export const ListAlertsQueryParams = zod.object({
+  ticker: zod.coerce.string().optional(),
+  days: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListAlertsResponse = zod.object({
+  alerts: zod.array(
+    zod.object({
+      id: zod.number(),
+      ticker: zod.string(),
+      date: zod.string(),
+      alertType: zod.enum([
+        "VERDICT_CHANGE",
+        "SCORE_DROP",
+        "SCORE_RISE",
+        "COMPOUNDER_CHANGE",
+      ]),
+      scoreFamily: zod.string().optional(),
+      previousValue: zod.number().optional(),
+      currentValue: zod.number().optional(),
+      message: zod.string(),
+      createdAt: zod.string().optional(),
+    }),
+  ),
+  count: zod.number(),
+});
+
+/**
+ * @summary Get current market regime (Bull/Bear/Recovery/Neutral) from SPY MA50/MA200
+ */
+export const GetMarketRegimeResponse = zod.object({
+  regime: zod.enum(["BULL", "BEAR", "RECOVERY", "NEUTRAL"]),
+  ma50: zod.number().optional(),
+  ma200: zod.number().optional(),
+  confidence: zod.enum(["HIGH", "MEDIUM", "LOW"]),
+  weights: zod.object({
+    fortress: zod.number().optional(),
+    rocket: zod.number().optional(),
+    wave: zod.number().optional(),
+  }),
+});
+
+/**
+ * @summary Recalculate scores for all tickers and emit alerts
+ */
+export const RunDailyPipelineResponse = zod.record(zod.string(), zod.unknown());

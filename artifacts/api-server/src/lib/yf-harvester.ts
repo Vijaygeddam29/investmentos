@@ -103,13 +103,13 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
   const incList = (summary.incomeStatementHistory?.incomeStatementHistory ?? []) as any[];
 
   // ── Current-period fundamentals from financialData (authoritative) ──────────
-  const revenue     = n(fd.totalRevenue)     ?? 0;
+  const revenue     = n(fd.totalRevenue)     ?? null;
   const grossMargin = n(fd.grossMargins);
   const opMargin    = n(fd.operatingMargins);
   const netMargin   = n(fd.profitMargins);
-  const opCF        = n(fd.operatingCashflow) ?? 0;
-  const fcf         = n(fd.freeCashflow)      ?? 0;
-  const totalDebt   = n(fd.totalDebt)         ?? 0;
+  const opCF        = n(fd.operatingCashflow) ?? null;
+  const fcf         = n(fd.freeCashflow)      ?? null;
+  const totalDebt   = n(fd.totalDebt)         ?? null;
   const currentRatio = n(fd.currentRatio);
   const quickRatio   = n(fd.quickRatio);
   const debtToEquity = n(fd.debtToEquity);
@@ -119,14 +119,15 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
   const earningsGrowth  = n(fd.earningsGrowth);
 
   // Derived from current-period (approx from margins + revenue)
-  const grossProfit   = grossMargin != null ? grossMargin * revenue : null;
-  const opIncome      = opMargin    != null ? opMargin    * revenue : null;
-  const netIncome     = netMargin   != null ? netMargin   * revenue : null;
+  const grossProfit   = grossMargin != null && revenue != null ? grossMargin * revenue : null;
+  const opIncome      = opMargin    != null && revenue != null ? opMargin    * revenue : null;
+  const netIncome     = netMargin   != null && revenue != null ? netMargin   * revenue : null;
   const ebit          = opIncome;
-  const ebitda        = ebit != null ? ebit * 1.15 : null; // rough proxy (+15% for D&A)
+  // ebitda proxy removed — D&A not available from yfinance; leave null for data integrity
+  const ebitda: number | null = null;
 
   // Valuation
-  const mktCap      = n(pr.marketCap) ?? (n(sd.marketCap) ?? 0);
+  const mktCap      = n(pr.marketCap) ?? n(sd.marketCap) ?? null;
   const dividendYield  = n(sd.dividendYield) ?? n(sd.trailingAnnualDividendYield);
   const payoutRatio    = n(sd.payoutRatio);
   const peRatio        = n(sd.trailingPE);
@@ -135,7 +136,7 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
   const priceToSales   = n(sd.priceToSalesTrailing12Months);
   const evToEbitda     = n(ks.enterpriseToEbitda);
   const evToSales      = n(ks.enterpriseToRevenue);
-  const fcfYield       = mktCap > 0 ? safeDiv(fcf, mktCap) : null;
+  const fcfYield       = mktCap != null && mktCap > 0 ? safeDiv(fcf, mktCap) : null;
   const earningsYield  = peRatio ? 1 / peRatio : null;
 
   // Analyst forward PE
@@ -160,7 +161,7 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
   const buybacks = 0; // not available from YF without cashflow history
   const sbc = 0;      // not available from YF without cashflow history
   const buybackYield = 0;
-  const shareholderYield = dividendYield ?? 0;
+  const shareholderYield = dividendYield ?? null;
   const roicProxy = roe; // ROIC not directly in YF; use ROE as proxy
   const roicVsWacc = roicProxy != null ? Math.min(1, Math.max(0, (roicProxy - 0.05) / 0.20)) : 0.5;
   const capitalAllocationDiscipline = (roicVsWacc + (dividendYield != null ? Math.min(1, dividendYield / 0.03) : 0.5)) / 2;
@@ -208,7 +209,7 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
     interestCoverage:      null,
     currentRatio,
     quickRatio,
-    cashToDebt:            totalDebt > 0 ? safeDiv(n(fd.cash) ?? 0, totalDebt) : null,
+    cashToDebt:            totalDebt != null && totalDebt > 0 ? safeDiv(n(fd.cash), totalDebt) : null,
     altmanZScore:          null,
     liquidityRatio:        null,
     workingCapitalDrift:   null,
@@ -248,7 +249,7 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
     pegRatio,
     evToEbitda,
     evToSales,
-    priceToFcf:            mktCap && fcf ? mktCap / fcf : null,
+    priceToFcf:            mktCap != null && fcf != null && fcf !== 0 ? mktCap / fcf : null,
     priceToBook,
     ruleOf40,
     revenueMultipleVsGrowth,
@@ -266,9 +267,9 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
   for (let i = 0; i < Math.min(incList.length, 4); i++) {
     const inc = incList[i] ?? {};
     const prevInc = incList[i + 1] ?? {};
-    const histRevenue = n(inc.totalRevenue) ?? 0;
-    const histNetIncome = n(inc.netIncome) ?? 0;
-    const prevRevenue  = n(prevInc.totalRevenue) ?? 0;
+    const histRevenue = n(inc.totalRevenue) ?? null;
+    const histNetIncome = n(inc.netIncome) ?? null;
+    const prevRevenue  = n(prevInc.totalRevenue) ?? null;
 
     if (!histRevenue || !inc.endDate) continue;
 
@@ -317,6 +318,80 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
 
   console.log(`[YF] ${ticker} — stored 1 latest + ${historicalInserted} historical period(s)`);
   return 1 + historicalInserted;
+}
+
+// ─── Null Field Patcher ───────────────────────────────────────────────────────
+/**
+ * yfPatchNullFields() — fills null/missing fields in the latest financial_metrics
+ * record for a ticker using Yahoo Finance data. Called after FMP harvest to
+ * backfill any gaps (e.g. when FMP free tier omits certain fields).
+ *
+ * Only writes fields that are currently null in the DB — never overwrites
+ * existing non-null FMP values.
+ */
+export async function yfPatchNullFields(ticker: string): Promise<void> {
+  try {
+    // Fetch a lightweight summary from YF
+    const quoteSummary = await yahooFinance.quoteSummary(ticker, {
+      modules: ["financialData", "defaultKeyStatistics", "summaryDetail"],
+    }).catch(() => null);
+
+    if (!quoteSummary) return;
+
+    const fd = quoteSummary.financialData ?? {};
+    const ks = quoteSummary.defaultKeyStatistics ?? {};
+    const sd = quoteSummary.summaryDetail ?? {};
+
+    // Build a patch with only the fields we can get from YF
+    const patch: Record<string, number | null> = {
+      revenueGrowth1y:  n(fd.revenueGrowth),
+      grossMargin:      n(fd.grossMargins),
+      operatingMargin:  n(fd.operatingMargins),
+      netMargin:        n(fd.profitMargins),
+      currentRatio:     n(fd.currentRatio),
+      quickRatio:       n(fd.quickRatio),
+      debtToEquity:     n(fd.debtToEquity),
+      roe:              n(fd.returnOnEquity),
+      roa:              n(fd.returnOnAssets),
+      dividendYield:    n(sd.dividendYield) ?? n(sd.trailingAnnualDividendYield),
+      peRatio:          n(sd.trailingPE),
+      priceToBook:      n(ks.priceToBook),
+      pegRatio:         n(ks.pegRatio),
+      evToEbitda:       n(ks.enterpriseToEbitda),
+      evToSales:        n(ks.enterpriseToRevenue),
+      forwardPe:        n(sd.forwardPE),
+    };
+
+    // Fetch the latest metrics row for this ticker
+    const today = new Date().toISOString().split("T")[0];
+    const existing = await db
+      .select()
+      .from(financialMetricsTable)
+      .where(and(eq(financialMetricsTable.ticker, ticker), eq(financialMetricsTable.date, today)))
+      .limit(1);
+
+    if (!existing.length) return;
+
+    const row = existing[0] as Record<string, any>;
+
+    // Only patch fields that are currently null in the DB
+    const updates: Record<string, number | null> = {};
+    for (const [field, value] of Object.entries(patch)) {
+      if (value != null && row[field] == null) {
+        updates[field] = value;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(financialMetricsTable)
+        .set(updates)
+        .where(and(eq(financialMetricsTable.ticker, ticker), eq(financialMetricsTable.date, today)));
+      console.log(`[YF Patch] ${ticker} — backfilled ${Object.keys(updates).length} null fields from Yahoo Finance`);
+    }
+  } catch (err: any) {
+    console.warn(`[YF Patch] ${ticker} — patch failed: ${err.message}`);
+  }
 }
 
 // ─── Price History ────────────────────────────────────────────────────────────

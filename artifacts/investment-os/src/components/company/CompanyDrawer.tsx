@@ -3,13 +3,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2 } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { EntryExitPanel } from "./EntryExitPanel";
 import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
+
+const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
+  NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
+  META: { founderLed: true,  dualClass: true,  ceoTenureYears: 20, visionRating: "HIGH" },
+  TSLA: { founderLed: true,  dualClass: false, ceoTenureYears: 16, visionRating: "HIGH" },
+  GOOGL:{ founderLed: false, dualClass: true,  ceoTenureYears: 10, visionRating: "MEDIUM" },
+  DDOG: { founderLed: true,  dualClass: true,  ceoTenureYears: 16, visionRating: "HIGH" },
+  CRWD: { founderLed: true,  dualClass: false, ceoTenureYears: 14, visionRating: "HIGH" },
+  PLTR: { founderLed: true,  dualClass: true,  ceoTenureYears: 20, visionRating: "HIGH" },
+  NET:  { founderLed: true,  dualClass: true,  ceoTenureYears: 15, visionRating: "HIGH" },
+  ZS:   { founderLed: true,  dualClass: false, ceoTenureYears: 13, visionRating: "HIGH" },
+  CRM:  { founderLed: true,  dualClass: false, ceoTenureYears: 25, visionRating: "HIGH" },
+  SQ:   { founderLed: true,  dualClass: true,  ceoTenureYears: 14, visionRating: "HIGH" },
+  MELI: { founderLed: true,  dualClass: true,  ceoTenureYears: 25, visionRating: "HIGH" },
+  LVMUY:{ founderLed: true,  dualClass: true,  ceoTenureYears: 35, visionRating: "HIGH" },
+  REGN: { founderLed: true,  dualClass: true,  ceoTenureYears: 35, visionRating: "HIGH" },
+  NU:   { founderLed: true,  dualClass: true,  ceoTenureYears: 9,  visionRating: "HIGH" },
+};
 
 interface CompanyDrawerProps {
   ticker: string | null;
@@ -43,6 +61,15 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
     entryTimingScore >= 0.55 ? { label: "Moderate", color: "bg-warning/20 text-warning border-warning/30" } :
     { label: "Poor Timing", color: "bg-destructive/20 text-destructive border-destructive/30" };
 
+  const compounderScore  = (scores as any)?.compounderScore as number | null | undefined;
+  const compounderRating = (scores as any)?.compounderRating as string | null | undefined;
+  const leadershipInfo   = ticker ? LEADERSHIP_LOOKUP[ticker] : undefined;
+
+  const compounderColor =
+    compounderRating === "HIGH"   ? "text-emerald-400" :
+    compounderRating === "MEDIUM" ? "text-amber-400" :
+    compounderRating === "LOW"    ? "text-red-400" : "text-muted-foreground";
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[90vw] sm:max-w-[640px] sm:w-[640px] border-l border-border bg-card p-0 flex flex-col">
@@ -67,19 +94,19 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-3 mt-5">
+              <div className="grid grid-cols-5 gap-2 mt-5">
                 <ScorePanel label="Fortress" score={scores?.fortressScore} type="fortress" />
                 <ScorePanel label="Rocket" score={scores?.rocketScore} type="rocket" />
                 <ScorePanel label="Wave" score={scores?.waveScore} type="wave" />
                 <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Entry Timing</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Entry</div>
                   {entryTimingScore != null ? (
                     <>
-                      <div className="text-xl font-mono font-bold text-foreground">
+                      <div className="text-lg font-mono font-bold text-foreground">
                         {entryTimingScore.toFixed(2)}
                       </div>
                       {entryLabel && (
-                        <span className={`mt-1 text-[9px] px-1.5 py-0.5 rounded font-medium border inline-block ${entryLabel.color}`}>
+                        <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block ${entryLabel.color}`}>
                           {entryLabel.label}
                         </span>
                       )}
@@ -88,7 +115,46 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                     <span className="text-muted-foreground text-sm">—</span>
                   )}
                 </div>
+                <div className="bg-secondary/50 rounded-lg p-3 border border-border">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <Award className="w-2.5 h-2.5" />Compounder
+                  </div>
+                  {compounderScore != null ? (
+                    <>
+                      <div className={`text-lg font-mono font-bold ${compounderColor}`}>
+                        {compounderScore}
+                      </div>
+                      <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block border-current ${compounderColor}`}>
+                        {compounderRating}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
+                </div>
               </div>
+
+              {/* Leadership badges */}
+              {leadershipInfo && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {leadershipInfo.founderLed && (
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-300 font-medium">Founder-Led</span>
+                  )}
+                  {leadershipInfo.dualClass && (
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 font-medium">Dual-Class</span>
+                  )}
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-muted/50 border border-border text-muted-foreground font-medium">
+                    CEO {leadershipInfo.ceoTenureYears}yr tenure
+                  </span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full border font-medium ${
+                    leadershipInfo.visionRating === "HIGH"
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                      : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                  }`}>
+                    Vision: {leadershipInfo.visionRating}
+                  </span>
+                </div>
+              )}
             </SheetHeader>
 
             <ScrollArea className="flex-1">
@@ -111,6 +177,40 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
 
                   {/* ── AI Memo ── */}
                   <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
+                    {/* Compounder breakdown card */}
+                    {compounderScore != null && (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                          <Award className="w-3.5 h-3.5" />Compounder Score — {compounderScore}/100
+                          <span className={`ml-1 text-[9px] px-1.5 py-0.5 rounded font-medium border border-current ${compounderColor}`}>{compounderRating}</span>
+                        </h4>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                          {[
+                            { label: "Growth",             w: "17%", score: scores?.growthScore },
+                            { label: "Profitability",      w: "13%", score: scores?.profitabilityScore },
+                            { label: "Capital Efficiency", w: "13%", score: scores?.capitalEfficiencyScore },
+                            { label: "Cash Flow Quality",  w: "13%", score: scores?.cashFlowQualityScore },
+                            { label: "Financial Strength", w: "12%", score: scores?.financialStrengthScore },
+                            { label: "Sentiment",          w: "12%", score: scores?.sentimentScore },
+                            { label: "Momentum",           w: "13%", score: scores?.momentumScore },
+                            { label: "Leadership",         w: "7%",  score: undefined },
+                          ].map(({ label, w, score }) => (
+                            <div key={label} className="space-y-0.5">
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-muted-foreground">{label} <span className="opacity-50">({w})</span></span>
+                                <span className="font-mono text-foreground">{score != null ? score.toFixed(2) : "—"}</span>
+                              </div>
+                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${score != null && score >= 0.7 ? "bg-emerald-400" : score != null && score >= 0.5 ? "bg-amber-400" : "bg-red-400"}`}
+                                  style={{ width: `${score != null ? score * 100 : 0}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {verdict ? (
                       <div className="rounded-xl border border-border bg-gradient-to-br from-secondary/50 to-background p-5 shadow-lg relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">

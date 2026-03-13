@@ -4,6 +4,7 @@ import {
   useListDriftSignals,
   useListOpportunityAlerts,
   useListRiskAlerts,
+  useGetMarketRegime,
 } from "@workspace/api-client-react";
 import { format } from "date-fns";
 import {
@@ -168,6 +169,28 @@ function CompanyIntelPanel({ ticker, co }: { ticker: string; co?: any }) {
   );
 }
 
+function RegimeBannerSignals() {
+  const { data: regimeData } = useGetMarketRegime();
+  const regime = (regimeData as any)?.regime as string | undefined;
+  const composite = (regimeData as any)?.compositeScore as number | undefined;
+  if (!regime) return null;
+
+  const cfg: Record<string, { label: string; cls: string; tip: string }> = {
+    BULL:     { label: "Bull Market",     cls: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300", tip: "Momentum-favoured regime — Rocket overweighted." },
+    BEAR:     { label: "Bear Market",     cls: "bg-red-500/10 border-red-500/30 text-red-300",             tip: "Defensive regime — Fortress overweighted." },
+    RECOVERY: { label: "Early Recovery",  cls: "bg-blue-500/10 border-blue-500/30 text-blue-300",          tip: "Transitional regime — balanced with growth lean." },
+    NEUTRAL:  { label: "Neutral Market",  cls: "bg-secondary border-border text-muted-foreground",         tip: "No clear trend — equal weight applied." },
+  };
+  const c = cfg[regime] ?? cfg.NEUTRAL;
+  return (
+    <div className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border ${c.cls}`}>
+      <span className="font-semibold">{c.label}</span>
+      <span className="text-[10px] opacity-70">{c.tip}</span>
+      {composite != null && <span className="font-mono ml-2">{composite.toFixed(2)}</span>}
+    </div>
+  );
+}
+
 function SignalsLayout({ title, description, icon: Icon, color, children, count }: any) {
   return (
     <Layout>
@@ -189,6 +212,7 @@ function SignalsLayout({ title, description, icon: Icon, color, children, count 
             </div>
           )}
         </div>
+        <RegimeBannerSignals />
         {children}
       </div>
     </Layout>

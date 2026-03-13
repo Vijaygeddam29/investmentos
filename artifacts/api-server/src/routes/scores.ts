@@ -2,38 +2,49 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
+import { compounderRating } from "../lib/scoring-engines";
 
 const router: IRouter = Router();
 
+// ─── GET /api/market/regime ──────────────────────────────────────────────────
+router.get("/market/regime", async (_req, res) => {
+  try {
+    const regime = await detectMarketRegime();
+    res.json(regime);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GET /api/scores ─────────────────────────────────────────────────────────
 router.get("/scores", async (req, res) => {
   try {
-    const engine = (req.query.engine as string) ?? "fortress";
+    const engine   = (req.query.engine as string) ?? "fortress";
     const minScore = req.query.minScore ? parseFloat(req.query.minScore as string) : undefined;
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
-    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const limit    = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
+    const offset   = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
-    // Fetch all score rows ordered by date desc, then deduplicate to latest per ticker in JS.
-    // Using DISTINCT ON would need raw SQL; this approach is clean and correct for typical
-    // universe sizes (< 5000 tickers).
     const allRows = await db
       .select({
-        ticker: scoresTable.ticker,
-        name: companiesTable.name,
-        sector: companiesTable.sector,
-        date: scoresTable.date,
-        fortressScore: scoresTable.fortressScore,
-        rocketScore: scoresTable.rocketScore,
-        waveScore: scoresTable.waveScore,
-        entryTimingScore: scoresTable.entryTimingScore,
-        profitabilityScore: scoresTable.profitabilityScore,
-        growthScore: scoresTable.growthScore,
+        ticker:                 scoresTable.ticker,
+        name:                   companiesTable.name,
+        sector:                 companiesTable.sector,
+        date:                   scoresTable.date,
+        fortressScore:          scoresTable.fortressScore,
+        rocketScore:            scoresTable.rocketScore,
+        waveScore:              scoresTable.waveScore,
+        entryTimingScore:       scoresTable.entryTimingScore,
+        profitabilityScore:     scoresTable.profitabilityScore,
+        growthScore:            scoresTable.growthScore,
         capitalEfficiencyScore: scoresTable.capitalEfficiencyScore,
         financialStrengthScore: scoresTable.financialStrengthScore,
-        cashFlowQualityScore: scoresTable.cashFlowQualityScore,
-        innovationScore: scoresTable.innovationScore,
-        sentimentScore: scoresTable.sentimentScore,
-        momentumScore: scoresTable.momentumScore,
-        valuationScore: scoresTable.valuationScore,
+        cashFlowQualityScore:   scoresTable.cashFlowQualityScore,
+        innovationScore:        scoresTable.innovationScore,
+        sentimentScore:         scoresTable.sentimentScore,
+        momentumScore:          scoresTable.momentumScore,
+        valuationScore:         scoresTable.valuationScore,
+        compounderScore:        scoresTable.compounderScore,
       })
       .from(scoresTable)
       .leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
@@ -61,7 +72,11 @@ router.get("/scores", async (req, res) => {
     // ── 4. Paginate ─────────────────────────────────────────────────────────
     const paginated = afterFilter.slice(offset, offset + limit);
 
-    // ── 5. Compute rule-based verdicts (AI verdicts are often stale HOLDs) ──
+    // ── 5. Detect current market regime (cached, lightweight) ───────────────
+    const regimeResult = await detectMarketRegime();
+    const { regime, weights: regimeWeights } = regimeResult;
+
+    // ── 6. Compute verdicts with regime-aware composite score ───────────────
     const verdicts = await db.select().from(aiVerdictsTable);
     const verdictMap = new Map(verdicts.map(v => [v.ticker, v]));
 
@@ -69,28 +84,31 @@ router.get("/scores", async (req, res) => {
       fortressScore: number | null; rocketScore: number | null; waveScore: number | null;
       entryTimingScore: number | null;
     }): string {
-      const f   = s.fortressScore  ?? 0;
-      const r   = s.rocketScore    ?? 0;
-      const w   = s.waveScore      ?? 0;
+      const f   = s.fortressScore   ?? 0;
+      const r   = s.rocketScore     ?? 0;
+      const w   = s.waveScore       ?? 0;
       const ent = s.entryTimingScore ?? 0.5;
-      // Use the best engine score (outstanding in ONE engine is enough to qualify)
+      // Regime-weighted composite score
+      const composite = computeCompositeScore(f, r, w, regimeWeights);
+      // Best engine score (strong in one engine still qualifies)
       const best = Math.max(f, r, w);
-      if (best >= 0.80 && ent >= 0.55) return "STRONG BUY";
-      if (best >= 0.75 && ent >= 0.45) return "BUY";
-      if (best >= 0.65 && ent >= 0.35) return "ADD";
-      if (best >= 0.55) return "HOLD";
-      if (best >= 0.42) return "TRIM";
+      const primary = (composite * 0.6) + (best * 0.4);
+      if (primary >= 0.78 && ent >= 0.55) return "STRONG BUY";
+      if (primary >= 0.72 && ent >= 0.45) return "BUY";
+      if (primary >= 0.62 && ent >= 0.35) return "ADD";
+      if (primary >= 0.52) return "HOLD";
+      if (primary >= 0.40) return "TRIM";
       return "SELL";
     }
 
-    // ── 6. Enrich with key fundamental metrics (ROIC, revenue growth) ───────
+    // ── 7. Enrich with key fundamental metrics ───────────────────────────────
     const metricsRows = await db
       .select({
-        ticker: financialMetricsTable.ticker,
-        roic: financialMetricsTable.roic,
+        ticker:         financialMetricsTable.ticker,
+        roic:           financialMetricsTable.roic,
         revenueGrowth1y: financialMetricsTable.revenueGrowth1y,
-        grossMargin: financialMetricsTable.grossMargin,
-        fcfYield: financialMetricsTable.fcfYield,
+        grossMargin:    financialMetricsTable.grossMargin,
+        fcfYield:       financialMetricsTable.fcfYield,
       })
       .from(financialMetricsTable)
       .orderBy(desc(financialMetricsTable.date));
@@ -101,36 +119,45 @@ router.get("/scores", async (req, res) => {
 
     const enriched = paginated.map(s => {
       const m = metricsMap.get(s.ticker);
+      const cs = s.compounderScore ?? null;
       return {
-        ticker: s.ticker,
-        name: s.name ?? undefined,
-        sector: s.sector ?? undefined,
-        date: s.date ?? undefined,
-        fortressScore: s.fortressScore ?? 0,
-        rocketScore: s.rocketScore ?? 0,
-        waveScore: s.waveScore ?? 0,
-        entryTimingScore: s.entryTimingScore ?? undefined,
-        profitabilityScore: s.profitabilityScore ?? undefined,
-        growthScore: s.growthScore ?? undefined,
+        ticker:                 s.ticker,
+        name:                   s.name ?? undefined,
+        sector:                 s.sector ?? undefined,
+        date:                   s.date ?? undefined,
+        fortressScore:          s.fortressScore ?? 0,
+        rocketScore:            s.rocketScore ?? 0,
+        waveScore:              s.waveScore ?? 0,
+        entryTimingScore:       s.entryTimingScore ?? undefined,
+        profitabilityScore:     s.profitabilityScore ?? undefined,
+        growthScore:            s.growthScore ?? undefined,
         capitalEfficiencyScore: s.capitalEfficiencyScore ?? undefined,
         financialStrengthScore: s.financialStrengthScore ?? undefined,
-        cashFlowQualityScore: s.cashFlowQualityScore ?? undefined,
-        innovationScore: s.innovationScore ?? undefined,
-        sentimentScore: s.sentimentScore ?? undefined,
-        momentumScore: s.momentumScore ?? undefined,
-        valuationScore: s.valuationScore ?? undefined,
-        // Key fundamental metrics for dashboard table display
-        roic: m?.roic ?? undefined,
-        revenueGrowth1y: m?.revenueGrowth1y ?? undefined,
-        grossMargin: m?.grossMargin ?? undefined,
-        fcfYield: m?.fcfYield ?? undefined,
-        verdict: computeVerdict(s),
-        classification: verdictMap.get(s.ticker)?.classification ?? undefined,
+        cashFlowQualityScore:   s.cashFlowQualityScore ?? undefined,
+        innovationScore:        s.innovationScore ?? undefined,
+        sentimentScore:         s.sentimentScore ?? undefined,
+        momentumScore:          s.momentumScore ?? undefined,
+        valuationScore:         s.valuationScore ?? undefined,
+        compounderScore:        cs,
+        compounderRating:       cs != null ? compounderRating(cs) : undefined,
+        roic:                   m?.roic ?? undefined,
+        revenueGrowth1y:        m?.revenueGrowth1y ?? undefined,
+        grossMargin:            m?.grossMargin ?? undefined,
+        fcfYield:               m?.fcfYield ?? undefined,
+        verdict:                computeVerdict(s),
+        classification:         verdictMap.get(s.ticker)?.classification ?? undefined,
+        compositeScore:         computeCompositeScore(
+          s.fortressScore ?? 0, s.rocketScore ?? 0, s.waveScore ?? 0, regimeWeights
+        ),
+        regime,
+        regimeWeights,
       };
     });
 
     res.json({
       engine,
+      regime,
+      regimeWeights,
       scores: enriched,
       total: afterFilter.length,
     });

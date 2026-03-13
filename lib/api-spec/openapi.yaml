@@ -546,6 +546,56 @@ paths:
           description: SSE stream of assistant response chunks
           content:
             text/event-stream: {}
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [scores]
+      summary: List score alerts (verdict changes, score drops/rises, compounder tier changes)
+      parameters:
+        - name: ticker
+          in: query
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Score alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsResponse"
+  /market/regime:
+    get:
+      operationId: getMarketRegime
+      tags: [scores]
+      summary: Get current market regime (Bull/Bear/Recovery/Neutral) from SPY MA50/MA200
+      responses:
+        "200":
+          description: Market regime
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketRegimeResponse"
+  /pipeline/run-daily:
+    post:
+      operationId: runDailyPipeline
+      tags: [pipeline]
+      summary: Recalculate scores for all tickers and emit alerts
+      responses:
+        "200":
+          description: Daily pipeline result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 components:
   schemas:
     HealthStatus:
@@ -629,9 +679,87 @@ components:
             $ref: "#/components/schemas/ScoreItem"
         total:
           type: number
+        regime:
+          type: string
+          enum: [BULL, BEAR, RECOVERY, NEUTRAL]
+        regimeWeights:
+          type: object
+          properties:
+            fortress:
+              type: number
+            rocket:
+              type: number
+            wave:
+              type: number
       required:
         - scores
         - total
+    AlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreAlertItem"
+        count:
+          type: number
+      required:
+        - alerts
+        - count
+    ScoreAlertItem:
+      type: object
+      properties:
+        id:
+          type: number
+        ticker:
+          type: string
+        date:
+          type: string
+        alertType:
+          type: string
+          enum: [VERDICT_CHANGE, SCORE_DROP, SCORE_RISE, COMPOUNDER_CHANGE]
+        scoreFamily:
+          type: string
+        previousValue:
+          type: number
+        currentValue:
+          type: number
+        message:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - ticker
+        - date
+        - alertType
+        - message
+    MarketRegimeResponse:
+      type: object
+      properties:
+        regime:
+          type: string
+          enum: [BULL, BEAR, RECOVERY, NEUTRAL]
+        ma50:
+          type: number
+        ma200:
+          type: number
+        confidence:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        weights:
+          type: object
+          properties:
+            fortress:
+              type: number
+            rocket:
+              type: number
+            wave:
+              type: number
+      required:
+        - regime
+        - confidence
+        - weights
     ScoreItem:
       type: object
       properties:
@@ -681,6 +809,25 @@ components:
           type: string
         classification:
           type: string
+        compounderScore:
+          type: number
+        compounderRating:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        compositeScore:
+          type: number
+        regime:
+          type: string
+          enum: [BULL, BEAR, RECOVERY, NEUTRAL]
+        regimeWeights:
+          type: object
+          properties:
+            fortress:
+              type: number
+            rocket:
+              type: number
+            wave:
+              type: number
       required:
         - ticker
         - fortressScore
@@ -1026,6 +1173,8 @@ components:
         waveScore:
           type: number
         entryTimingScore:
+          type: number
+        compounderScore:
           type: number
       required:
         - date

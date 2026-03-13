@@ -12,4 +12,5 @@ export interface ScoreHistoryPoint {
   rocketScore?: number;
   waveScore?: number;
   entryTimingScore?: number;
+  compounderScore?: number;
 }

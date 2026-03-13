@@ -5,6 +5,9 @@
  * Investment OS API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScoreItemCompounderRating } from "./scoreItemCompounderRating";
+import type { ScoreItemRegime } from "./scoreItemRegime";
+import type { ScoreItemRegimeWeights } from "./scoreItemRegimeWeights";
 
 export interface ScoreItem {
   ticker: string;
@@ -30,4 +33,9 @@ export interface ScoreItem {
   fcfYield?: number;
   verdict?: string;
   classification?: string;
+  compounderScore?: number;
+  compounderRating?: ScoreItemCompounderRating;
+  compositeScore?: number;
+  regime?: ScoreItemRegime;
+  regimeWeights?: ScoreItemRegimeWeights;
 }
