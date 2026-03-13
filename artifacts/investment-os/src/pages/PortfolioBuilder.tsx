@@ -495,7 +495,7 @@ export default function PortfolioBuilder() {
                                 {h.highValuation && (
                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px] font-semibold">
                                     <AlertTriangle className="w-2.5 h-2.5" />
-                                    High PE
+                                    High valuation
                                   </span>
                                 )}
                               </div>

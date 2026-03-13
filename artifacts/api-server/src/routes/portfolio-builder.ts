@@ -306,7 +306,7 @@ router.get("/portfolio/builder", async (req, res) => {
     let peRatios: Record<string, number> = {};
     if (isPowerLaw) {
       peRatios = await fetchSectorPeMedians(
-        filtered.map(s => s.ticker),
+        tickers,
         companyMap as Record<string, { sector?: string | null }>
       );
     }
