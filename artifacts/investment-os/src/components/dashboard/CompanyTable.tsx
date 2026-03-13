@@ -117,18 +117,22 @@ export function CompanyTable({ data, isLoading }: CompanyTableProps) {
     },
     {
       accessorKey: "verdict",
-      header: "AI Verdict",
+      header: "Verdict",
       cell: ({ row }: any) => {
-        const v = row.getValue("verdict") as string;
-        if (!v) return <span className="text-xs text-muted-foreground">-</span>;
-        
-        let colors = "bg-secondary text-muted-foreground";
-        if (v.toUpperCase().includes("BUY")) colors = "bg-success/10 text-success border-success/20";
-        if (v.toUpperCase().includes("SELL")) colors = "bg-destructive/10 text-destructive border-destructive/20";
-        if (v.toUpperCase().includes("HOLD")) colors = "bg-warning/10 text-warning border-warning/20";
+        const v = (row.getValue("verdict") as string | undefined) ?? "";
+        if (!v) return <span className="text-xs text-muted-foreground">—</span>;
+
+        const up = v.toUpperCase();
+        let colors = "bg-secondary/50 text-muted-foreground border-border/50";
+        if (up === "STRONG BUY") colors = "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+        else if (up === "BUY")   colors = "bg-emerald-500/10 text-emerald-400 border-emerald-500/25";
+        else if (up === "ADD")   colors = "bg-teal-500/10 text-teal-400 border-teal-500/20";
+        else if (up === "HOLD")  colors = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+        else if (up === "TRIM")  colors = "bg-orange-500/10 text-orange-400 border-orange-500/20";
+        else if (up === "SELL")  colors = "bg-red-500/15 text-red-400 border-red-500/25";
 
         return (
-          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${colors}`}>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${colors}`}>
             {v}
           </span>
         );

@@ -61,9 +61,27 @@ router.get("/scores", async (req, res) => {
     // ── 4. Paginate ─────────────────────────────────────────────────────────
     const paginated = afterFilter.slice(offset, offset + limit);
 
-    // ── 5. Enrich with AI verdicts ──────────────────────────────────────────
+    // ── 5. Compute rule-based verdicts (AI verdicts are often stale HOLDs) ──
     const verdicts = await db.select().from(aiVerdictsTable);
     const verdictMap = new Map(verdicts.map(v => [v.ticker, v]));
+
+    function computeVerdict(s: {
+      fortressScore: number | null; rocketScore: number | null; waveScore: number | null;
+      entryTimingScore: number | null;
+    }): string {
+      const f   = s.fortressScore  ?? 0;
+      const r   = s.rocketScore    ?? 0;
+      const w   = s.waveScore      ?? 0;
+      const ent = s.entryTimingScore ?? 0.5;
+      // Use the best engine score (outstanding in ONE engine is enough to qualify)
+      const best = Math.max(f, r, w);
+      if (best >= 0.80 && ent >= 0.55) return "STRONG BUY";
+      if (best >= 0.75 && ent >= 0.45) return "BUY";
+      if (best >= 0.65 && ent >= 0.35) return "ADD";
+      if (best >= 0.55) return "HOLD";
+      if (best >= 0.42) return "TRIM";
+      return "SELL";
+    }
 
     // ── 6. Enrich with key fundamental metrics (ROIC, revenue growth) ───────
     const metricsRows = await db
@@ -106,7 +124,7 @@ router.get("/scores", async (req, res) => {
         revenueGrowth1y: m?.revenueGrowth1y ?? undefined,
         grossMargin: m?.grossMargin ?? undefined,
         fcfYield: m?.fcfYield ?? undefined,
-        verdict: verdictMap.get(s.ticker)?.verdict ?? undefined,
+        verdict: computeVerdict(s),
         classification: verdictMap.get(s.ticker)?.classification ?? undefined,
       };
     });
