@@ -12,7 +12,12 @@ const SECTORS = [
   "Real Estate", "Utilities", "Communication Services",
 ];
 
-const COUNTRIES = ["US", "UK", "India", "Germany", "France", "Japan", "China", "Canada", "Australia"];
+const COUNTRIES = [
+  "United States", "United Kingdom", "India", "France", "Germany",
+  "China", "Netherlands", "Australia", "Brazil", "Canada", "Denmark",
+  "Hong Kong", "Ireland", "Israel", "Italy", "Singapore",
+  "Switzerland", "Taiwan", "Uruguay",
+];
 
 function ScoreCell({ score }: { score?: number | null }) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
@@ -24,12 +29,12 @@ function ScoreCell({ score }: { score?: number | null }) {
   return <span className={`font-mono text-xs font-semibold ${color}`}>{score.toFixed(2)}</span>;
 }
 
+// marketCap is stored in billions (e.g. 4451.2 = $4.45T)
 function formatMarketCap(v?: number | null) {
   if (v == null) return "—";
-  if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-  if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e6)  return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${v.toFixed(0)}`;
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}T`;
+  if (v >= 1)    return `$${v.toFixed(1)}B`;
+  return `$${(v * 1000).toFixed(0)}M`;
 }
 
 export default function Screener() {
@@ -55,8 +60,8 @@ export default function Screener() {
     min_rocket:      minRocket   ? Number(minRocket)   : undefined,
     min_wave:        minWave     ? Number(minWave)     : undefined,
     min_entry:       minEntry    ? Number(minEntry)    : undefined,
-    market_cap_min:  mcapMin ? Number(mcapMin) * 1e9 : undefined,
-    market_cap_max:  mcapMax ? Number(mcapMax) * 1e9 : undefined,
+    market_cap_min:  mcapMin ? Number(mcapMin) : undefined,
+    market_cap_max:  mcapMax ? Number(mcapMax) : undefined,
     limit: 200,
   }), [sector, industry, country, minFortress, minRocket, minWave, minEntry, mcapMin, mcapMax]);
 
