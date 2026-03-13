@@ -10,6 +10,7 @@ import { Trash2, Plus, Loader2, Globe, ChevronDown, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 
 const SECTORS = [
   "Technology", "Healthcare", "Financial Services", "Consumer Defensive",
@@ -28,6 +29,8 @@ const COUNTRY_FLAGS: Record<string, string> = {
 interface CountryOption { name: string; slug: string; count: number; }
 
 export default function Universe() {
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [sectorFilter, setSectorFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [appliedSector, setAppliedSector] = useState<string | undefined>(undefined);
@@ -242,8 +245,8 @@ export default function Universe() {
                   </TableRow>
                 ) : (
                   data?.companies.map((company) => (
-                    <TableRow key={company.ticker} className="border-border hover:bg-secondary/40 group">
-                      <TableCell className="font-mono font-bold text-primary sticky left-0 bg-card z-10 group-hover:bg-secondary/40 whitespace-nowrap">{company.ticker}</TableCell>
+                    <TableRow key={company.ticker} className="border-border hover:bg-secondary/40 group cursor-pointer" onClick={() => { setSelectedTicker(company.ticker); setDrawerOpen(true); }}>
+                      <TableCell className="font-mono font-bold text-primary sticky left-0 bg-card z-10 group-hover:bg-secondary/40 whitespace-nowrap hover:underline">{company.ticker}</TableCell>
                       <TableCell className="font-medium whitespace-nowrap">{company.name}</TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{company.sector || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
@@ -259,8 +262,9 @@ export default function Universe() {
                           variant="ghost"
                           size="icon"
                           className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemove(company.ticker)}
+                          onClick={(e) => { e.stopPropagation(); handleRemove(company.ticker); }}
                           disabled={removeMutation.isPending}
+                          aria-label={`Remove ${company.ticker}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -273,6 +277,12 @@ export default function Universe() {
           </div>
         </div>
       </div>
+
+      <CompanyDrawer
+        ticker={selectedTicker}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </Layout>
   );
 }
