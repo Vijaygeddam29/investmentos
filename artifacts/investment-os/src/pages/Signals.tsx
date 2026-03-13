@@ -33,7 +33,7 @@ function ScoreBar({ label, value, color }: { label: string; value: number | null
   const pct = Math.round(value * 100);
   return (
     <div>
-      <div className="flex justify-between text-[10px] mb-0.5">
+      <div className="flex justify-between text-[11px] mb-0.5">
         <span className="text-muted-foreground">{label}</span>
         <span className={`font-mono font-semibold ${color}`}>{pct}</span>
       </div>
@@ -194,14 +194,14 @@ function RegimeBannerSignals() {
 function SignalsLayout({ title, description, icon: Icon, color, children, count }: any) {
   return (
     <Layout>
-      <div className="max-w-[1200px] mx-auto space-y-6">
-        <div className="flex items-start justify-between mb-6">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        <div className="flex flex-col md:flex-row items-start justify-between gap-3 mb-6">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-xl border ${color}`}>
               <Icon className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-3xl font-display font-bold tracking-tight">{title}</h1>
+              <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight">{title}</h1>
               <p className="text-muted-foreground text-sm mt-0.5">{description}</p>
             </div>
           </div>

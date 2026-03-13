@@ -97,8 +97,8 @@ export default function Screener() {
 
   return (
     <Layout>
-      <div className="max-w-[1600px] mx-auto space-y-5">
-        <div className="flex items-start justify-between">
+      <div className="max-w-[1800px] mx-auto space-y-5">
+        <div className="flex flex-col md:flex-row items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-display font-bold tracking-tight mb-1">Global Screener</h1>
             <p className="text-muted-foreground text-sm">Filter the factor warehouse across US, UK, and India markets.</p>
@@ -175,34 +175,34 @@ export default function Screener() {
             />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Fortress ≥</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Fortress ≥</label>
               <input type="number" min={0} max={1} step={0.05} value={minFortress} onChange={e => setMinFortress(e.target.value)}
                 placeholder="0.0" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-emerald-500/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Rocket ≥</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Rocket ≥</label>
               <input type="number" min={0} max={1} step={0.05} value={minRocket} onChange={e => setMinRocket(e.target.value)}
                 placeholder="0.0" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-orange-500/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Wave ≥</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Wave ≥</label>
               <input type="number" min={0} max={1} step={0.05} value={minWave} onChange={e => setMinWave(e.target.value)}
                 placeholder="0.0" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-cyan-500/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Entry ≥</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Entry ≥</label>
               <input type="number" min={0} max={1} step={0.05} value={minEntry} onChange={e => setMinEntry(e.target.value)}
                 placeholder="0.0" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-violet-500/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Mkt Cap Min ($B)</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Mkt Cap Min ($B)</label>
               <input type="number" min={0} step={1} value={mcapMin} onChange={e => setMcapMin(e.target.value)}
                 placeholder="0" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-primary/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Mkt Cap Max ($B)</label>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider block mb-1">Mkt Cap Max ($B)</label>
               <input type="number" min={0} step={1} value={mcapMax} onChange={e => setMcapMax(e.target.value)}
                 placeholder="∞" className="w-full px-3 py-1.5 text-xs rounded-lg bg-secondary/50 border border-border focus:border-primary/50 outline-none placeholder:text-muted-foreground/60" />
             </div>
@@ -215,7 +215,7 @@ export default function Screener() {
             <span className="text-xs text-muted-foreground font-mono">
               {isLoading ? "Loading..." : `${snapshots.length} companies`}
             </span>
-            <span className="text-[10px] text-muted-foreground">Click a row to drill into company detail</span>
+            <span className="text-[11px] text-muted-foreground hidden md:inline">Click a row to drill into company detail</span>
           </div>
 
           {isLoading ? (
@@ -233,19 +233,19 @@ export default function Screener() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs md:text-sm">
                 <thead>
                   <tr className="border-b border-border bg-secondary/20">
-                    <th className="text-left px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Ticker</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Name</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Sector</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Country</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">CCY</th>
-                    <th className="text-right px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Mkt Cap</th>
-                    <th className="text-center px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider text-emerald-600">Fortress</th>
-                    <th className="text-center px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider text-orange-600">Rocket</th>
-                    <th className="text-center px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider text-cyan-600">Wave</th>
-                    <th className="text-center px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider text-violet-600">Entry</th>
+                    <th className="text-left px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground sticky left-0 bg-secondary/20 z-10 whitespace-nowrap">Ticker</th>
+                    <th className="text-left px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">Name</th>
+                    <th className="text-left px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">Sector</th>
+                    <th className="text-left px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">Country</th>
+                    <th className="text-left px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">CCY</th>
+                    <th className="text-right px-3 md:px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground whitespace-nowrap">Mkt Cap</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-mono uppercase tracking-wider text-emerald-600 whitespace-nowrap">Fortress</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-mono uppercase tracking-wider text-orange-600 whitespace-nowrap">Rocket</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-mono uppercase tracking-wider text-cyan-600 whitespace-nowrap">Wave</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-mono uppercase tracking-wider text-violet-600 whitespace-nowrap">Entry</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,26 +253,26 @@ export default function Screener() {
                     <tr
                       key={s.ticker}
                       onClick={() => openDrawer(s.ticker)}
-                      className={`border-b border-border/50 cursor-pointer transition-colors hover:bg-primary/5 hover:border-primary/20 ${i % 2 === 0 ? "bg-transparent" : "bg-secondary/10"}`}
+                      className={`border-b border-border/50 cursor-pointer transition-colors hover:bg-primary/5 hover:border-primary/20 group ${i % 2 === 0 ? "bg-transparent" : "bg-secondary/10"}`}
                     >
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 md:px-4 py-2.5 sticky left-0 bg-card z-10 group-hover:bg-primary/5 whitespace-nowrap">
                         <span className="font-mono text-xs font-bold text-primary">{s.ticker}</span>
                       </td>
-                      <td className="px-4 py-2.5 max-w-[180px]">
+                      <td className="px-3 md:px-4 py-2.5 max-w-[180px]">
                         <span className="text-xs text-foreground truncate block">{s.name ?? "—"}</span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 md:px-4 py-2.5 whitespace-nowrap">
                         {s.sector ? (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal border-border/50">{s.sector}</Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-border/50">{s.sector}</Badge>
                         ) : <span className="text-muted-foreground text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 md:px-4 py-2.5 whitespace-nowrap">
                         <span className="text-xs text-muted-foreground">{s.country ?? "—"}</span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 md:px-4 py-2.5 whitespace-nowrap">
                         <span className="text-xs font-mono text-muted-foreground">{s.currency ?? "—"}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-3 md:px-4 py-2.5 text-right whitespace-nowrap">
                         <span className="text-xs font-mono">{formatMarketCap(s.marketCap)}</span>
                       </td>
                       <td className="px-3 py-2.5 text-center"><ScoreCell score={s.fortressScore} /></td>

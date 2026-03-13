@@ -97,8 +97,8 @@ export default function Universe() {
 
   return (
     <Layout>
-      <div className="max-w-[1000px] mx-auto space-y-6">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-[1400px] mx-auto space-y-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 md:mb-8">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
               <Globe className="w-6 h-6 text-primary" />
@@ -216,59 +216,61 @@ export default function Universe() {
         </div>
 
         <div className="rounded-xl border border-border bg-card overflow-hidden shadow-lg shadow-black/20">
-          <Table>
-            <TableHeader className="bg-secondary/30">
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="w-[100px]">Ticker</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Sector</TableHead>
-                <TableHead>Country</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-secondary/30">
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="w-[100px] sticky left-0 bg-secondary/30 z-10 whitespace-nowrap">Ticker</TableHead>
+                  <TableHead className="whitespace-nowrap">Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Sector</TableHead>
+                  <TableHead className="whitespace-nowrap">Country</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
-              ) : data?.companies?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    {hasActiveFilters ? "No companies match your filters." : "Universe is empty. Add companies to begin."}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data?.companies.map((company) => (
-                  <TableRow key={company.ticker} className="border-border hover:bg-secondary/40">
-                    <TableCell className="font-mono font-bold text-primary">{company.ticker}</TableCell>
-                    <TableCell className="font-medium">{company.name}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{company.sector || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {company.country ? (
-                        <span className="flex items-center gap-1.5">
-                          <span>{COUNTRY_FLAGS[company.country] ?? "🌐"}</span>
-                          <span>{company.country}</span>
-                        </span>
-                      ) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleRemove(company.ticker)}
-                        disabled={removeMutation.isPending}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : data?.companies?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      {hasActiveFilters ? "No companies match your filters." : "Universe is empty. Add companies to begin."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.companies.map((company) => (
+                    <TableRow key={company.ticker} className="border-border hover:bg-secondary/40 group">
+                      <TableCell className="font-mono font-bold text-primary sticky left-0 bg-card z-10 group-hover:bg-secondary/40 whitespace-nowrap">{company.ticker}</TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">{company.name}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{company.sector || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                        {company.country ? (
+                          <span className="flex items-center gap-1.5">
+                            <span>{COUNTRY_FLAGS[company.country] ?? "🌐"}</span>
+                            <span>{company.country}</span>
+                          </span>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemove(company.ticker)}
+                          disabled={removeMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </div>
     </Layout>

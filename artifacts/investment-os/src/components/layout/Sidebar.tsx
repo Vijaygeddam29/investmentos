@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -9,10 +10,12 @@ import {
   LayoutGrid,
   Briefcase,
   Wand2,
-  Settings
+  Settings,
+  X
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { useSidebarCtx } from "./Layout";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -42,9 +45,24 @@ const navGroups = [
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { open, isMobile, close } = useSidebarCtx();
+  const closeRef = useRef<HTMLButtonElement>(null);
 
-  return (
-    <div className="w-64 border-r border-border bg-sidebar flex flex-col h-screen overflow-hidden flex-shrink-0">
+  useEffect(() => {
+    if (!open || !isMobile) return;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, isMobile, close]);
+
+  const sidebarContent = (
+    <div className={cn(
+      "w-64 border-r border-border bg-sidebar flex flex-col h-screen overflow-hidden flex-shrink-0",
+      isMobile && "relative"
+    )}>
       <div className="p-6 flex items-center gap-3">
         <div className="w-8 h-8 rounded bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/20">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -53,6 +71,11 @@ export function Sidebar() {
           </svg>
         </div>
         <span className="font-display font-bold text-lg tracking-tight text-white">Investment<span className="text-primary">OS</span></span>
+        {isMobile && (
+          <button ref={closeRef} onClick={close} className="ml-auto p-1 rounded-lg hover:bg-sidebar-accent transition-colors" aria-label="Close navigation menu">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 px-4 py-4 space-y-4 overflow-y-auto">
@@ -66,6 +89,7 @@ export function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={isMobile ? close : undefined}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
                       isActive
@@ -97,4 +121,21 @@ export function Sidebar() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <>
+        {open && (
+          <div className="fixed inset-0 z-[60] flex" role="dialog" aria-modal="true" aria-label="Navigation menu">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
+            <div className="relative z-[70] animate-in slide-in-from-left duration-200">
+              {sidebarContent}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return sidebarContent;
 }

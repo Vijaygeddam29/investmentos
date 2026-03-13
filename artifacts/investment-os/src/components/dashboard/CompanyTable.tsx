@@ -25,12 +25,13 @@ export function CompanyTable({ data, isLoading }: CompanyTableProps) {
     {
       accessorKey: "ticker",
       header: "Ticker",
-      cell: ({ row }: any) => <span className="font-mono font-bold text-primary">{row.getValue("ticker")}</span>,
+      cell: ({ row }: any) => <span className="font-mono font-bold text-primary text-xs">{row.getValue("ticker")}</span>,
+      meta: { sticky: true },
     },
     {
       accessorKey: "name",
       header: "Company",
-      cell: ({ row }: any) => <span className="font-medium truncate max-w-[200px] block">{row.getValue("name")}</span>,
+      cell: ({ row }: any) => <span className="font-medium truncate max-w-[200px] block text-xs">{row.getValue("name")}</span>,
     },
     {
       accessorKey: "sector",
@@ -172,48 +173,56 @@ export function CompanyTable({ data, isLoading }: CompanyTableProps) {
   return (
     <>
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-lg shadow-black/20">
-        <Table>
-          <TableHeader className="bg-secondary/30">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="border-border hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="text-xs font-medium text-muted-foreground h-10">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                  className="border-border hover:bg-secondary/40 cursor-pointer transition-colors group"
-                  onClick={() => setSelectedTicker(row.original.ticker)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-secondary/30">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="border-border hover:bg-transparent">
+                  {headerGroup.headers.map((header, idx) => (
+                    <TableHead
+                      key={header.id}
+                      className={`text-xs font-medium text-muted-foreground h-10 whitespace-nowrap ${idx === 0 ? "sticky left-0 bg-secondary/30 z-10" : ""}`}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                    className="border-border hover:bg-secondary/40 cursor-pointer transition-colors group"
+                    onClick={() => setSelectedTicker(row.original.ticker)}
+                  >
+                    {row.getVisibleCells().map((cell, idx) => (
+                      <TableCell
+                        key={cell.id}
+                        className={`py-3 whitespace-nowrap ${idx === 0 ? "sticky left-0 bg-card z-10 group-hover:bg-secondary/40" : ""}`}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <CompanyDrawer 

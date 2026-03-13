@@ -141,7 +141,7 @@
 
   --border: 217 33% 17%;
   --input: 217 33% 17%;
-  --ring: 217 91% 60%;
+  --ring: 217 30% 35%;
 
   --sidebar: 222 47% 6%;
   --sidebar-foreground: 210 40% 98%;
@@ -154,7 +154,10 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-none;
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ring/50 ring-offset-1 ring-offset-background;
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
