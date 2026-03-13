@@ -10,6 +10,8 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, asc, and, ilike, gte, lte } from "drizzle-orm";
 import { generateAiMemo } from "../lib/ai-memo";
+import { generateValueChain } from "../lib/value-chain";
+import { companyValueChainsTable } from "@workspace/db/schema";
 import { computeMACD } from "../lib/scoring-engines";
 
 const router: IRouter = Router();
@@ -430,6 +432,35 @@ router.post("/companies/:ticker/verdict", async (req, res) => {
     const { ticker } = req.params;
     const verdict = await generateAiMemo(ticker);
     res.json({ verdict });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/companies/:ticker/value-chain", async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const [existing] = await db
+      .select()
+      .from(companyValueChainsTable)
+      .where(eq(companyValueChainsTable.ticker, ticker))
+      .orderBy(desc(companyValueChainsTable.generatedAt))
+      .limit(1);
+    if (existing) {
+      res.json({ valueChain: existing, cached: true });
+    } else {
+      res.json({ valueChain: null, cached: false });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/companies/:ticker/value-chain", async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const valueChain = await generateValueChain(ticker);
+    res.json({ valueChain });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

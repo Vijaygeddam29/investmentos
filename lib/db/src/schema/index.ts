@@ -9,4 +9,5 @@ export * from "./portfolio";
 export * from "./conversations";
 export * from "./messages";
 export * from "./score-alerts";
+export * from "./value-chains";
 export type { RiskAlert } from "./signals";

@@ -3,13 +3,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { EntryExitPanel } from "./EntryExitPanel";
 import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
+import { ValueChainTab } from "./ValueChainTab";
 
 const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
   NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
@@ -200,18 +201,21 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
             <ScrollArea className="flex-1">
               <div className="p-6">
                 <Tabs defaultValue="overview" className="w-full">
-                  <TabsList className="w-full grid grid-cols-5 mb-6 bg-secondary/50">
-                    <TabsTrigger value="overview">AI Memo</TabsTrigger>
-                    <TabsTrigger value="factors">120 Factors</TabsTrigger>
-                    <TabsTrigger value="valuation">Entry/Exit</TabsTrigger>
-                    <TabsTrigger value="charts" className="flex items-center gap-1">
+                  <TabsList className="w-full grid grid-cols-6 mb-6 bg-secondary/50 text-[11px]">
+                    <TabsTrigger value="overview" className="text-[11px]">AI Memo</TabsTrigger>
+                    <TabsTrigger value="factors" className="text-[11px]">Factors</TabsTrigger>
+                    <TabsTrigger value="valuation" className="text-[11px]">Entry/Exit</TabsTrigger>
+                    <TabsTrigger value="charts" className="text-[11px] flex items-center gap-1">
                       <BarChart2 className="w-3 h-3" />Charts
                     </TabsTrigger>
-                    <TabsTrigger value="signals">
+                    <TabsTrigger value="signals" className="text-[11px]">
                       Signals
                       {driftSignals.length > 0 && (
                         <span className="ml-1.5 w-2 h-2 rounded-full bg-destructive animate-pulse inline-block" />
                       )}
+                    </TabsTrigger>
+                    <TabsTrigger value="value-chain" className="text-[11px] flex items-center gap-1">
+                      <Link2 className="w-3 h-3" />Story
                     </TabsTrigger>
                   </TabsList>
 
@@ -368,6 +372,11 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                         </div>
                       )}
                     </div>
+                  </TabsContent>
+
+                  {/* ── Value Chain Story ── */}
+                  <TabsContent value="value-chain" className="animate-in fade-in duration-300">
+                    {ticker && <ValueChainTab ticker={ticker} />}
                   </TabsContent>
                 </Tabs>
               </div>
