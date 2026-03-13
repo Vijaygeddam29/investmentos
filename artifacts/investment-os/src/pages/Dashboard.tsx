@@ -57,12 +57,12 @@ export default function Dashboard() {
             <div className="flex items-center gap-3 flex-wrap">
               <span className="font-semibold text-sm">Market Regime: {regimeCfg.label}</span>
               {regimeData && (
-                <Badge variant="outline" className="font-mono text-[10px] border-current">
+                <Badge variant="outline" className="font-mono text-[11px] border-current">
                   SPY MA50 {regimeData.ma50 != null ? `$${regimeData.ma50}` : "—"} · MA200 {regimeData.ma200 != null ? `$${regimeData.ma200}` : "—"}
                 </Badge>
               )}
               {regimeData && (
-                <span className="text-[10px] text-muted-foreground font-mono">
+                <span className="text-[11px] text-muted-foreground font-mono">
                   Fortress {Math.round((regimeData.weights?.fortress ?? 0.33) * 100)}% · Rocket {Math.round((regimeData.weights?.rocket ?? 0.33) * 100)}% · Wave {Math.round((regimeData.weights?.wave ?? 0.33) * 100)}%
                 </span>
               )}
@@ -151,7 +151,7 @@ export default function Dashboard() {
                   <span className="text-base">{ALERT_ICON[alert.alertType] ?? "⚡"}</span>
                   <span className="font-mono font-bold text-xs text-foreground w-14 shrink-0">{alert.ticker}</span>
                   <span className="text-muted-foreground flex-1">{alert.message}</span>
-                  <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">{alert.date}</span>
+                  <span className="text-[11px] font-mono text-muted-foreground/60 shrink-0">{alert.date}</span>
                 </div>
               ))}
             </div>

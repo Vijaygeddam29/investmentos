@@ -114,7 +114,7 @@ function CompanyIntelPanel({ ticker, co }: { ticker: string; co?: any }) {
 
         <div className="grid grid-cols-2 gap-2.5">
           <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
               <Flag className="w-3 h-3 text-primary" /> Key Products
             </div>
             <ul className="space-y-0.5">
@@ -126,7 +126,7 @@ function CompanyIntelPanel({ ticker, co }: { ticker: string; co?: any }) {
             </ul>
           </div>
           <div className="p-3 rounded-lg bg-secondary/20 border border-border/40">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground mb-1.5 uppercase tracking-wider">
               <Users className="w-3 h-3 text-orange-400" /> Competitors
             </div>
             <ul className="space-y-0.5">
@@ -140,14 +140,14 @@ function CompanyIntelPanel({ ticker, co }: { ticker: string; co?: any }) {
         </div>
 
         <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-500 mb-1.5 uppercase tracking-wider">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-500 mb-1.5 uppercase tracking-wider">
             <Lock className="w-3 h-3" /> Competitive Moat
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">{intel.moat}</p>
         </div>
 
         <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-500 mb-1.5 uppercase tracking-wider">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-500 mb-1.5 uppercase tracking-wider">
             <AlertCircle className="w-3 h-3" /> Key Risk
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">{intel.keyRisk}</p>
@@ -185,7 +185,7 @@ function RegimeBannerSignals() {
   return (
     <div className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border ${c.cls}`}>
       <span className="font-semibold">{c.label}</span>
-      <span className="text-[10px] opacity-70">{c.tip}</span>
+      <span className="text-[11px] opacity-70">{c.tip}</span>
       {composite != null && <span className="font-mono ml-2">{composite.toFixed(2)}</span>}
     </div>
   );
@@ -272,8 +272,8 @@ export function DriftSignals() {
                           <span className="font-bold text-lg font-mono text-primary">{signal.ticker}</span>
                           {co && <span className="text-sm text-foreground font-medium truncate">{co.name}</span>}
                           <Badge className={signal.severity === 'high'
-                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/20 text-[10px]'
-                            : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-[10px]'}>
+                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/20 text-[11px]'
+                            : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-[11px]'}>
                             {signal.severity.toUpperCase()} SEVERITY
                           </Badge>
                         </div>
@@ -303,7 +303,7 @@ export function DriftSignals() {
                   {/* Signal summary */}
                   <div className="mt-3 ml-9">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="outline" className="text-[10px] font-mono">{signal.factorName || signal.signalType}</Badge>
+                      <Badge variant="outline" className="text-[11px] font-mono">{signal.factorName || signal.signalType}</Badge>
                     </div>
                     <p className="text-sm text-foreground/80">{signal.description}</p>
 
@@ -311,17 +311,17 @@ export function DriftSignals() {
                     {signal.currentValue != null && signal.historicalAvg != null && (
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         <div className="bg-secondary/30 rounded-lg p-2 text-center border border-border/40">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Current</div>
+                          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Current</div>
                           <div className={`text-sm font-mono font-bold ${signal.severity === 'high' ? 'text-red-400' : 'text-amber-400'}`}>
                             {signal.currentValue.toFixed(3)}
                           </div>
                         </div>
                         <div className="bg-secondary/30 rounded-lg p-2 text-center border border-border/40">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Hist Avg</div>
+                          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Hist Avg</div>
                           <div className="text-sm font-mono text-muted-foreground">{signal.historicalAvg.toFixed(3)}</div>
                         </div>
                         <div className="bg-secondary/30 rounded-lg p-2 text-center border border-border/40">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Change</div>
+                          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Change</div>
                           <div className={`text-sm font-mono font-bold ${(pctDelta ?? 0) < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                             {pctDelta != null ? `${pctDelta >= 0 ? '+' : ''}${pctDelta.toFixed(1)}%` : '—'}
                           </div>
@@ -433,7 +433,7 @@ export function OpportunityAlerts() {
                               NEW CROSS
                             </Badge>
                           )}
-                          <Badge className={`bg-${c}-500/20 text-${c}-400 hover:bg-${c}-500/20 text-[10px]`}>
+                          <Badge className={`bg-${c}-500/20 text-${c}-400 hover:bg-${c}-500/20 text-[11px]`}>
                             {cfg.label}
                           </Badge>
                         </div>
@@ -610,17 +610,17 @@ export function RiskAlerts() {
                   {/* Signal count pills */}
                   <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
                     {highSigs.length > 0 && (
-                      <span className="text-[10px] bg-red-500/15 text-red-400 border border-red-500/20 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-[11px] bg-red-500/15 text-red-400 border border-red-500/20 rounded-full px-2 py-0.5 font-medium">
                         {highSigs.length} High severity
                       </span>
                     )}
                     {mediumSigs.length > 0 && (
-                      <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-full px-2 py-0.5 font-medium">
                         {mediumSigs.length} Medium severity
                       </span>
                     )}
                     {co && co.fortressScore != null && (
-                      <span className={`text-[10px] rounded-full px-2 py-0.5 font-medium border ${co.fortressScore >= 0.6 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary text-muted-foreground border-border/40'}`}>
+                      <span className={`text-[11px] rounded-full px-2 py-0.5 font-medium border ${co.fortressScore >= 0.6 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary text-muted-foreground border-border/40'}`}>
                         Quality: {(co.fortressScore * 100).toFixed(0)}/100
                       </span>
                     )}

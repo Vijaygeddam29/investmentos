@@ -133,7 +133,7 @@ export function CompanyTable({ data, isLoading }: CompanyTableProps) {
         else if (up === "SELL")  colors = "bg-red-500/15 text-red-400 border-red-500/25";
 
         return (
-          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${colors}`}>
+          <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border ${colors}`}>
             {v}
           </span>
         );

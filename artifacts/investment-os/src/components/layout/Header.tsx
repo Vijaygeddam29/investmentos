@@ -56,7 +56,7 @@ export function Header() {
   return (
     <header
       ref={headerRef}
-      className={`h-14 md:h-16 border-b border-border bg-background/50 backdrop-blur-md flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 transition-transform duration-300 ${hidden ? "-translate-y-full" : "translate-y-0"}`}
+      className={`md:h-16 border-b border-border bg-background/50 backdrop-blur-md flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 transition-all duration-300 ${hidden ? "h-0 overflow-hidden border-b-0 py-0" : "h-14 py-2"}`}
     >
       <div className="flex items-center gap-2 md:gap-4">
         {isMobile && (
@@ -89,7 +89,7 @@ export function Header() {
                     </span>
                   )}
                   {total > 0 && (
-                    <span className="text-primary/50 ml-2 text-[10px]">
+                    <span className="text-primary/50 ml-2 text-[11px]">
                       {processed}/{total}
                     </span>
                   )}

@@ -263,7 +263,7 @@ export default function Screener() {
                       </td>
                       <td className="px-3 md:px-4 py-2.5 whitespace-nowrap">
                         {s.sector ? (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-border/50">{s.sector}</Badge>
+                          <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-normal border-border/50">{s.sector}</Badge>
                         ) : <span className="text-muted-foreground text-xs">—</span>}
                       </td>
                       <td className="px-3 md:px-4 py-2.5 whitespace-nowrap">
