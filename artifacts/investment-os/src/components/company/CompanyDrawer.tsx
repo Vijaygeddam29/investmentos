@@ -98,40 +98,80 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                 <ScorePanel label="Fortress" score={scores?.fortressScore} type="fortress" />
                 <ScorePanel label="Rocket" score={scores?.rocketScore} type="rocket" />
                 <ScorePanel label="Wave" score={scores?.waveScore} type="wave" />
-                <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Entry</div>
-                  {entryTimingScore != null ? (
-                    <>
-                      <div className="text-lg font-mono font-bold text-foreground">
-                        {entryTimingScore.toFixed(2)}
-                      </div>
-                      {entryLabel && (
-                        <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block ${entryLabel.color}`}>
-                          {entryLabel.label}
-                        </span>
+
+                {/* Entry timing block */}
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div className="bg-secondary/50 rounded-lg p-3 border border-border cursor-help">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Entry</div>
+                      {entryTimingScore != null ? (
+                        <>
+                          <div className="text-lg font-mono font-bold text-foreground">
+                            {entryTimingScore.toFixed(2)}
+                          </div>
+                          {entryLabel && (
+                            <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block ${entryLabel.color}`}>
+                              {entryLabel.label}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
                       )}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
-                </div>
-                <div className="bg-secondary/50 rounded-lg p-3 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <Award className="w-2.5 h-2.5" />Compounder
-                  </div>
-                  {compounderScore != null ? (
-                    <>
-                      <div className={`text-lg font-mono font-bold ${compounderColor}`}>
-                        {compounderScore}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px] p-0 bg-card border border-border shadow-xl rounded-xl overflow-hidden z-[9999]">
+                    <div className="px-3.5 py-2.5 border-b border-border bg-secondary/50">
+                      <p className="text-xs font-semibold text-foreground">Entry Timing Score</p>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Signals whether now is a favourable moment to initiate or add to a position. Combines technical momentum (RSI, price vs moving averages), sentiment shifts, and relative value versus the stock's own history. A high score means the risk/reward skew is favourable right now.
+                      </p>
+                      <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">Target</span>
+                        <span className="text-[10px] text-emerald-300/80 leading-snug">&gt; 0.7 = strong entry. 0.55–0.7 = moderate. &lt; 0.55 = wait for better timing.</span>
                       </div>
-                      <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block border-current ${compounderColor}`}>
-                        {compounderRating}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
-                </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Compounder block */}
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div className="bg-secondary/50 rounded-lg p-3 border border-border cursor-help">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                        <Award className="w-2.5 h-2.5" />Compounder
+                      </div>
+                      {compounderScore != null ? (
+                        <>
+                          <div className={`text-lg font-mono font-bold ${compounderColor}`}>
+                            {compounderScore}
+                          </div>
+                          <span className={`mt-1 text-[9px] px-1 py-0.5 rounded font-medium border inline-block border-current ${compounderColor}`}>
+                            {compounderRating}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px] p-0 bg-card border border-border shadow-xl rounded-xl overflow-hidden z-[9999]">
+                    <div className="px-3.5 py-2.5 border-b border-border bg-secondary/50">
+                      <p className="text-xs font-semibold text-foreground">Compounder Score (0–100)</p>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        A composite long-term quality score across 8 factors: Growth (17%), Profitability (13%), Capital Efficiency (13%), Cash Flow Quality (13%), Financial Strength (12%), Sentiment (12%), Momentum (13%), and Leadership conviction (7%). Identifies companies built to compound for decades.
+                      </p>
+                      <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">Target</span>
+                        <span className="text-[10px] text-emerald-300/80 leading-snug">70+ = High conviction compounder. 50–69 = Medium. &lt; 50 = Not a compounder.</span>
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               </div>
 
               {/* Leadership badges */}
