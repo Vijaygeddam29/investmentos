@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { Combobox } from "@/components/ui/combobox";
+import { countryFilterFn } from "@/lib/country-filter";
 
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "United Kingdom": "🇬🇧", India: "🇮🇳",
@@ -186,6 +187,7 @@ export default function Universe() {
               value={countryFilter}
               onChange={setCountryFilter}
               placeholder="All Countries"
+              filterFn={countryFilterFn}
             />
           </div>
 

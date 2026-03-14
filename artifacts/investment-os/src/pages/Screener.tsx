@@ -6,6 +6,7 @@ import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Loader2, Filter, RefreshCw, Sprout, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { countryFilterFn } from "@/lib/country-filter";
 
 function ScoreCell({ score }: { score?: number | null }) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
@@ -56,27 +57,32 @@ export default function Screener() {
     query: { refetchOnWindowFocus: false }
   });
 
+  const { data: allData } = useListFactorSnapshots({ limit: 1000 }, {
+    query: { refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 }
+  });
+
   const { mutate: seedUniverse, isPending: isSeeding } = useSeedUniverse();
 
   const allSnapshots = data?.snapshots ?? [];
+  const allForOptions = allData?.snapshots ?? [];
 
   const sectorOptions = useMemo(() => {
     const set = new Set<string>();
-    allSnapshots.forEach(s => { if (s.sector) set.add(s.sector); });
+    allForOptions.forEach(s => { if (s.sector) set.add(s.sector); });
     return [...set].sort();
-  }, [allSnapshots]);
+  }, [allForOptions]);
 
   const countryOptions = useMemo(() => {
     const set = new Set<string>();
-    allSnapshots.forEach(s => { if (s.country) set.add(s.country); });
+    allForOptions.forEach(s => { if (s.country) set.add(s.country); });
     return [...set].sort();
-  }, [allSnapshots]);
+  }, [allForOptions]);
 
   const industryOptions = useMemo(() => {
     const set = new Set<string>();
-    allSnapshots.forEach(s => { if (s.industry) set.add(s.industry); });
+    allForOptions.forEach(s => { if (s.industry) set.add(s.industry); });
     return [...set].sort();
-  }, [allSnapshots]);
+  }, [allForOptions]);
 
   const snapshots = useMemo(() => {
     if (!search) return allSnapshots;
@@ -164,6 +170,7 @@ export default function Screener() {
               value={country}
               onChange={setCountry}
               placeholder="All Countries"
+              filterFn={countryFilterFn}
             />
 
             <Combobox

@@ -8,9 +8,15 @@ interface ComboboxProps {
   placeholder?: string;
   label?: string;
   className?: string;
+  /** Custom filter function — return true to include the option. Defaults to case-insensitive substring match. */
+  filterFn?: (option: string, query: string) => boolean;
 }
 
-export function Combobox({ options, value, onChange, placeholder = "All", label, className = "" }: ComboboxProps) {
+function defaultFilter(option: string, query: string): boolean {
+  return option.toLowerCase().includes(query.toLowerCase());
+}
+
+export function Combobox({ options, value, onChange, placeholder = "All", label, className = "", filterFn }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightIndex, setHighlightIndex] = useState(0);
@@ -18,8 +24,10 @@ export function Combobox({ options, value, onChange, placeholder = "All", label,
   const listRef = useRef<HTMLUListElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const matchFn = filterFn ?? defaultFilter;
+
   const filtered = query
-    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    ? options.filter(o => matchFn(o, query))
     : options;
 
   useEffect(() => {
