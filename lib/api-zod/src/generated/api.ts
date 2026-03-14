@@ -342,6 +342,7 @@ export const GetCompanyValueChainParams = zod.object({
 
 export const GetCompanyValueChainResponse = zod.object({
   cached: zod.boolean(),
+  fresh: zod.boolean(),
   generatedAt: zod.date().optional(),
   content: zod
     .object({
@@ -366,6 +367,7 @@ export const GenerateCompanyValueChainParams = zod.object({
 
 export const GenerateCompanyValueChainResponse = zod.object({
   cached: zod.boolean(),
+  fresh: zod.boolean(),
   generatedAt: zod.date().optional(),
   content: zod
     .object({

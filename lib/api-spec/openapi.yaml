@@ -1459,6 +1459,8 @@ components:
       properties:
         cached:
           type: boolean
+        fresh:
+          type: boolean
         generatedAt:
           type: string
           format: date-time
@@ -1466,3 +1468,4 @@ components:
           $ref: "#/components/schemas/ValueChainContent"
       required:
         - cached
+        - fresh

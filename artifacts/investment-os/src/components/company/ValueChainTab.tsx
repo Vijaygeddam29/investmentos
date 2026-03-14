@@ -102,12 +102,15 @@ export function ValueChainTab({ ticker }: { ticker: string }) {
   const isGenerating = generateMutation.isPending;
   const content = data?.content as Record<string, string> | null | undefined;
   const hasContent = !!content;
+  const isFresh = data?.fresh ?? false;
 
   useEffect(() => {
-    if (!isFetching && !hasContent && !isGenerating) {
-      generateMutation.mutate({ ticker });
+    if (!isFetching && !isGenerating) {
+      if (!hasContent || !isFresh) {
+        generateMutation.mutate({ ticker });
+      }
     }
-  }, [isFetching, hasContent, isGenerating, ticker]);
+  }, [isFetching, hasContent, isFresh, isGenerating, ticker]);
 
   const showSkeleton = isFetching || (!hasContent && isGenerating);
 

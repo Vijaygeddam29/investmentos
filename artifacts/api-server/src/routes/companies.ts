@@ -480,7 +480,7 @@ router.get("/companies/:ticker/value-chain", async (req, res) => {
 router.post("/companies/:ticker/value-chain/generate", async (req, res) => {
   try {
     const { ticker } = req.params;
-    const result = await generateValueChain(ticker, false);
+    const result = await generateValueChain(ticker, true);
     res.json({
       cached: result.cached,
       generatedAt: result.generatedAt,

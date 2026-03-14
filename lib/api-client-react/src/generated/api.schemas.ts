@@ -465,6 +465,7 @@ export interface ValueChainContent {
 
 export interface ValueChainResponse {
   cached: boolean;
+  fresh: boolean;
   generatedAt?: string;
   content?: ValueChainContent;
 }

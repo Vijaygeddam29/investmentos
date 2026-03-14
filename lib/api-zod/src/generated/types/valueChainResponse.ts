@@ -9,6 +9,7 @@ import type { ValueChainContent } from "./valueChainContent";
 
 export interface ValueChainResponse {
   cached: boolean;
+  fresh: boolean;
   generatedAt?: Date;
   content?: ValueChainContent;
 }

@@ -4,6 +4,7 @@ import {
   companiesTable,
   scoresTable,
   financialMetricsTable,
+  aiVerdictsTable,
 } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -80,26 +81,38 @@ export async function generateValueChain(
     .where(eq(financialMetricsTable.ticker, ticker))
     .orderBy(desc(financialMetricsTable.date))
     .limit(1);
+  const [aiMemo] = await db
+    .select()
+    .from(aiVerdictsTable)
+    .where(eq(aiVerdictsTable.ticker, ticker))
+    .orderBy(desc(aiVerdictsTable.createdAt))
+    .limit(1);
 
   const name = company?.name || ticker;
   const sector = company?.sector || "Unknown";
   const industry = company?.industry || "Unknown";
+  const country = company?.country || "Unknown";
+
+  const memoContext = aiMemo?.memo
+    ? `\nAI Memo Summary (for context):\n${String(aiMemo.memo).slice(0, 800)}`
+    : "";
 
   const prompt = `You are a senior equity analyst writing a structured Value Chain Intelligence brief for an institutional investor.
 
 Company: ${name} (${ticker})
 Sector: ${sector} | Industry: ${industry}
+Country/Exchange: ${country}${memoContext}
 
 Key financials:
 - Revenue: ${metrics?.revenue ? "$" + (metrics.revenue / 1e9).toFixed(2) + "B" : "N/A"}
 - Gross Margin: ${metrics?.grossMargin ? (metrics.grossMargin * 100).toFixed(1) + "%" : "N/A"}
-- ROIC: ${metrics?.roic ? (metrics.roic * 100).toFixed(1) + "%" : "N/A"}
+- ROIC: ${metrics?.roic ? Math.min(metrics.roic * 100, 100).toFixed(1) + "%" : "N/A"}
 - Revenue Growth YoY: ${metrics?.revenueGrowth1y ? (metrics.revenueGrowth1y * 100).toFixed(1) + "%" : "N/A"}
 - R&D / Revenue: ${metrics?.rdToRevenue ? (metrics.rdToRevenue * 100).toFixed(1) + "%" : "N/A"}
 - Fortress Score: ${scores?.fortressScore?.toFixed(2) || "N/A"}
 - Rocket Score: ${scores?.rocketScore?.toFixed(2) || "N/A"}
 
-Write a Value Chain Intelligence brief with exactly these 7 sections. Each section must be dense, specific, and jargon-precise — no generic fluff. Reference real business dynamics, named suppliers, customers, or competitors where you have knowledge.
+Write a Value Chain Intelligence brief with exactly these 7 sections. Each section must be dense, specific, and jargon-precise — no generic fluff. Reference real business dynamics, named suppliers, customers, or competitors where you have knowledge. Reflect the company's country/market context where relevant.
 
 Return valid JSON with exactly these keys:
 {
@@ -140,7 +153,7 @@ Be specific. Name things. Avoid vague phrases like "strong management" or "growi
 
     return { cached: false, generatedAt: now, content: parsed };
   } catch (err) {
-    const fallback = buildFallback(name, ticker, sector, metrics, scores);
+    const fallback = buildFallback(name, sector, industry, metrics, scores);
     const now = new Date();
     await db
       .delete(companyValueChainsTable)
@@ -156,13 +169,13 @@ Be specific. Name things. Avoid vague phrases like "strong management" or "growi
 
 function buildFallback(
   name: string,
-  ticker: string,
   sector: string,
+  industry: string,
   metrics: any,
   scores: any
 ): ValueChainContent {
   const roic = metrics?.roic
-    ? (metrics.roic * 100).toFixed(1) + "%"
+    ? Math.min(metrics.roic * 100, 100).toFixed(1) + "%"
     : "N/A";
   const gm = metrics?.grossMargin
     ? (metrics.grossMargin * 100).toFixed(1) + "%"
