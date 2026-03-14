@@ -1,0 +1,319 @@
+Yeah — parts of the model look sensible, but there are a few big red flags. So I’d say:
+
+The model is probably directionally working, but it is not yet trustworthy enough to use blindly.
+
+Let’s do this like you’re 2.
+
+The toy box version
+
+You built a machine that looks at companies and gives them stickers:
+
+Fortress = strong castle
+
+Rocket = growing fast
+
+Wave = maybe quality / trend / cash flow smoothness
+
+then it gives a Verdict
+
+That idea is good.
+
+But when I look at the sticker sheet, some of the stickers don’t match the final verdict in a clean, consistent way. That means the machine may be finding signal, but the decision layer is still messy.
+
+What looks good
+
+A bunch of the outputs pass the “smell test”:
+
+TSM = STRONG BUY looks pretty reasonable given high quality, strong growth, and huge FCF yield.
+
+RMV.L = BUY also looks plausible: very strong economics, solid margins/returns, decent FCF.
+
+AVGO, KLAC, LRCX, GOOGL, NVDA, JNJ, AMGN mostly sit in places that feel broadly logical for a quality-growth style model.
+
+RACE = TRIM also makes intuitive sense if the model dislikes lower FCF yield and slower growth despite quality.
+
+So the model is not nonsense.
+
+What looks weird
+
+Here’s where I’d get suspicious.
+
+1. Some ROIC numbers are absurd
+
+Example:
+
+ABBV ROIC = 6225.0%
+
+RR.L ROIC = 623.5%
+
+RMV.L ROIC = 266.1%
+
+Sometimes very high ROIC can happen because of accounting quirks, negative/very small invested capital, buybacks, goodwill distortions, or denominator problems.
+
+Like this:
+
+If I say “I made £10 using only £1,” that’s 1000%.
+But if the “£1” is weird accounting math and not real capital, the number is kind of fake-pretty.
+
+So if your model treats these values as normal, it can get tricked.
+
+Fix: cap or normalize ROIC.
+For example:
+
+anything above 100% gets clipped
+
+or use percentile ranking instead of raw values
+
+or use 3-year median ROIC
+
+2. FCF yield is dominating some names in odd ways
+
+Example:
+
+TSM FCF yield 36.7% jumps off the page as unusually high
+
+Tencent 20.5% also very high
+
+some mega caps have tiny yields, which may be fine, but the spread looks wide enough that I’d verify the formula
+
+Sometimes people accidentally use:
+
+FCF / revenue
+instead of
+
+FCF / enterprise value or market cap
+
+or mix TTM and forward values.
+
+So I’d check:
+How exactly are you calculating FCF yield?
+
+Because if that input is wrong, a lot of verdicts will look “smart” while actually being built on a broken ruler.
+
+3. The verdict mapping is not fully consistent
+
+A few examples:
+
+PLTR gets 0.82 / 0.80 / 0.37, rev growth +70%, but only ADD
+
+MRK gets similar top-line score profile and is STRONG BUY
+
+APP has huge growth and high combined score but is only ADD
+
+V has decent quality and is only HOLD
+
+AAPL has decent scores and is ADD
+
+QCOM has strong FCF yield and is only ADD
+
+This tells me one of two things:
+
+the verdict logic includes hidden penalties, or
+
+the thresholds aren’t tuned well
+
+A model is healthier when you can explain it simply:
+
+high fortress + high rocket + good cash = BUY
+
+low growth + expensive + weak cash = HOLD/TRIM
+
+Right now some decisions feel a little “why exactly?”
+
+Biggest issue: duplicate / noisy entries
+
+You have both:
+
+GOOGL
+
+GOOG
+
+That’s the same business twice. If the model portfolio later treats them as separate opportunities, that can distort rankings.
+
+Also:
+
+HESAY and some ADR / foreign listings may not be directly comparable to local listings on the same data basis.
+
+UK, US, India, ADRs, and conglomerates can have different accounting quirks.
+
+So the model may be mixing:
+
+apples
+
+oranges
+
+and one very confident watermelon
+
+Is the model “working”?
+
+My verdict:
+
+Yes, in the sense that:
+
+it seems to recognize quality businesses
+
+it roughly separates better companies from weaker ones
+
+the factor concept is coherent
+
+No, in the sense that:
+
+some inputs probably need cleaning
+
+some metrics are unstable or distorted
+
+the verdict engine doesn’t yet feel fully calibrated
+
+cross-market comparability is shaky
+
+So I’d call it:
+
+“Promising prototype, not production-ready.”
+
+The toddler example
+
+Imagine you’re picking the best toy cars.
+
+Your model says:
+
+shiny paint = good
+
+fast wheels = good
+
+full battery = good
+
+That’s smart.
+
+But sometimes one toy says it has 6,225 wheels because the label is broken.
+
+Then your model goes:
+“WOW. BEST CAR EVER.”
+
+That’s the problem.
+
+Your model may be smart, but it still believes some silly labels.
+
+What I would test next
+1. Check the formulas
+
+Especially:
+
+ROIC
+
+FCF Yield
+
+Revenue Growth basis
+
+whether values are trailing, forward, annualized, or mixed
+
+2. Winsorize extreme values
+
+That’s a fancy way of saying:
+don’t let crazy numbers bully the model
+
+For example:
+
+ROIC cap at 100%
+
+revenue growth cap at maybe 80% or 100%
+
+FCF yield cap at maybe 15–20%
+
+3. Turn raw values into percentile scores
+
+Instead of saying:
+
+6225% ROIC is way better than 60%
+
+say:
+
+both are just “top bucket”
+
+This prevents nonsense explosions.
+
+4. Make the verdict formula explicit
+
+For example:
+
+STRONG BUY = Fortress > 0.8 and Rocket > 0.75 and Wave > 0.65 and no red flags
+
+BUY = two strong factors plus acceptable valuation
+
+ADD = good company, less attractive setup
+
+HOLD = quality okay, upside weaker
+
+TRIM = great company, stretched setup or deteriorating trend
+
+If you can’t explain the label rule in one breath, it’s probably too muddy.
+
+5. Separate quality from valuation
+
+Right now it feels like you might be mixing:
+
+business quality
+
+growth
+
+cash generation
+
+maybe valuation
+
+That’s okay, but then the verdict should reflect that clearly.
+
+A good company is not always a good stock today.
+
+For example:
+
+Ferrari can be an amazing business and still be a TRIM
+
+Merck can be slower growth but attractive if valuation/cash flow is strong
+
+That distinction matters a lot.
+
+My specific take on your output
+
+The model seems best at finding:
+
+high-quality compounders
+
+semis
+
+platform businesses
+
+strong healthcare franchises
+
+It seems weakest at:
+
+handling accounting-distorted metrics
+
+comparing across regions/listings
+
+mapping factor scores into final verdicts consistently
+
+So I would trust it more as a:
+ranking assistant
+than as an:
+automatic buy/sell judge
+
+Best practical use right now
+
+Use it like this:
+
+Let it shortlist the top 20
+
+Manually inspect the weird metrics
+
+Throw out accounting distortions
+
+Then make the final call
+
+That’s where it already has value.
+
+My honest verdict
+
+The model has signal.
+The scoring system is not yet robust.
+The main bug is probably metric construction / normalization, not the overall idea.
+
+If you want, paste the exact formulas for Fortress, Rocket, Wave, ROIC, and FCF Yield, and I’ll pressure-test the model properly and tell you exactly where it’s breaking.
