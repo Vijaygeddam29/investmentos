@@ -64,15 +64,15 @@ export function Combobox({ options, value, onChange, placeholder = "All", label,
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        setHighlightIndex(i => Math.min(i + 1, filtered.length - 1));
+        if (filtered.length > 0) setHighlightIndex(i => Math.min(i + 1, filtered.length - 1));
         break;
       case "ArrowUp":
         e.preventDefault();
-        setHighlightIndex(i => Math.max(i - 1, 0));
+        if (filtered.length > 0) setHighlightIndex(i => Math.max(i - 1, 0));
         break;
       case "Enter":
         e.preventDefault();
-        if (filtered[highlightIndex]) {
+        if (filtered.length > 0 && filtered[highlightIndex]) {
           onChange(filtered[highlightIndex]);
           setOpen(false);
           setQuery("");
