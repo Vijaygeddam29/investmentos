@@ -1,22 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListUniverse, useAddToUniverse, useRemoveFromUniverse } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus, Loader2, Globe, ChevronDown, X } from "lucide-react";
+import { Trash2, Plus, Loader2, Globe, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
-
-const SECTORS = [
-  "Technology", "Healthcare", "Financial Services", "Consumer Defensive",
-  "Consumer Cyclical", "Energy", "Industrials", "Basic Materials",
-  "Real Estate", "Utilities", "Communication Services",
-];
+import { Combobox } from "@/components/ui/combobox";
 
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "United Kingdom": "🇬🇧", India: "🇮🇳",
@@ -26,37 +19,48 @@ const COUNTRY_FLAGS: Record<string, string> = {
   Israel: "🇮🇱", Singapore: "🇸🇬", Switzerland: "🇨🇭", Uruguay: "🇺🇾",
 };
 
-interface CountryOption { name: string; slug: string; count: number; }
-
 export default function Universe() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sectorFilter, setSectorFilter] = useState("");
+
+  const [sectorFilter, setSectorFilter]   = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [appliedSector, setAppliedSector] = useState<string | undefined>(undefined);
   const [appliedCountry, setAppliedCountry] = useState<string | undefined>(undefined);
 
   const { data, isLoading } = useListUniverse({ sector: appliedSector, country: appliedCountry });
+  const { data: allData }   = useListUniverse({});
   const removeMutation = useRemoveFromUniverse();
-  const addMutation = useAddToUniverse();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  const { data: countriesData } = useQuery<{ countries: CountryOption[] }>({
-    queryKey: ["portfolio-builder-countries"],
-    queryFn: () => customFetch("/api/portfolio/builder/countries"),
-    staleTime: 30 * 60 * 1000,
-  });
+  const addMutation    = useAddToUniverse();
+  const queryClient    = useQueryClient();
+  const { toast }      = useToast();
 
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({ ticker: "", name: "", sector: "" });
 
-  const countryOptions = countriesData?.countries ?? [];
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    allData?.companies?.forEach(c => { if (c.sector) set.add(c.sector); });
+    return [...set].sort();
+  }, [allData]);
+
+  const countryOptions = useMemo(() => {
+    const set = new Set<string>();
+    allData?.companies?.forEach(c => { if (c.country) set.add(c.country); });
+    return [...set].sort().map(name => `${COUNTRY_FLAGS[name] ?? "🌐"} ${name}`);
+  }, [allData]);
+
+  function countryOptionToValue(opt: string) {
+    return opt.replace(/^[^ ]+ /, "");
+  }
+
   const hasActiveFilters = !!appliedSector || !!appliedCountry;
 
   function handleApplyFilters() {
     setAppliedSector(sectorFilter || undefined);
-    setAppliedCountry(countryFilter || undefined);
+    setAppliedCountry(
+      countryFilter ? countryOptionToValue(countryFilter) : undefined
+    );
   }
 
   function handleClearFilters() {
@@ -148,17 +152,12 @@ export default function Universe() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Sector (Optional)</label>
-                  <div className="relative">
-                    <select
-                      value={formData.sector}
-                      onChange={e => setFormData({ ...formData, sector: e.target.value })}
-                      className="w-full appearance-none bg-secondary/50 border border-border rounded-md px-3 py-2 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="">Select sector…</option>
-                      {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  </div>
+                  <Combobox
+                    options={sectorOptions}
+                    value={formData.sector}
+                    onChange={v => setFormData({ ...formData, sector: v })}
+                    placeholder="Select sector…"
+                  />
                 </div>
                 <Button type="submit" className="w-full mt-2" disabled={addMutation.isPending}>
                   {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save to Database"}
@@ -170,40 +169,24 @@ export default function Universe() {
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border border-border bg-card/50">
-          {/* Sector dropdown */}
           <div className="flex-1 min-w-[160px] space-y-1">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sector</label>
-            <div className="relative">
-              <select
-                value={sectorFilter}
-                onChange={e => setSectorFilter(e.target.value)}
-                className="w-full appearance-none bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">All Sectors</option>
-                {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <ChevronDown className="absolute right-2 top-2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
+            <Combobox
+              options={sectorOptions}
+              value={sectorFilter}
+              onChange={setSectorFilter}
+              placeholder="All Sectors"
+            />
           </div>
 
-          {/* Country dropdown */}
           <div className="flex-1 min-w-[180px] space-y-1">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Country</label>
-            <div className="relative">
-              <select
-                value={countryFilter}
-                onChange={e => setCountryFilter(e.target.value)}
-                className="w-full appearance-none bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">All Countries</option>
-                {countryOptions.map(c => (
-                  <option key={c.slug} value={c.name}>
-                    {COUNTRY_FLAGS[c.name] ?? "🌐"} {c.name} ({c.count})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2 top-2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
+            <Combobox
+              options={countryOptions}
+              value={countryFilter}
+              onChange={setCountryFilter}
+              placeholder="All Countries"
+            />
           </div>
 
           <div className="flex gap-2 pb-0.5">

@@ -74,7 +74,7 @@ export default function Screener() {
 
   const industryOptions = useMemo(() => {
     const set = new Set<string>();
-    allSnapshots.forEach(s => { if ((s as any).industry) set.add((s as any).industry); });
+    allSnapshots.forEach(s => { if (s.industry) set.add(s.industry); });
     return [...set].sort();
   }, [allSnapshots]);
 
