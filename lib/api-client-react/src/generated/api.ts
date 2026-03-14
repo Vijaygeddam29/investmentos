@@ -54,6 +54,7 @@ import type {
   SendAnthropicMessageBody,
   SuccessResponse,
   TopMoversResponse,
+  ValueChainResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -959,6 +960,182 @@ export function useGetCompanyScoreHistory<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get cached value chain narrative for a company (7-day cache)
+ */
+export const getGetCompanyValueChainUrl = (ticker: string) => {
+  return `/api/companies/${ticker}/value-chain`;
+};
+
+export const getCompanyValueChain = async (
+  ticker: string,
+  options?: RequestInit,
+): Promise<ValueChainResponse> => {
+  return customFetch<ValueChainResponse>(getGetCompanyValueChainUrl(ticker), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCompanyValueChainQueryKey = (ticker: string) => {
+  return [`/api/companies/${ticker}/value-chain`] as const;
+};
+
+export const getGetCompanyValueChainQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompanyValueChain>>,
+  TError = ErrorType<unknown>,
+>(
+  ticker: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyValueChain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCompanyValueChainQueryKey(ticker);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCompanyValueChain>>
+  > = ({ signal }) =>
+    getCompanyValueChain(ticker, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!ticker,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyValueChain>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCompanyValueChainQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompanyValueChain>>
+>;
+export type GetCompanyValueChainQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get cached value chain narrative for a company (7-day cache)
+ */
+
+export function useGetCompanyValueChain<
+  TData = Awaited<ReturnType<typeof getCompanyValueChain>>,
+  TError = ErrorType<unknown>,
+>(
+  ticker: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyValueChain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCompanyValueChainQueryOptions(ticker, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Generate or regenerate value chain narrative (skips if cache < 7 days old)
+ */
+export const getGenerateCompanyValueChainUrl = (ticker: string) => {
+  return `/api/companies/${ticker}/value-chain/generate`;
+};
+
+export const generateCompanyValueChain = async (
+  ticker: string,
+  options?: RequestInit,
+): Promise<ValueChainResponse> => {
+  return customFetch<ValueChainResponse>(
+    getGenerateCompanyValueChainUrl(ticker),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getGenerateCompanyValueChainMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateCompanyValueChain>>,
+    TError,
+    { ticker: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateCompanyValueChain>>,
+  TError,
+  { ticker: string },
+  TContext
+> => {
+  const mutationKey = ["generateCompanyValueChain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateCompanyValueChain>>,
+    { ticker: string }
+  > = (props) => {
+    const { ticker } = props ?? {};
+
+    return generateCompanyValueChain(ticker, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateCompanyValueChainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateCompanyValueChain>>
+>;
+
+export type GenerateCompanyValueChainMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate or regenerate value chain narrative (skips if cache < 7 days old)
+ */
+export const useGenerateCompanyValueChain = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateCompanyValueChain>>,
+    TError,
+    { ticker: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateCompanyValueChain>>,
+  TError,
+  { ticker: string },
+  TContext
+> => {
+  return useMutation(getGenerateCompanyValueChainMutationOptions(options));
+};
 
 /**
  * @summary Screener — filter factor warehouse by score thresholds and company attributes

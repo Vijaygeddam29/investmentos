@@ -229,6 +229,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScoreHistoryResponse"
+  /companies/{ticker}/value-chain:
+    get:
+      operationId: getCompanyValueChain
+      tags: [companies]
+      summary: Get cached value chain narrative for a company (7-day cache)
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Value chain response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValueChainResponse"
+  /companies/{ticker}/value-chain/generate:
+    post:
+      operationId: generateCompanyValueChain
+      tags: [companies]
+      summary: Generate or regenerate value chain narrative (skips if cache < 7 days old)
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Generated value chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValueChainResponse"
   /factor-snapshots:
     get:
       operationId: listFactorSnapshots
@@ -1390,3 +1426,43 @@ components:
           type: string
       required:
         - error
+    ValueChainContent:
+      type: object
+      properties:
+        oneLiner:
+          type: string
+        upstreamInputs:
+          type: string
+        peopleTalent:
+          type: string
+        productionOperations:
+          type: string
+        productsServices:
+          type: string
+        customerDemand:
+          type: string
+        demandSupplyChain:
+          type: string
+        bottlenecksRisks:
+          type: string
+      required:
+        - oneLiner
+        - upstreamInputs
+        - peopleTalent
+        - productionOperations
+        - productsServices
+        - customerDemand
+        - demandSupplyChain
+        - bottlenecksRisks
+    ValueChainResponse:
+      type: object
+      properties:
+        cached:
+          type: boolean
+        generatedAt:
+          type: string
+          format: date-time
+        content:
+          $ref: "#/components/schemas/ValueChainContent"
+      required:
+        - cached

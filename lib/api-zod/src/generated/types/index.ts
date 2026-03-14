@@ -78,3 +78,5 @@ export * from "./successResponse";
 export * from "./topMoverItem";
 export * from "./topMoversResponse";
 export * from "./valuationSignals";
+export * from "./valueChainContent";
+export * from "./valueChainResponse";

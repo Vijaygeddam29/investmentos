@@ -452,6 +452,23 @@ export interface AnthropicError {
   error: string;
 }
 
+export interface ValueChainContent {
+  oneLiner: string;
+  upstreamInputs: string;
+  peopleTalent: string;
+  productionOperations: string;
+  productsServices: string;
+  customerDemand: string;
+  demandSupplyChain: string;
+  bottlenecksRisks: string;
+}
+
+export interface ValueChainResponse {
+  cached: boolean;
+  generatedAt?: string;
+  content?: ValueChainContent;
+}
+
 export type ListScoresParams = {
   engine?: ListScoresEngine;
   minScore?: number;

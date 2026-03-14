@@ -334,6 +334,54 @@ export const GetCompanyScoreHistoryResponse = zod.object({
 });
 
 /**
+ * @summary Get cached value chain narrative for a company (7-day cache)
+ */
+export const GetCompanyValueChainParams = zod.object({
+  ticker: zod.coerce.string(),
+});
+
+export const GetCompanyValueChainResponse = zod.object({
+  cached: zod.boolean(),
+  generatedAt: zod.date().optional(),
+  content: zod
+    .object({
+      oneLiner: zod.string(),
+      upstreamInputs: zod.string(),
+      peopleTalent: zod.string(),
+      productionOperations: zod.string(),
+      productsServices: zod.string(),
+      customerDemand: zod.string(),
+      demandSupplyChain: zod.string(),
+      bottlenecksRisks: zod.string(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Generate or regenerate value chain narrative (skips if cache < 7 days old)
+ */
+export const GenerateCompanyValueChainParams = zod.object({
+  ticker: zod.coerce.string(),
+});
+
+export const GenerateCompanyValueChainResponse = zod.object({
+  cached: zod.boolean(),
+  generatedAt: zod.date().optional(),
+  content: zod
+    .object({
+      oneLiner: zod.string(),
+      upstreamInputs: zod.string(),
+      peopleTalent: zod.string(),
+      productionOperations: zod.string(),
+      productsServices: zod.string(),
+      customerDemand: zod.string(),
+      demandSupplyChain: zod.string(),
+      bottlenecksRisks: zod.string(),
+    })
+    .optional(),
+});
+
+/**
  * @summary Screener — filter factor warehouse by score thresholds and company attributes
  */
 export const ListFactorSnapshotsQueryParams = zod.object({

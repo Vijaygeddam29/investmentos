@@ -220,7 +220,7 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                       )}
                     </TabsTrigger>
                     <TabsTrigger value="value-chain" className="text-[11px] flex items-center gap-1">
-                      <Link2 className="w-3 h-3" />Story
+                      <Link2 className="w-3 h-3" />Value Chain
                     </TabsTrigger>
                   </TabsList>
 

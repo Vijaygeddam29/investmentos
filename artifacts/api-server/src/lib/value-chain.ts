@@ -1,12 +1,85 @@
 import { db } from "@workspace/db";
-import { companyValueChainsTable, companiesTable, scoresTable, financialMetricsTable } from "@workspace/db/schema";
+import {
+  companyValueChainsTable,
+  companiesTable,
+  scoresTable,
+  financialMetricsTable,
+} from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
-export async function generateValueChain(ticker: string) {
-  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.ticker, ticker)).limit(1);
-  const [scores] = await db.select().from(scoresTable).where(eq(scoresTable.ticker, ticker)).orderBy(desc(scoresTable.date)).limit(1);
-  const [metrics] = await db.select().from(financialMetricsTable).where(eq(financialMetricsTable.ticker, ticker)).orderBy(desc(financialMetricsTable.date)).limit(1);
+export interface ValueChainContent {
+  oneLiner: string;
+  upstreamInputs: string;
+  peopleTalent: string;
+  productionOperations: string;
+  productsServices: string;
+  customerDemand: string;
+  demandSupplyChain: string;
+  bottlenecksRisks: string;
+}
+
+const CACHE_DAYS = 7;
+
+export async function getValueChain(ticker: string): Promise<{
+  cached: boolean;
+  generatedAt: Date | null;
+  content: ValueChainContent | null;
+  fresh: boolean;
+}> {
+  const [row] = await db
+    .select()
+    .from(companyValueChainsTable)
+    .where(eq(companyValueChainsTable.ticker, ticker))
+    .orderBy(desc(companyValueChainsTable.generatedAt))
+    .limit(1);
+
+  if (!row || !row.content) {
+    return { cached: false, generatedAt: null, content: null, fresh: false };
+  }
+
+  const ageMs = Date.now() - new Date(row.generatedAt).getTime();
+  const fresh = ageMs < CACHE_DAYS * 24 * 60 * 60 * 1000;
+
+  return {
+    cached: true,
+    generatedAt: row.generatedAt,
+    content: row.content as ValueChainContent,
+    fresh,
+  };
+}
+
+export async function generateValueChain(
+  ticker: string,
+  forceRegenerate = false
+): Promise<{ cached: boolean; generatedAt: Date; content: ValueChainContent }> {
+  const existing = await getValueChain(ticker);
+
+  if (!forceRegenerate && existing.cached && existing.fresh) {
+    return {
+      cached: true,
+      generatedAt: existing.generatedAt!,
+      content: existing.content!,
+    };
+  }
+
+  const [company] = await db
+    .select()
+    .from(companiesTable)
+    .where(eq(companiesTable.ticker, ticker))
+    .limit(1);
+  const [scores] = await db
+    .select()
+    .from(scoresTable)
+    .where(eq(scoresTable.ticker, ticker))
+    .orderBy(desc(scoresTable.date))
+    .limit(1);
+  const [metrics] = await db
+    .select()
+    .from(financialMetricsTable)
+    .where(eq(financialMetricsTable.ticker, ticker))
+    .orderBy(desc(financialMetricsTable.date))
+    .limit(1);
 
   const name = company?.name || ticker;
   const sector = company?.sector || "Unknown";
@@ -17,7 +90,7 @@ export async function generateValueChain(ticker: string) {
 Company: ${name} (${ticker})
 Sector: ${sector} | Industry: ${industry}
 
-Key financials available:
+Key financials:
 - Revenue: ${metrics?.revenue ? "$" + (metrics.revenue / 1e9).toFixed(2) + "B" : "N/A"}
 - Gross Margin: ${metrics?.grossMargin ? (metrics.grossMargin * 100).toFixed(1) + "%" : "N/A"}
 - ROIC: ${metrics?.roic ? (metrics.roic * 100).toFixed(1) + "%" : "N/A"}
@@ -26,67 +99,91 @@ Key financials available:
 - Fortress Score: ${scores?.fortressScore?.toFixed(2) || "N/A"}
 - Rocket Score: ${scores?.rocketScore?.toFixed(2) || "N/A"}
 
-Write a Value Chain Intelligence brief with exactly these 7 sections. Each section must be a dense, specific paragraph — no generic fluff. Use industry-specific terminology. Reference real business dynamics, named suppliers, customers, or competitors where you have knowledge.
+Write a Value Chain Intelligence brief with exactly these 7 sections. Each section must be dense, specific, and jargon-precise — no generic fluff. Reference real business dynamics, named suppliers, customers, or competitors where you have knowledge.
 
-Return your response as valid JSON with these exact keys:
+Return valid JSON with exactly these keys:
 {
   "oneLiner": "One punchy sentence capturing the company's essential investment thesis (max 25 words)",
-  "supplyChain": "2-3 sentences on input dependencies, key suppliers, geographic concentration, single points of failure, and inventory dynamics",
-  "customerStickiness": "2-3 sentences on customer retention mechanics, switching costs, net revenue retention if SaaS, contract structures, churn dynamics",
-  "keyPeople": "2-3 sentences on founder/CEO background, key executives, succession risk, insider ownership, and management track record",
-  "competitiveMoat": "2-3 sentences on the durable competitive advantage — network effects, IP, scale, switching costs, brand, or regulatory moat",
-  "growthCatalysts": "2-3 sentences on the 2-3 biggest growth levers over the next 3-5 years with specific addressable market context",
-  "riskNarratives": "2-3 sentences on the 2-3 most credible bear-case risks — technological disruption, margin compression, regulatory, or competitive threats"
+  "upstreamInputs": "2-3 sentences on raw material / component dependencies, key named suppliers, geographic concentration, input-cost volatility, and inventory dynamics",
+  "peopleTalent": "2-3 sentences on founder/CEO background, key executives, succession risk, insider ownership, talent moat (engineering depth, proprietary processes), and management track record vs capital allocation",
+  "productionOperations": "2-3 sentences on manufacturing/delivery infrastructure, operational leverage, cost structure, capacity utilisation, and any operational differentiators (automation, proprietary tooling, margin structure)",
+  "productsServices": "2-3 sentences on the core product/service portfolio, pricing power, mix shifts, product differentiation, and any platform or ecosystem dynamics that lock in economics",
+  "customerDemand": "2-3 sentences on end-market demand drivers, customer concentration, contract structures, switching costs, net revenue retention (if SaaS), and secular vs cyclical demand characteristics",
+  "demandSupplyChain": "2-3 sentences on how demand patterns shape supply chain decisions — demand variability, bullwhip effects, just-in-time vs buffer strategies, and how demand signals propagate upstream",
+  "bottlenecksRisks": "2-3 sentences on the 2-3 most credible bear-case risks: single points of failure, regulatory threats, technological disruption, margin compression vectors, or competitive moat erosion"
 }
 
-Be specific. Avoid vague phrases like "strong management team" or "growing market". Name things.`;
+Be specific. Name things. Avoid vague phrases like "strong management" or "growing market".`;
 
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      max_tokens: 2500,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const raw =
+      response.content[0].type === "text" ? response.content[0].text : "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed: ValueChainContent = JSON.parse(jsonMatch[0]);
 
-    await db.delete(companyValueChainsTable).where(eq(companyValueChainsTable.ticker, ticker));
+    const now = new Date();
+    await db
+      .delete(companyValueChainsTable)
+      .where(eq(companyValueChainsTable.ticker, ticker));
     await db.insert(companyValueChainsTable).values({
       ticker,
-      supplyChain: parsed.supplyChain || "",
-      customerStickiness: parsed.customerStickiness || "",
-      keyPeople: parsed.keyPeople || "",
-      competitiveMoat: parsed.competitiveMoat || "",
-      growthCatalysts: parsed.growthCatalysts || "",
-      riskNarratives: parsed.riskNarratives || "",
-      oneLiner: parsed.oneLiner || "",
+      generatedAt: now,
+      content: parsed,
     });
 
-    return parsed;
+    return { cached: false, generatedAt: now, content: parsed };
   } catch (err) {
     const fallback = buildFallback(name, ticker, sector, metrics, scores);
-    await db.delete(companyValueChainsTable).where(eq(companyValueChainsTable.ticker, ticker));
-    await db.insert(companyValueChainsTable).values({ ticker, ...fallback });
-    return fallback;
+    const now = new Date();
+    await db
+      .delete(companyValueChainsTable)
+      .where(eq(companyValueChainsTable.ticker, ticker));
+    await db.insert(companyValueChainsTable).values({
+      ticker,
+      generatedAt: now,
+      content: fallback,
+    });
+    return { cached: false, generatedAt: now, content: fallback };
   }
 }
 
-function buildFallback(name: string, ticker: string, sector: string, metrics: any, scores: any) {
-  const roic = metrics?.roic ? (metrics.roic * 100).toFixed(1) + "%" : "N/A";
-  const gm = metrics?.grossMargin ? (metrics.grossMargin * 100).toFixed(1) + "%" : "N/A";
-  const rev = metrics?.revenue ? "$" + (metrics.revenue / 1e9).toFixed(2) + "B" : "N/A";
-  const growth = metrics?.revenueGrowth1y ? (metrics.revenueGrowth1y * 100).toFixed(1) + "%" : "N/A";
+function buildFallback(
+  name: string,
+  ticker: string,
+  sector: string,
+  metrics: any,
+  scores: any
+): ValueChainContent {
+  const roic = metrics?.roic
+    ? (metrics.roic * 100).toFixed(1) + "%"
+    : "N/A";
+  const gm = metrics?.grossMargin
+    ? (metrics.grossMargin * 100).toFixed(1) + "%"
+    : "N/A";
+  const rev = metrics?.revenue
+    ? "$" + (metrics.revenue / 1e9).toFixed(2) + "B"
+    : "N/A";
+  const growth = metrics?.revenueGrowth1y
+    ? (metrics.revenueGrowth1y * 100).toFixed(1) + "%"
+    : "N/A";
+  const fortress = scores?.fortressScore?.toFixed(2) || "N/A";
+  const rocket = scores?.rocketScore?.toFixed(2) || "N/A";
 
   return {
-    oneLiner: `${name} is a ${sector} company generating ${rev} in revenue with ${roic} ROIC.`,
-    supplyChain: `${name} operates in the ${sector} sector. Supply chain dependencies and concentration risks require further company-specific research. Revenue of ${rev} with gross margin of ${gm} reflects current input cost dynamics.`,
-    customerStickiness: `Customer retention mechanics for ${name} reflect typical ${sector} dynamics. Switching costs and contractual structures have not been fully modelled from available data. Further primary research into NRR or churn metrics is recommended.`,
-    keyPeople: `Management details for ${name} require review of recent proxy filings and earnings calls. ROIC of ${roic} provides a proxy for capital allocation quality under current leadership.`,
-    competitiveMoat: `${name}'s competitive positioning in the ${sector} sector is partially captured in its Fortress Score of ${scores?.fortressScore?.toFixed(2) || "N/A"}. Gross margin of ${gm} reflects pricing power relative to peers.`,
-    growthCatalysts: `Revenue growth of ${growth} YoY is the primary near-term indicator. Rocket Score of ${scores?.rocketScore?.toFixed(2) || "N/A"} captures growth momentum. Sector tailwinds in ${sector} represent a medium-term opportunity.`,
-    riskNarratives: `Key risks include sector cyclicality, potential margin compression, and execution risk on growth initiatives. The current financial profile (ROIC ${roic}, Gross Margin ${gm}) provides a baseline for stress-testing bear-case scenarios.`,
+    oneLiner: `${name} is a ${sector} company generating ${rev} in annual revenue with ${roic} ROIC.`,
+    upstreamInputs: `${name}'s upstream input dependencies in the ${sector} sector require further primary research. Gross margin of ${gm} provides a baseline for input-cost sensitivity. Geographic concentration of supply chains has not been fully modelled from available data.`,
+    peopleTalent: `Management quality at ${name} is partially captured by ROIC of ${roic} as a proxy for capital allocation discipline. Succession risk and insider ownership require review of recent proxy filings and earnings calls.`,
+    productionOperations: `${name}'s operational infrastructure in the ${sector} sector generates ${rev} in revenue. Gross margin of ${gm} reflects the current cost structure and pricing dynamics relative to peers.`,
+    productsServices: `${name}'s product and service portfolio serves the ${industry} market. Revenue growth of ${growth} YoY reflects current demand for its offerings. Pricing power is partially captured by the gross margin profile of ${gm}.`,
+    customerDemand: `End-market demand for ${name}'s offerings reflects ${sector} sector dynamics. Fortress Score of ${fortress} captures business durability metrics. Customer concentration and contract structures require further primary research.`,
+    demandSupplyChain: `Demand variability in ${name}'s ${industry} business shapes upstream procurement and inventory strategies. Rocket Score of ${rocket} reflects growth momentum that may signal demand-driven supply chain expansion.`,
+    bottlenecksRisks: `Key risks for ${name} include sector cyclicality, potential gross margin compression from ${gm} current levels, and execution risk on growth initiatives delivering ${growth} YoY revenue expansion. ROIC of ${roic} and Fortress Score of ${fortress} provide baseline stress-test anchors.`,
   };
 }
