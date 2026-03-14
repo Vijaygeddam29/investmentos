@@ -5,19 +5,7 @@ import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Loader2, Filter, RefreshCw, Sprout, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-const SECTORS = [
-  "Technology", "Healthcare", "Financial Services", "Consumer Defensive",
-  "Consumer Cyclical", "Energy", "Industrials", "Basic Materials",
-  "Real Estate", "Utilities", "Communication Services",
-];
-
-const COUNTRIES = [
-  "United States", "United Kingdom", "India", "France", "Germany",
-  "China", "Netherlands", "Australia", "Brazil", "Canada", "Denmark",
-  "Hong Kong", "Ireland", "Israel", "Italy", "Singapore",
-  "Switzerland", "Taiwan", "Uruguay",
-];
+import { Combobox } from "@/components/ui/combobox";
 
 function ScoreCell({ score }: { score?: number | null }) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
@@ -29,7 +17,6 @@ function ScoreCell({ score }: { score?: number | null }) {
   return <span className={`font-mono text-xs font-semibold ${color}`}>{score.toFixed(2)}</span>;
 }
 
-// marketCap is stored in billions (e.g. 4451.2 = $4.45T)
 function formatMarketCap(v?: number | null) {
   if (v == null) return "—";
   if (v >= 1000) return `$${(v / 1000).toFixed(1)}T`;
@@ -71,16 +58,35 @@ export default function Screener() {
 
   const { mutate: seedUniverse, isPending: isSeeding } = useSeedUniverse();
 
+  const allSnapshots = data?.snapshots ?? [];
+
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    allSnapshots.forEach(s => { if (s.sector) set.add(s.sector); });
+    return [...set].sort();
+  }, [allSnapshots]);
+
+  const countryOptions = useMemo(() => {
+    const set = new Set<string>();
+    allSnapshots.forEach(s => { if (s.country) set.add(s.country); });
+    return [...set].sort();
+  }, [allSnapshots]);
+
+  const industryOptions = useMemo(() => {
+    const set = new Set<string>();
+    allSnapshots.forEach(s => { if ((s as any).industry) set.add((s as any).industry); });
+    return [...set].sort();
+  }, [allSnapshots]);
+
   const snapshots = useMemo(() => {
-    const all = data?.snapshots ?? [];
-    if (!search) return all;
+    if (!search) return allSnapshots;
     const q = search.toLowerCase();
-    return all.filter(s =>
+    return allSnapshots.filter(s =>
       s.ticker.toLowerCase().includes(q) ||
       (s.name ?? "").toLowerCase().includes(q) ||
       (s.sector ?? "").toLowerCase().includes(q)
     );
-  }, [data, search]);
+  }, [allSnapshots, search]);
 
   const hasFilters = sector || industry || country || minFortress || minRocket || minWave || minEntry || mcapMin || mcapMax;
 
@@ -146,32 +152,25 @@ export default function Screener() {
               />
             </div>
 
-            {/* Sector */}
-            <select
+            <Combobox
+              options={sectorOptions}
               value={sector}
-              onChange={e => setSector(e.target.value)}
-              className="px-3 py-2 text-xs rounded-lg bg-secondary/50 border border-border focus:border-primary/50 outline-none text-foreground"
-            >
-              <option value="">All Sectors</option>
-              {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+              onChange={setSector}
+              placeholder="All Sectors"
+            />
 
-            {/* Country */}
-            <select
+            <Combobox
+              options={countryOptions}
               value={country}
-              onChange={e => setCountry(e.target.value)}
-              className="px-3 py-2 text-xs rounded-lg bg-secondary/50 border border-border focus:border-primary/50 outline-none text-foreground"
-            >
-              <option value="">All Countries</option>
-              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+              onChange={setCountry}
+              placeholder="All Countries"
+            />
 
-            {/* Industry */}
-            <input
+            <Combobox
+              options={industryOptions}
               value={industry}
-              onChange={e => setIndustry(e.target.value)}
+              onChange={setIndustry}
               placeholder="Industry..."
-              className="px-3 py-2 text-xs rounded-lg bg-secondary/50 border border-border focus:border-primary/50 outline-none placeholder:text-muted-foreground/60"
             />
           </div>
 

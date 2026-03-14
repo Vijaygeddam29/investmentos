@@ -10,9 +10,11 @@ import portfolioRouter from "./portfolio";
 import portfolioBuilderRouter from "./portfolio-builder";
 import anthropicRouter from "./anthropic";
 import alertsRouter from "./alerts";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
+router.use(authRouter);
 router.use(healthRouter);
 router.use(pipelineRouter);
 router.use(companiesRouter);

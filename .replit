@@ -20,6 +20,7 @@ runButton = "Project"
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
+integrations = ["twilio:1.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -29,6 +30,7 @@ timeoutMs = 20000
 
 [userenv.shared]
 FMP_API_KEY = "Xzru8qMDuTcHCg2XSu5nK3n0RzpatD7r"
+JWT_SECRET = "812e2a5147a477cf3ff00d50def826ee142db6d6456eacfe3596f2f1538c6a8b4ee75c452f1f0e8dfe6de34fe0436f4eaf5a844ab8e331f815b19341b358fc06"
 
 [nix]
 channel = "stable-25_05"

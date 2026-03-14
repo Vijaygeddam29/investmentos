@@ -11,11 +11,14 @@ import {
   Briefcase,
   Wand2,
   Settings,
-  X
+  X,
+  LogOut,
+  User
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { useSidebarCtx } from "./Layout";
+import { useAuth } from "@/contexts/AuthContext";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -46,6 +49,10 @@ const navGroups = [
 export function Sidebar() {
   const [location] = useLocation();
   const { open, isMobile, close } = useSidebarCtx();
+  const { user, logout } = useAuth();
+
+  const displayName = user?.name ?? user?.email ?? user?.phone ?? "Account";
+  const displaySub  = user?.email ?? user?.phone ?? "";
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -113,11 +120,33 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-1">
         <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150">
           <Settings className="w-4 h-4" />
           Settings
         </button>
+        {user && (
+          <>
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg">
+              <div className="w-7 h-7 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-white truncate">{displayName}</div>
+                {displaySub && displaySub !== displayName && (
+                  <div className="text-[10px] text-muted-foreground truncate">{displaySub}</div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-900/30 hover:text-red-400 transition-all duration-150"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

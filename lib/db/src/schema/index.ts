@@ -10,4 +10,6 @@ export * from "./conversations";
 export * from "./messages";
 export * from "./score-alerts";
 export * from "./value-chains";
+export * from "./users";
+export * from "./otp-codes";
 export type { RiskAlert } from "./signals";
