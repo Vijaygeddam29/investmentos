@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2 } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2, AlertTriangle, CheckCircle2, TrendingDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { EntryExitPanel } from "./EntryExitPanel";
@@ -56,6 +56,11 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
   const driftSignals = data?.driftSignals || [];
   const latestMetrics = metricsData?.metrics?.[0];
   const entryTimingScore = scores?.entryTimingScore;
+  const verdictData = (data as any)?.verdictData as {
+    verdict: string; base: number; riskFlags: string[]; softWarnings: string[];
+    rationale: { topStrength: string; topDrag: string; sentence: string };
+  } | undefined;
+  const familyCoverage = (data as any)?.familyCoverage as Record<string, { total: number; available: number; pct: number }> | undefined;
 
   const entryLabel = entryTimingScore == null ? null :
     entryTimingScore >= 0.70 ? { label: "Strong Entry", color: "bg-success text-white" } :
@@ -293,9 +298,81 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                   </TabsContent>
 
                   {/* ── 120 Factors ── */}
-                  <TabsContent value="factors" className="animate-in fade-in duration-300">
+                  <TabsContent value="factors" className="animate-in fade-in duration-300 space-y-4">
+                    {/* Verdict rationale card */}
+                    {verdictData && (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded border font-mono ${
+                              verdictData.verdict === "STRONG BUY" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" :
+                              verdictData.verdict === "BUY"        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" :
+                              verdictData.verdict === "ADD"        ? "bg-blue-500/15 border-blue-500/30 text-blue-400" :
+                              verdictData.verdict === "HOLD"       ? "bg-amber-500/15 border-amber-500/30 text-amber-400" :
+                              verdictData.verdict === "TRIM"       ? "bg-orange-500/15 border-orange-500/30 text-orange-400" :
+                              "bg-red-500/15 border-red-500/30 text-red-400"
+                            }`}>
+                              {verdictData.verdict}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              base {verdictData.base.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px]">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              {verdictData.rationale.topStrength}
+                            </span>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <TrendingDown className="w-3 h-3 text-red-400" />
+                              {verdictData.rationale.topDrag}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          {verdictData.rationale.sentence}
+                        </p>
+                        {/* Quality vs Opportunity bar */}
+                        {(scores as any)?.companyQualityScore != null && (scores as any)?.stockOpportunityScore != null && (
+                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                            <div>
+                              <div className="flex justify-between text-[10px] mb-1">
+                                <span className="text-muted-foreground">Company Quality</span>
+                                <span className="font-mono text-foreground">{((scores as any).companyQualityScore * 100).toFixed(0)}</span>
+                              </div>
+                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                <div className="h-full bg-violet-400 rounded-full" style={{ width: `${(scores as any).companyQualityScore * 100}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[10px] mb-1">
+                                <span className="text-muted-foreground">Stock Opportunity</span>
+                                <span className="font-mono text-foreground">{((scores as any).stockOpportunityScore * 100).toFixed(0)}</span>
+                              </div>
+                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(scores as any).stockOpportunityScore * 100}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Risk flag amber banner */}
+                    {verdictData?.riskFlags && verdictData.riskFlags.length > 0 && (
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="text-xs font-semibold text-amber-400">Hard Gates Active — Verdict Capped</span>
+                        </div>
+                        {verdictData.riskFlags.map((flag, i) => (
+                          <p key={i} className="text-[11px] text-amber-300/80 pl-5">{flag}</p>
+                        ))}
+                      </div>
+                    )}
+
                     {latestMetrics ? (
-                      <FactorAccordion metrics={latestMetrics} scores={scores} />
+                      <FactorAccordion metrics={latestMetrics} scores={scores} familyCoverage={familyCoverage} />
                     ) : (
                       <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
                         No factor data available. Run the pipeline first.

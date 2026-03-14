@@ -26,6 +26,12 @@ export const scoresTable = pgTable("scores", {
   // Compounder Score: 0–100 derived metric identifying compounding business characteristics
   compounderScore: real("compounder_score"),
 
+  // Two-score architecture (v2 model)
+  // Company Quality Score: how good is the business? (Profitability/Growth/BalanceSheet/CashFlow/CapEff)
+  companyQualityScore: real("company_quality_score"),
+  // Stock Opportunity Score: is now a good entry? (Valuation/Momentum/Sentiment)
+  stockOpportunityScore: real("stock_opportunity_score"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

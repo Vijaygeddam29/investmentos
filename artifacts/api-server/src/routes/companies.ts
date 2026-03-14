@@ -12,7 +12,8 @@ import { eq, desc, asc, and, ilike, gte, lte } from "drizzle-orm";
 import { generateAiMemo } from "../lib/ai-memo";
 import { generateValueChain } from "../lib/value-chain";
 import { companyValueChainsTable } from "@workspace/db/schema";
-import { computeMACD } from "../lib/scoring-engines";
+import { computeMACD, computeFamilyCoverage } from "../lib/scoring-engines";
+import { computeVerdict, generateVerdictRationale } from "../lib/verdict-engine";
 
 const router: IRouter = Router();
 
@@ -158,6 +159,41 @@ router.get("/companies/:ticker", async (req, res) => {
     const momentumIndicators = computeMomentumIndicators(prices);
     const priceHistory = [...prices].reverse().map(p => ({ date: p.date, close: p.close }));
 
+    const familyCoverage = m ? computeFamilyCoverage(m) : undefined;
+    const totalMetrics = familyCoverage ? Object.values(familyCoverage).reduce((acc, f) => acc + f.total, 0) : 0;
+    const availableMetrics = familyCoverage ? Object.values(familyCoverage).reduce((acc, f) => acc + f.available, 0) : 0;
+    const dataCoveragePercent = totalMetrics > 0 ? Math.round((availableMetrics / totalMetrics) * 100) : undefined;
+
+    const verdictData = (s as any)?.companyQualityScore != null && (s as any)?.stockOpportunityScore != null ? (() => {
+      const vResult = computeVerdict({
+        qualityScore: (s as any).companyQualityScore,
+        opportunityScore: (s as any).stockOpportunityScore,
+        altmanZScore: m?.altmanZScore,
+        interestCoverage: m?.interestCoverage,
+        netDebtEbitda: m?.netDebtEbitda,
+        dataCoveragePercent,
+      });
+      const rationale = generateVerdictRationale({
+        verdict: vResult.verdict,
+        qualityScore: (s as any).companyQualityScore,
+        opportunityScore: (s as any).stockOpportunityScore,
+        base: vResult.base,
+        familyScores: {
+          profitabilityScore: s?.profitabilityScore,
+          growthScore: s?.growthScore,
+          capitalEfficiencyScore: s?.capitalEfficiencyScore,
+          financialStrengthScore: s?.financialStrengthScore,
+          cashFlowQualityScore: s?.cashFlowQualityScore,
+          innovationScore: s?.innovationScore,
+          momentumScore: s?.momentumScore,
+          valuationScore: s?.valuationScore,
+          sentimentScore: s?.sentimentScore,
+        },
+        riskFlags: vResult.riskFlags,
+      });
+      return { ...vResult, rationale };
+    })() : undefined;
+
     res.json({
       company: {
         ticker: c.ticker,
@@ -190,6 +226,8 @@ router.get("/companies/:ticker", async (req, res) => {
         compounderRating: s.compounderScore != null
           ? (s.compounderScore >= 70 ? "HIGH" : s.compounderScore >= 50 ? "MEDIUM" : "LOW")
           : undefined,
+        companyQualityScore: (s as any).companyQualityScore ?? undefined,
+        stockOpportunityScore: (s as any).stockOpportunityScore ?? undefined,
       } : undefined,
       latestVerdict: v ? {
         ticker: v.ticker,
@@ -221,6 +259,9 @@ router.get("/companies/:ticker", async (req, res) => {
       } : undefined,
       momentumIndicators,
       driftSignals: driftSigs.map(({ createdAt, ...rest }) => rest),
+      verdictData,
+      familyCoverage,
+      dataCoveragePercent,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -296,16 +337,13 @@ router.get("/companies/:ticker/metrics", async (req, res) => {
         cashToDebt: m.cashToDebt,
         altmanZScore: m.altmanZScore,
         liquidityRatio: m.liquidityRatio,
-        operatingCfToRevenue: m.operatingCfToRevenue,
-        fcfToNetIncome: m.fcfToNetIncome,
-        taxEfficiency: m.taxEfficiency,
-        accrualRatio: m.accrualRatio,
+        workingCapitalDrift: m.workingCapitalDrift,
       },
       cashFlowQuality: {
         fcfToNetIncome: m.fcfToNetIncome,
         operatingCfToRevenue: m.operatingCfToRevenue,
-        fcfYield: m.fcfYield,
         accrualRatio: m.accrualRatio,
+        taxEfficiency: m.taxEfficiency,
         receivablesGrowthVsRevenue: m.receivablesGrowthVsRevenue,
         inventoryGrowthVsRevenue: m.inventoryGrowthVsRevenue,
         freeCashFlow: m.freeCashFlow,
@@ -316,36 +354,24 @@ router.get("/companies/:ticker/metrics", async (req, res) => {
         earningsSurprises: m.earningsSurprises,
         capitalAllocationDiscipline: m.capitalAllocationDiscipline,
       },
+      // R&D & Innovation: R&D intensity, productivity, reinvestment quality
       innovation: {
         rdExpense: m.rdExpense,
         rdToRevenue: m.rdToRevenue,
         rdProductivity: m.rdProductivity,
-        insiderOwnership: m.insiderOwnership,
-        institutionalOwnership: m.institutionalOwnership,
-        insiderBuying: m.insiderBuying,
-        revenueGrowth1y: m.revenueGrowth1y,
-        operatingLeverage: m.operatingLeverage,
-        reinvestmentRate: m.reinvestmentRate,
-        fcfGrowth: m.fcfGrowth,
-        incrementalMargin: m.incrementalMargin,
-        operatingIncomeGrowth: m.operatingIncomeGrowth,
+        revenueGrowth3y: m.revenueGrowth3y,
+        grossMarginTrend: m.grossMarginTrend,
       },
-      // Sentiment family: insider conviction, analyst revisions, peer-relative value, SBC dilution
+      // Market Signals: insider conviction, institutional ownership, analyst revisions, peer-relative value
       sentiment: {
         insiderBuying: m.insiderBuying,
         insiderOwnership: m.insiderOwnership,
         institutionalOwnership: m.institutionalOwnership,
         earningsSurprises: m.earningsSurprises,
-        shareholderYield: m.shareholderYield,
-        stockBasedCompPct: m.stockBasedCompPct,
-        accrualRatio: m.accrualRatio,
-        deferredRevenueGrowth: m.deferredRevenueGrowth,
-        operatingLeverage: m.operatingLeverage,
+        analystUpside: m.analystUpside,
         peVsPeerMedian: m.peVsPeerMedian,
         pePeerMedian: m.pePeerMedian,
         evEbitdaPeerMedian: m.evEbitdaPeerMedian,
-        forwardPe: m.forwardPe,
-        sentimentScore: m.sentimentScore,
       },
       momentum: momentumIndicators,
       valuation: {

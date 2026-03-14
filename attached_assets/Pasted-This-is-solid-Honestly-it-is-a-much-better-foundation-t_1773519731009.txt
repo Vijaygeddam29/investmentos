@@ -1,0 +1,427 @@
+This is solid. Honestly, it is a much better foundation than the current Fortress/Rocket/Wave tangle.
+
+My read: yes, commit the two-score split. That is the main architectural fix. It turns “contradictions” into something intelligible:
+
+Business quality answers: is this a strong company?
+
+Stock opportunity answers: is this a good entry now?
+
+That framing is clean, defensible, and way easier to explain in product.
+
+What I’d approve
+1) Approve the two-score split
+
+Do it.
+
+Your proposed split is the right move:
+
+Company Quality Score = slow-moving, fundamentals-driven
+
+Stock Opportunity Score = faster-moving, market/entry-driven
+
+Final Verdict = function of both, plus gates
+
+That solves the Ferrari/Palantir problem immediately.
+
+2) Approve the “one factor, one bucket” registry
+
+Also yes.
+
+That is the only honest way to stop hidden double-weighting. Every factor should have:
+
+one bucket
+
+one direction
+
+one role
+
+one missing-data policy
+
+That registry becomes the source of truth for both scoring and UI.
+
+3) Approve hard gates
+
+Yes, with one tweak: keep them few, visible, and boring.
+
+The proposed gate set is good:
+
+altmanZScore < 1.81
+
+netDebtEbitda > 5
+
+debtToEquity > 3
+
+interestCoverage < 2
+
+dataCoverage < 70%
+
+YF-only / reduced-data warning
+
+revenueGrowth1y < 0 && operatingMargin < 0
+
+ROIC > 100% distortion flag
+
+That said, I would split gates into two types:
+
+Risk caps: cap verdict ceiling
+
+Display warnings: do not cap, but warn
+
+For example:
+
+altmanZ < 1.81 → risk cap
+
+interestCoverage < 2 → risk cap
+
+dataCoverage < 70% → risk cap
+
+ROIC > 100% → display warning, and suppress from scoring
+
+YF-only harvest → display warning, not necessarily a hard cap by itself unless coverage is also weak
+
+That keeps the model from feeling too punitive.
+
+4) Approve most of the bucket assignments
+
+Your registry logic is mostly right. A few calls I’d tighten:
+
+Keep as scoring
+
+Good calls:
+
+roic5yrAvg, roicStability
+
+grossMargin, operatingMargin, fcfMargin
+
+revenueGrowth3y, revenueGrowth5y, fcfGrowth
+
+debtToEquity, netDebtEbitda, interestCoverage, cashToDebt
+
+fcfToNetIncome, operatingCfToRevenue, accrualRatio
+
+assetTurnover, workingCapitalEfficiency, operatingLeverage
+
+fcfYield, evToEbitda, peRatio, pegRatio
+
+momentum factors
+
+sentiment only if real sentiment data exists
+
+Downgrade to display
+
+I agree with your instinct on these:
+
+roe
+
+roa
+
+netMargin
+
+employeeProductivity
+
+dividendGrowth
+
+freeCashFlow
+
+cashConversionCycle
+
+evToSales, priceToBook, dividendYield
+
+That keeps the scoring cleaner and less sector-distorted.
+
+One thing I’d change
+
+I would not make revenueGrowth1y too important in Company Quality. Keep it, but lighter than 3y/5y. One-year growth is noisy and can whip scores around.
+
+5) Approve removal of phantom Sentiment
+
+Big yes.
+
+Right now that bucket is basically fiction. If the primary sentiment inputs are null, then:
+
+either disable the bucket entirely
+
+or rename it to something explicitly limited
+
+My preference:
+
+If sentiment coverage < 50%, set sentimentScore = null
+
+reweight Opportunity across Valuation + Momentum only
+
+show badge: Sentiment unavailable
+
+That is cleaner than pretending.
+
+What I would change in your scoring design
+A) Slightly rebalance the top-level weights
+
+Your proposal:
+
+Quality 55%
+
+Opportunity 45%
+
+That is close, but I’d make it a little more quality-led:
+
+Quality Score contribution: 60%
+
+Opportunity Score contribution: 40%
+
+Reason: you do not want short-term tape action overpowering a truly strong business too often.
+
+So:
+
+base = qualityScore * 0.60 + opportunityScore * 0.40
+
+B) Rebalance Company Quality internals slightly
+
+Your proposed:
+
+Quality 30
+
+Growth 25
+
+Balance Sheet 20
+
+Cash Flow 15
+
+CapEfficiency 10
+
+I’d go:
+
+Quality 30
+
+Growth 20
+
+Balance Sheet 20
+
+Cash Flow 20
+
+Capital Efficiency 10
+
+Why: cash flow quality deserves equal footing with balance sheet. It is one of the best anti-fraud / anti-hype filters in the whole stack.
+
+C) Rebalance Opportunity if Sentiment is weak
+
+Your proposed:
+
+Valuation 40
+
+Momentum 35
+
+Sentiment 25
+
+Good if sentiment is real. But until then:
+
+when Sentiment unavailable, redistribute to:
+
+Valuation 55
+
+Momentum 45
+
+Do not let a fake bucket keep a fixed weight.
+
+Verdict logic: mostly yes, with one important cleanup
+
+Your proposed verdict layer is much cleaner than the current setup. I’d support it with one adjustment:
+
+Your current proposed rules overlap a bit awkwardly:
+
+ADD = base ≥ 0.60, OR quality high but opportunity weak
+
+TRIM = quality ≥ 0.65 but opportunity ≤ 0.35
+
+That is directionally right, but I’d make it more deterministic and ordered.
+
+A cleaner rule set:
+
+SELL
+
+base < 0.40
+
+or distress gate triggered
+
+TRIM
+
+qualityScore >= 0.65 && opportunityScore <= 0.35
+
+or base between 0.40 and 0.50 with stretched valuation + poor momentum
+
+HOLD
+
+base >= 0.50
+
+or any hard gate triggered that blocks higher verdicts
+
+ADD
+
+base >= 0.60
+
+or qualityScore >= 0.70 && opportunityScore between 0.35 and 0.52
+
+BUY
+
+base >= 0.70 && qualityScore >= 0.62 && opportunityScore >= 0.52
+
+no hard gates
+
+STRONG BUY
+
+base >= 0.78 && qualityScore >= 0.72 && opportunityScore >= 0.65
+
+no hard gates
+
+coverage adequate
+
+This preserves your idea while reducing ambiguity.
+
+One more thing I’d definitely add: score confidence
+
+This should ship with the refactor.
+
+Not just data coverage, but score confidence:
+
+High confidence = broad factor coverage and no major proxy substitutions
+
+Medium confidence = partial coverage or some proxy use
+
+Low confidence = YF-only, many nulls, missing balance sheet/cash flow depth
+
+Because a BUY with low confidence should feel different from a BUY with full evidence.
+
+What I’d commit in one pass
+
+Here’s the version I’d green-light:
+
+Core model
+
+two-score split: yes
+
+one-factor-one-bucket registry: yes
+
+remove duplicate factor scoring: yes
+
+fix workingCapitalDrift direction bug: yes
+
+suppress phantom Sentiment until data exists: yes
+
+remove best engine bonus entirely: yes
+
+shared single verdict engine: yes
+
+Weighting
+
+base = quality * 0.60 + opportunity * 0.40
+
+Company Quality:
+
+Quality 30
+
+Growth 20
+
+Balance Sheet 20
+
+Cash Flow 20
+
+Cap Efficiency 10
+
+Stock Opportunity:
+
+Valuation 55 / Momentum 45 when Sentiment unavailable
+
+otherwise Valuation 40 / Momentum 35 / Sentiment 25
+
+Gates
+
+Use as hard caps:
+
+altmanZ < 1.81
+
+interestCoverage < 2
+
+dataCoverage < 70%
+
+maybe netDebtEbitda > 5
+
+Use as softer warnings:
+
+ROIC > 100%
+
+YF-only harvest
+
+crude proxy substitutions
+
+marginOfSafety from YF proxy only
+
+UI
+
+Show these as dimensions, not votes:
+
+Business Quality
+
+Growth
+
+Balance Sheet
+
+Cash Flow Quality
+
+Capital Efficiency
+
+Valuation
+
+Momentum
+
+Sentiment availability
+
+Coverage / Confidence
+
+And the verdict text should explicitly read like:
+
+ADD — strong business, average entry
+
+TRIM — strong business, stretched stock
+
+HOLD — quality okay, but risk gate triggered
+
+BUY — solid business and attractive setup
+
+Biggest thing to be careful about
+
+Do not destroy raw source data.
+
+Store three versions where needed:
+
+raw
+
+cleaned for scoring
+
+display value
+
+That matters a lot for auditability.
+
+Bottom line
+
+I’d approve this direction with these calls:
+
+Yes to the two-score split
+
+Yes to the factor registry
+
+Yes to de-duplication
+
+Yes to hard risk gates
+
+Yes to eliminating phantom Sentiment
+
+Yes to a single verdict engine
+
+Change top-level blend to 60/40
+
+Make score confidence visible
+
+Keep raw vs scored vs displayed values separate
+
+This is the first version of the framework that feels like a real investment model instead of a pile of overlapping heuristics.
+
+If you want, I can turn this into a ship-ready implementation spec with exact bucket definitions, weights, gate precedence, and pseudocode for the verdict engine.

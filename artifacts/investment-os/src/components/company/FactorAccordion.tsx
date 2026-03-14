@@ -8,57 +8,60 @@ import { HelpCircle } from "lucide-react";
 interface FactorAccordionProps {
   metrics: MetricSnapshot;
   scores?: ScoreItem;
+  familyCoverage?: Record<string, { total: number; available: number; pct: number }>;
 }
 
-export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
+const MAX_ROIC = 1.0;
+
+export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccordionProps) {
   const families = [
     {
       id: "profitability",
       label: "Profitability",
       score: scores?.profitabilityScore,
-      description: "ROIC, ROE, ROA, all margin types, employee productivity",
+      description: "ROIC, ROE, ROA, all margin types — measures how efficiently the business earns returns",
       data: metrics.profitability,
     },
     {
       id: "growth",
       label: "Growth",
       score: scores?.growthScore,
-      description: "Revenue, EPS, FCF growth across 1/3/5 year horizons, margin trends",
+      description: "Revenue, EPS, FCF growth across 1/3/5 year horizons, margin expansion trends",
       data: metrics.growth,
     },
     {
       id: "capitalEfficiency",
       label: "Capital Efficiency",
       score: scores?.capitalEfficiencyScore,
-      description: "Asset & inventory turnover, CapEx discipline, shareholder yield",
+      description: "Asset & inventory turnover, CapEx discipline, shareholder yield, employee productivity",
       data: metrics.capitalEfficiency,
     },
     {
       id: "financialStrength",
       label: "Financial Strength",
       score: scores?.financialStrengthScore,
-      description: "Leverage, liquidity, interest coverage, Altman Z-Score",
+      description: "Leverage, liquidity, interest coverage, Altman Z-Score — balance sheet resilience",
       data: metrics.financialStrength,
     },
     {
       id: "cashFlowQuality",
       label: "Cash Flow Quality",
       score: scores?.cashFlowQualityScore,
-      description: "FCF conversion, accruals, earnings quality, working capital",
+      description: "FCF conversion, accrual quality, working capital discipline, earnings quality",
       data: metrics.cashFlowQuality,
     },
     {
       id: "innovation",
-      label: "Innovation & Founder Signals",
+      label: "R&D & Innovation",
       score: scores?.innovationScore,
-      description: "R&D intensity, insider ownership, institutional conviction",
+      description: "R&D intensity, R&D productivity, sustained investment in future growth",
       data: metrics.innovation,
     },
     {
       id: "momentum",
       label: "Market Momentum",
       score: scores?.momentumScore,
-      description: "RSI, moving averages, 52-week range, price returns, volume trend",
+      description: "RSI, moving averages, 52-week range, price returns, volume trend, MACD",
       data: metrics.momentum,
     },
     {
@@ -70,7 +73,7 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
     },
     {
       id: "sentiment",
-      label: "Sentiment",
+      label: "Market Signals",
       score: scores?.sentimentScore,
       description: "Insider conviction, institutional ownership, earnings surprises, analyst revisions, P/E vs peers",
       data: metrics.sentiment,
@@ -95,9 +98,14 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
       .trim();
 
   const formatValue = (key: string, value: any): string => {
-    if (value == null || value === undefined) return "—";
+    if (value == null || value === undefined) return "Unavailable";
     if (typeof value === "boolean") return value ? "Yes ✓" : "No ✗";
     if (typeof value !== "number") return String(value);
+
+    // ROIC capped at 100% for display — raw values above 100% indicate accounting distortion
+    if (key === "roic" && value > MAX_ROIC) {
+      return `100.0% ⚠`;
+    }
 
     const pctKeys = [
       "grossMargin", "operatingMargin", "netMargin", "ebitMargin", "ebitdaMargin", "fcfMargin",
@@ -131,6 +139,13 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
     return "text-red-400";
   };
 
+  const getConfidenceLabel = (pct?: number): { label: string; color: string } | null => {
+    if (pct == null) return null;
+    if (pct >= 80) return { label: "High confidence", color: "text-emerald-400" };
+    if (pct >= 60) return { label: "Medium confidence", color: "text-amber-400" };
+    return { label: "Low confidence", color: "text-red-400" };
+  };
+
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4 px-1">
@@ -138,9 +153,13 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
       </p>
       <Accordion type="multiple" className="w-full space-y-2">
         {families.map((family) => {
-          const entries = family.data
-            ? Object.entries(family.data).filter(([, v]) => v != null)
+          const allEntries = family.data
+            ? Object.entries(family.data)
             : [];
+          const entries = allEntries.filter(([, v]) => v != null);
+          const coverage = familyCoverage?.[family.id];
+          const confidence = coverage ? getConfidenceLabel(coverage.pct) : null;
+          const isSentimentUnavailable = family.id === "sentiment" && family.score == null;
 
           return (
             <AccordionItem
@@ -151,10 +170,34 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
               <AccordionTrigger className="px-3 hover:no-underline py-3">
                 <div className="flex items-center justify-between w-full pr-4">
                   <div className="text-left">
-                    <div className="font-semibold text-sm">{family.label}</div>
+                    <div className="font-semibold text-sm flex items-center gap-2">
+                      {family.label}
+                      {isSentimentUnavailable && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400 bg-amber-500/10 font-medium">
+                          Unavailable
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">{family.description}</div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {coverage && (
+                      <span className={`text-[9px] font-mono opacity-60 ${confidence?.color ?? ""}`}>
+                        {coverage.available}/{coverage.total}
+                      </span>
+                    )}
+                    {confidence && (
+                      <Tooltip delayDuration={400}>
+                        <TooltipTrigger asChild>
+                          <span className={`text-[9px] px-1 py-0.5 rounded border border-current font-medium cursor-help ${confidence.color} opacity-80`}>
+                            {confidence.label.split(" ")[0]}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {coverage.available}/{coverage.total} signals available ({coverage.pct}% coverage)
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <span className={`text-xs font-mono font-bold ${getScoreColor(family.score)}`}>
                       {family.score != null ? family.score.toFixed(2) : "—"}
                     </span>
@@ -163,18 +206,30 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-4 pt-1">
-                {entries.length === 0 ? (
+                {isSentimentUnavailable ? (
+                  <div className="py-4 text-center space-y-1.5">
+                    <p className="text-xs text-amber-400 font-medium">Market Signals — Unavailable</p>
+                    <p className="text-[11px] text-muted-foreground max-w-[80%] mx-auto leading-relaxed">
+                      Requires insider activity, institutional ownership, and analyst coverage data.
+                      Opportunity score has been reweighted to Valuation 55% / Momentum 45%.
+                    </p>
+                  </div>
+                ) : entries.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-2 text-center">No data available for this period.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 pt-3 border-t border-border/50">
-                    {entries.map(([key, value]) => {
+                    {allEntries.map(([key, value]) => {
                       const info = getMetricInfo(key);
+                      const isUnavailable = value == null;
+                      const formattedVal = formatValue(key, value);
+                      const isROICCapped = key === "roic" && typeof value === "number" && value > MAX_ROIC;
+
                       return (
                         <div key={key} className="flex justify-between items-center py-1 group border-b border-border/20 last:border-0">
                           {info ? (
                             <Tooltip delayDuration={200}>
                               <TooltipTrigger asChild>
-                                <span className="flex items-center gap-1 text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%] cursor-help underline decoration-dotted underline-offset-2">
+                                <span className={`flex items-center gap-1 text-[11px] group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%] cursor-help underline decoration-dotted underline-offset-2 ${isUnavailable ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                                   {formatKey(key)}
                                   <HelpCircle className="w-2.5 h-2.5 shrink-0 opacity-50" />
                                 </span>
@@ -194,6 +249,11 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
                                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                                     {info.explanation}
                                   </p>
+                                  {isROICCapped && (
+                                    <p className="text-[10px] text-amber-400 mt-1.5">
+                                      Raw value exceeds 100% — accounting distortion (negative equity). Capped at 100% for scoring.
+                                    </p>
+                                  )}
                                   <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">
                                       Target
@@ -206,12 +266,16 @@ export function FactorAccordion({ metrics, scores }: FactorAccordionProps) {
                               </TooltipContent>
                             </Tooltip>
                           ) : (
-                            <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%]">
+                            <span className={`text-[11px] group-hover:text-foreground transition-colors truncate pr-2 max-w-[55%] ${isUnavailable ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                               {formatKey(key)}
                             </span>
                           )}
-                          <span className="text-[11px] font-mono font-medium text-foreground">
-                            {formatValue(key, value)}
+                          <span className={`text-[11px] font-mono font-medium ${
+                            isUnavailable ? "text-muted-foreground/40 italic" :
+                            isROICCapped ? "text-amber-400" :
+                            "text-foreground"
+                          }`}>
+                            {formattedVal}
                           </span>
                         </div>
                       );

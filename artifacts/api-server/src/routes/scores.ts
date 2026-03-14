@@ -4,6 +4,7 @@ import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable } f
 import { eq, desc } from "drizzle-orm";
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 import { compounderRating } from "../lib/scoring-engines";
+import { computeVerdict } from "../lib/verdict-engine";
 
 const router: IRouter = Router();
 
@@ -45,12 +46,13 @@ router.get("/scores", async (req, res) => {
         momentumScore:          scoresTable.momentumScore,
         valuationScore:         scoresTable.valuationScore,
         compounderScore:        scoresTable.compounderScore,
+        companyQualityScore:    scoresTable.companyQualityScore,
+        stockOpportunityScore:  scoresTable.stockOpportunityScore,
       })
       .from(scoresTable)
       .leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
       .orderBy(desc(scoresTable.date));
 
-    // ── 1. Deduplicate: keep only the latest score row per ticker ───────────
     const seen = new Set<string>();
     const latestPerTicker = allRows.filter(row => {
       if (seen.has(row.ticker)) return false;
@@ -58,7 +60,6 @@ router.get("/scores", async (req, res) => {
       return true;
     });
 
-    // ── 2. Apply minimum score filter if requested ──────────────────────────
     const scoreField = (engine === "rocket" ? "rocketScore"
       : engine === "wave" ? "waveScore"
       : "fortressScore") as keyof typeof scoresTable.$inferSelect;
@@ -66,49 +67,26 @@ router.get("/scores", async (req, res) => {
       ? latestPerTicker.filter(s => ((s[scoreField] as number | null) ?? 0) >= minScore)
       : latestPerTicker;
 
-    // ── 3. Sort by the selected engine score descending ─────────────────────
     afterFilter.sort((a, b) => ((b[scoreField] as number | null) ?? 0) - ((a[scoreField] as number | null) ?? 0));
 
-    // ── 4. Paginate ─────────────────────────────────────────────────────────
     const paginated = afterFilter.slice(offset, offset + limit);
 
-    // ── 5. Detect current market regime (cached, lightweight) ───────────────
     const regimeResult = await detectMarketRegime();
     const { regime, weights: regimeWeights } = regimeResult;
 
-    // ── 6. Compute verdicts with regime-aware composite score ───────────────
     const verdicts = await db.select().from(aiVerdictsTable);
     const verdictMap = new Map(verdicts.map(v => [v.ticker, v]));
 
-    function computeVerdict(s: {
-      fortressScore: number | null; rocketScore: number | null; waveScore: number | null;
-      entryTimingScore: number | null;
-    }): string {
-      const f   = s.fortressScore   ?? 0;
-      const r   = s.rocketScore     ?? 0;
-      const w   = s.waveScore       ?? 0;
-      const ent = s.entryTimingScore ?? 0.5;
-      // Regime-weighted composite score
-      const composite = computeCompositeScore(f, r, w, regimeWeights);
-      // Best engine score (strong in one engine still qualifies)
-      const best = Math.max(f, r, w);
-      const primary = (composite * 0.6) + (best * 0.4);
-      if (primary >= 0.78 && ent >= 0.55) return "STRONG BUY";
-      if (primary >= 0.72 && ent >= 0.45) return "BUY";
-      if (primary >= 0.62 && ent >= 0.35) return "ADD";
-      if (primary >= 0.52) return "HOLD";
-      if (primary >= 0.40) return "TRIM";
-      return "SELL";
-    }
-
-    // ── 7. Enrich with key fundamental metrics ───────────────────────────────
     const metricsRows = await db
       .select({
-        ticker:         financialMetricsTable.ticker,
-        roic:           financialMetricsTable.roic,
+        ticker:          financialMetricsTable.ticker,
+        roic:            financialMetricsTable.roic,
         revenueGrowth1y: financialMetricsTable.revenueGrowth1y,
-        grossMargin:    financialMetricsTable.grossMargin,
-        fcfYield:       financialMetricsTable.fcfYield,
+        grossMargin:     financialMetricsTable.grossMargin,
+        fcfYield:        financialMetricsTable.fcfYield,
+        altmanZScore:    financialMetricsTable.altmanZScore,
+        interestCoverage: financialMetricsTable.interestCoverage,
+        netDebtEbitda:   financialMetricsTable.netDebtEbitda,
       })
       .from(financialMetricsTable)
       .orderBy(desc(financialMetricsTable.date));
@@ -120,6 +98,35 @@ router.get("/scores", async (req, res) => {
     const enriched = paginated.map(s => {
       const m = metricsMap.get(s.ticker);
       const cs = s.compounderScore ?? null;
+
+      const qualityScore     = s.companyQualityScore    ?? null;
+      const opportunityScore = s.stockOpportunityScore  ?? null;
+
+      let verdict: string;
+      let riskFlags: string[] = [];
+
+      if (qualityScore != null && opportunityScore != null) {
+        const vResult = computeVerdict({
+          qualityScore,
+          opportunityScore,
+          altmanZScore:    m?.altmanZScore,
+          interestCoverage: m?.interestCoverage,
+          netDebtEbitda:   m?.netDebtEbitda,
+        });
+        verdict = vResult.verdict;
+        riskFlags = vResult.riskFlags;
+      } else {
+        const f   = s.fortressScore ?? 0;
+        const r   = s.rocketScore   ?? 0;
+        const w   = s.waveScore     ?? 0;
+        const composite = computeCompositeScore(f, r, w, regimeWeights);
+        if (composite >= 0.70) verdict = "BUY";
+        else if (composite >= 0.60) verdict = "ADD";
+        else if (composite >= 0.50) verdict = "HOLD";
+        else if (composite >= 0.40) verdict = "TRIM";
+        else verdict = "SELL";
+      }
+
       return {
         ticker:                 s.ticker,
         name:                   s.name ?? undefined,
@@ -140,11 +147,14 @@ router.get("/scores", async (req, res) => {
         valuationScore:         s.valuationScore ?? undefined,
         compounderScore:        cs,
         compounderRating:       cs != null ? compounderRating(cs) : undefined,
+        companyQualityScore:    qualityScore ?? undefined,
+        stockOpportunityScore:  opportunityScore ?? undefined,
         roic:                   m?.roic ?? undefined,
         revenueGrowth1y:        m?.revenueGrowth1y ?? undefined,
         grossMargin:            m?.grossMargin ?? undefined,
         fcfYield:               m?.fcfYield ?? undefined,
-        verdict:                computeVerdict(s),
+        verdict,
+        riskFlags,
         classification:         verdictMap.get(s.ticker)?.classification ?? undefined,
         compositeScore:         computeCompositeScore(
           s.fortressScore ?? 0, s.rocketScore ?? 0, s.waveScore ?? 0, regimeWeights

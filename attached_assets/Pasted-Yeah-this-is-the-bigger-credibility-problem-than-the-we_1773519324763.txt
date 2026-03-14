@@ -1,0 +1,186 @@
+Yeah — this is the bigger credibility problem than the weird ROIC outliers.
+
+You do not just have “some noisy factors.” You have a factor architecture that can produce contradictory suggestions for structural reasons:
+
+Hidden overweighting from duplicate metrics
+The same business attribute is being counted multiple times under different family names. That means the displayed family weights are not the real weights. So a user thinks they are seeing diversified evidence, but they are often seeing the same evidence wearing three hats.
+
+At least one true direction bug
+workingCapitalDrift scoring opposite ways in two families is not philosophical disagreement — it is a logic bug. That should be fixed immediately.
+
+Mislabelled families
+“Sentiment” and parts of “Innovation” are basically pretending to use signals that do not exist in the DB. That is how users end up feeling gaslit by the UI: the label says one thing, the score is actually driven by something else.
+
+No bridge between factor detail and final recommendation
+The system can show lots of green sub-metrics and still land on HOLD/ADD/TRIM, but it does not explain which family or entry signal overruled the others. So the recommendation feels arbitrary even when the math is technically consistent.
+
+What I’d commit
+
+I’d do these in this order:
+
+Commit now
+
+1. Fix B — workingCapitalDrift direction
+This is a straight bug. No debate.
+
+2. Fix D — verdict rationale in the Factors tab
+This gives users an immediate explanation layer:
+
+strongest support
+
+biggest drag
+
+whether entry timing changed the label
+
+whether valuation/momentum overrode quality
+
+This is the fastest trust win.
+
+3. Fix E — winsorize raw ROIC display
+Not for scoring first — for presentation. Raw 6225% in UI or memo makes the whole platform look broken.
+
+Commit next
+
+4. Fix A — de-duplicate factors across families
+This is the real model cleanup. I agree with your direction almost completely.
+
+My preference:
+
+fcfToNetIncome, operatingCfToRevenue, accrualRatio, taxEfficiency → Cash Flow Quality only
+
+rdToRevenue → Innovation only
+
+reinvestmentRate → Capital Efficiency only
+
+operatingLeverage → Capital Efficiency only
+
+deferredRevenueGrowth, stockBasedCompPct → Cash Flow Quality only
+
+insiderOwnership, insiderBuying, institutionalOwnership → Sentiment only
+
+I would also strongly consider moving employeeProductivity and incrementalMargin to a single home rather than keeping them spread around. My vote:
+
+employeeProductivity → Capital Efficiency only
+
+incrementalMargin → Capital Efficiency only
+
+That makes Capital Efficiency the “quality of growth and reinvestment” bucket, which is conceptually clean.
+
+Commit after that
+
+5. Fix C — relabel families honestly
+Do this after the metric moves, so labels match the final architecture.
+
+My preferred naming:
+
+Innovation → Innovation & Reinvestment or R&D Efficiency
+
+Sentiment → Market Signals only if real market/analyst/ownership data exists
+
+otherwise rename it now to something like Market-Adjacent Signals or External Signals (Limited)
+
+Honestly, until insider/analyst data is real, I would avoid the word Sentiment altogether.
+
+What I would change from your proposal
+
+I would go a bit further than you did on contradictions:
+
+1. Add factor coverage / confidence
+
+Each family should show something like:
+
+Coverage: 8/10 signals available
+
+Confidence: High / Medium / Low
+
+Because right now a family score built from 3 surviving inputs looks as authoritative as one built from 12. That is sneaky, even if unintended.
+
+2. Separate “missing” from “neutral”
+
+Do not let null signals quietly disappear as though they had no effect. Users should know whether:
+
+the signal was unavailable
+
+the signal was neutral
+
+the signal was weak/strong
+
+That alone will explain a lot of apparent contradictions.
+
+3. Add contribution view
+
+For each family, calculate top positive and negative contributors. Example:
+
+Profitability driven by ROIC and operating margin
+
+Momentum dragged by RSI and distance above MA50
+
+That is more useful than just dumping raw rows.
+
+4. Stop showing the same raw metric twice without context
+
+For fcfYield, if it remains in two places, the UI must explicitly label the role:
+
+Cash Flow Quality: “cash generation relative to price”
+
+Valuation: “cheapness based on cash flow”
+
+But really, cleaner move is to score it once and reference it elsewhere visually, not count it twice.
+
+On the recommendation logic
+
+I would also remove the best engine bonus, yes.
+
+That bonus is exactly the kind of thing that makes users say, “why did this get promoted?” It rewards spikes and makes the recommendation less interpretable. If you want a “don’t miss exceptional companies” feature, do it explicitly as a rule-based override, not via a hidden blend term.
+
+A cleaner structure is:
+
+compute family scores
+
+compute engine scores from family scores
+
+compute regime-weighted composite
+
+apply entry timing as a gate/modifier
+
+produce verdict
+
+produce explanation from dominant positives and negatives
+
+That is legible.
+
+My recommended implementation order
+
+workingCapitalDrift direction fix
+
+displayed ROIC winsorization
+
+verdict rationale block in Factors tab
+
+shared verdict engine
+
+factor de-duplication across families
+
+family relabeling
+
+coverage/confidence indicators for each family
+
+Constraints I’d set
+
+Fully remove the best engine bonus.
+
+Cap displayed ROIC at 100% with distortion note.
+
+Do not winsorize stored raw source data destructively unless you also keep original raw values somewhere. Better:
+
+raw source value
+
+cleaned/scoring value
+
+displayed value
+
+Do not let a family score render without coverage metadata.
+
+Do not call anything “Sentiment” unless you have actual sentiment-like inputs.
+
+If you want the cleanest one-pass refactor, the best bundle is: A + B + D + E, then shared verdict logic right after. That gets rid of the contradictions users actually feel, not just the ones we can see in code.
