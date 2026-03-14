@@ -1,0 +1,652 @@
+our model doesn’t just have a score problem. It has a story problem.
+
+You’ve got:
+
+3 top-level engines
+
+a verdict layer
+
+an AI memo layer
+
+~120 factor indicators
+
+…and they are not all speaking the same language.
+
+So the user sees:
+
+“great business”
+
+“bad entry”
+
+“strong momentum”
+
+“poor valuation”
+
+“BUY”
+
+“HOLD”
+
+and some random factor panel yelling the opposite
+
+That feels contradictory even when the math is technically doing what it was told.
+
+Like you’re 2
+
+You have 120 tiny judges.
+
+One says:
+“Fast car! Good!”
+
+Another says:
+“Too expensive! Bad!”
+
+Another says:
+“Castle strong! Good!”
+
+Another says:
+“Battery weak! Bad!”
+
+Then the big judge says:
+“ADD.”
+
+And then the AI says:
+“HOLD.”
+
+So the user goes:
+“Mate… who is in charge here?”
+
+That’s the issue.
+
+What is actually happening
+
+From your audit, the contradictions are likely coming from five layers:
+
+1. Too many factors are describing different things
+
+Your 120 indicators are probably mixing together:
+
+business quality
+
+growth
+
+valuation
+
+momentum
+
+balance sheet risk
+
+accounting quality
+
+sentiment
+
+entry timing
+
+maybe estimate revisions / technicals / ownership
+
+These are different questions, not one question.
+
+A company can easily be:
+
+a great business
+
+with bad valuation
+
+and awful near-term entry timing
+
+but great long-term ownership quality
+
+That is not a bug by itself.
+
+The bug is when the UI presents all of them like they are all making the same kind of recommendation.
+
+The core design mistake
+
+You likely have factors that are:
+
+diagnostic
+
+descriptive
+
+predictive
+
+decision-making
+
+all thrown into one bucket.
+
+That creates fake contradiction.
+
+Example
+
+For PLTR:
+
+Growth says: awesome
+
+Fortress says: good
+
+FCF yield says: weak
+
+Entry timing says: not great
+
+Verdict says: ADD
+
+That is actually coherent.
+
+But if your factor labels are things like:
+
+“Bullish”
+
+“Attractive”
+
+“Strong”
+
+“Avoid”
+
+“Overvalued”
+
+“Buy”
+
+then users read them as contradictions instead of dimensions.
+
+You need factor hierarchy
+
+Your 120 indicators should not all be allowed to speak directly to the final recommendation.
+
+You need 3 layers:
+
+Layer A: Observations
+
+These are raw facts or transformed facts.
+
+Examples:
+
+ROIC
+
+gross margin
+
+debt/equity
+
+revenue growth
+
+FCF yield
+
+RSI
+
+insider buying
+
+accrual ratio
+
+These should never make direct recommendations.
+
+Layer B: Interpreted dimensions
+
+Group the raw factors into a few clean buckets:
+
+Quality
+
+Growth
+
+Valuation
+
+Financial strength
+
+Momentum
+
+Entry timing
+
+Risk
+
+This is where your 120 become understandable.
+
+Layer C: Final decision
+
+Only a handful of dimensions should drive verdict:
+
+quality
+
+growth
+
+valuation
+
+timing
+
+risk controls
+
+Not 120 little votes.
+
+Why contradictions happen in your current setup
+Problem 1: Different factors operate on different time horizons
+
+Some factors are:
+
+long-term: ROIC, margins, capital allocation
+
+medium-term: revenue growth, FCF growth
+
+short-term: RSI, MA50, 52-week range
+
+A stock can be:
+
+amazing over 5 years
+
+expensive over 12 months
+
+overbought over 2 weeks
+
+If you don’t label the time horizon clearly, it sounds contradictory.
+
+Problem 2: Some factors are correlated, some are opposites
+
+A lot of your 120 factors probably overlap heavily.
+
+For example:
+
+ROIC
+
+ROE
+
+operating margin
+
+FCF margin
+
+gross margin
+
+asset turnover
+
+These may all be shouting some version of “good business.”
+
+Then one valuation factor says “expensive” and suddenly the model feels split.
+
+That’s not balanced evidence — that’s 6 cousins on one side and 1 judge on the other.
+
+So if you’re not careful, you either:
+
+overweight correlated clusters, or
+
+show lots of repeated green checkmarks that don’t add real information
+
+Problem 3: Factor signs may be inconsistent
+
+This is a classic bug.
+
+Some metrics are good when high:
+
+ROIC
+
+FCF yield
+
+revenue growth
+
+Some are good when low:
+
+debt/equity
+
+P/E
+
+EV/EBITDA
+
+accrual ratio in many cases
+
+If any factor direction is wrong, or inconsistently normalized, you get garbage suggestions that look sophisticated.
+
+Problem 4: Missing data creates false neutrality
+
+You already found:
+
+Yahoo path has no accrual ratio
+
+insider/institutional data is null
+
+leadership conviction falls back to static lookup
+
+So some companies are getting judged with 120 factors, while others are really getting judged on maybe 80 plus some fake defaults.
+
+That creates contradictory output because users think all stocks are being evaluated on the same basis.
+
+They aren’t.
+
+Problem 5: UI language is too recommendation-like
+
+This may be the biggest product issue.
+
+If a factor card says:
+
+“Bullish”
+
+“Weak”
+
+“Attractive”
+
+“Negative”
+
+users naturally think each factor is a mini recommendation.
+
+But many factors should just say:
+
+High
+
+Low
+
+Above median
+
+Expensive vs history
+
+Strong momentum, weak valuation
+
+That’s a description, not a vote.
+
+What the real fix is
+
+You need to stop treating 120 factors as 120 opinions.
+
+Treat them as:
+raw ingredients → grouped signals → one decision engine
+
+The clean architecture
+1. Put every factor into one category only
+
+Every factor should belong to exactly one bucket:
+
+Quality
+
+Growth
+
+Valuation
+
+Financial strength
+
+Momentum
+
+Timing
+
+Risk
+
+Sentiment
+
+No orphan factors. No mystery factors.
+
+2. Tag every factor by role
+
+Each factor should have metadata:
+
+role: descriptive | scoring | gating | explanatory
+
+horizon: short | medium | long
+
+direction: higher_better | lower_better | neutral_range
+
+missing_policy: ignore | impute | penalize
+
+bucket_weight
+
+This is huge.
+
+Because then you can say:
+
+RSI is a short-term timing factor
+
+ROIC is a long-term quality factor
+
+FCF yield is a valuation factor
+
+accrual ratio is a risk/quality factor
+
+Now contradictions become understandable instead of chaotic.
+
+3. Only let some factors drive the verdict
+
+Not every factor should affect the final recommendation.
+
+For example:
+
+70 factors may help create sub-scores
+
+20 may be for display only
+
+10 may act as risk flags
+
+5 may gate the final recommendation
+
+That makes the engine much more stable.
+
+4. Introduce hard conflict rules
+
+A few examples:
+
+No STRONG BUY if valuation is bottom decile and entry timing is poor
+
+No BUY if financial strength is below threshold
+
+No BUY if accounting quality is missing and leverage is high
+
+Cap verdict at ADD when data coverage < 70%
+
+This is how you stop “amazing business, terrible setup, still BUY” weirdness.
+
+How to handle contradictions in the UI
+
+Instead of pretending there’s one truth, show:
+
+Business quality
+
+Strong
+
+Valuation
+
+Stretched
+
+Momentum
+
+Positive
+
+Entry timing
+
+Weak
+
+Overall verdict
+
+ADD — great company, not a great entry today
+
+That is not contradictory. That is useful.
+
+What I suspect is happening with your 120 factors
+
+I’d bet they currently fall into four bad patterns:
+
+1. Duplicate factors pretending to be new information
+
+Example:
+
+ROIC
+
+ROE proxy
+
+Return on capital employed
+
+FCF margin
+
+EBITDA margin
+
+operating margin
+
+These can all say roughly the same thing.
+
+2. Factors with unstable denominators
+
+Example:
+
+ROIC
+
+accrual ratio
+
+debt/equity
+
+per-share growth metrics
+
+These can flip wildly because accounting changed, not economics.
+
+3. Factors that are not comparable across markets/sectors
+
+Example:
+
+banks, insurers, semis, software, pharma, UK shares, ADRs, India listings
+
+One formula won’t behave the same everywhere.
+
+4. Explanation factors being mistaken for recommendation factors
+
+Example:
+
+“innovation”
+
+“leadership conviction”
+
+“AI exposure”
+
+“platform strength”
+
+These may help storytelling, but they shouldn’t quietly swing a verdict unless they are rigorously defined.
+
+My blunt take
+
+Your contradiction issue is probably less about the 120 factors existing, and more about:
+
+too many of them are being surfaced as recommendations instead of context.
+
+That’s why users lose trust.
+
+What I’d fix next, after your six fixes
+Fix 7: Factor registry
+
+Create a single factor_registry.ts or table with:
+
+name
+
+formula
+
+bucket
+
+direction
+
+time horizon
+
+weight
+
+whether it affects verdict
+
+whether it is display-only
+
+missing-data policy
+
+Without this, the model stays fuzzy.
+
+Fix 8: Bucket-level contradiction resolver
+
+Before final verdict, compute:
+
+quality_score
+
+growth_score
+
+valuation_score
+
+timing_score
+
+risk_score
+
+Then generate a structured explanation:
+
+“Strong business quality”
+
+“Strong growth”
+
+“Valuation is rich”
+
+“Timing is neutral”
+
+“Net result: BUY”
+
+This is what users actually want.
+
+Fix 9: Data coverage score
+
+Show something like:
+
+Data completeness: 82%
+
+And if under threshold:
+
+suppress certain factor commentary
+
+downgrade confidence
+
+cap recommendation strength
+
+Fix 10: Separate “company score” from “stock score”
+
+This is massive.
+
+A lot of contradiction disappears when you split:
+
+Company Quality Score = how good is the business?
+
+Stock Opportunity Score = how attractive is the stock now?
+
+Example:
+
+Ferrari: company excellent, stock maybe expensive
+
+Merck: company solid, stock attractive
+
+Palantir: company improving fast, stock hot and expensive
+
+That distinction clears up half the confusion instantly.
+
+The one-line diagnosis
+
+Your model currently has too many mouths and no clear boss.
+
+The one-line cure
+
+Make the 120 factors feed bucketed judgments, and make only the bucketed judgments feed the final recommendation.
+
+What I’d recommend you commit
+
+Your first six fixes are good. I’d add these as mandatory:
+
+Factor registry with metadata
+
+Separate company-quality verdict from stock-opportunity verdict
+
+Display contradictions as dimensions, not conflicts
+
+Confidence / coverage score
+
+Mark factors as scoring vs explanatory
+
+Deduplicate highly correlated factors in displayed output
+
+My priority order
+
+Fix raw metric credibility
+
+Unify verdict engine
+
+Remove dual recommendation logic
+
+Create factor registry
+
+Split company vs stock verdict
+
+Redesign UI text so factors stop sounding like mini buy/sell calls
+
+That gets you from “clever but confusing” to “coherent and trustworthy.”
+
+Paste the factor warehouse / glossary / factor display logic and I’ll tell you exactly which of the 120 should be:
+
+core scoring factors
+
+support factors
+
+display-only
+
+removed entirely
