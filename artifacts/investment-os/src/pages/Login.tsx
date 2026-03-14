@@ -19,10 +19,12 @@ export default function Login() {
   const [contact, setContact] = useState("");
   const [code,    setCode]    = useState("");
   const [busy,    setBusy]    = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
 
   async function handleSendOtp() {
     if (!contact.trim()) return;
     setBusy(true);
+    setDevCode(null);
     try {
       const r = await fetch(`${API}/api/auth/request-otp`, {
         method: "POST",
@@ -31,6 +33,7 @@ export default function Login() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Failed to send OTP");
+      if (data.devCode) setDevCode(data.devCode);
       toast({ title: "Code sent!", description: data.message });
       setStep("otp");
     } catch (e: any) {
@@ -140,9 +143,16 @@ export default function Login() {
                 <ShieldCheck className="w-6 h-6 text-indigo-400" />
               </div>
               <h2 className="text-lg font-semibold text-white text-center mb-1">Check your {method === "email" ? "inbox" : "WhatsApp"}</h2>
-              <p className="text-sm text-slate-400 text-center mb-6">
+              <p className="text-sm text-slate-400 text-center mb-4">
                 Enter the 6-digit code sent to <span className="text-white font-medium">{contact}</span>
               </p>
+
+              {devCode && (
+                <div className="mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-center">
+                  <p className="text-[11px] text-amber-400 uppercase tracking-wider mb-1.5 font-medium">Dev mode — your code</p>
+                  <p className="text-2xl font-bold tracking-[0.3em] text-white font-mono">{devCode}</p>
+                </div>
+              )}
               <Input
                 type="text"
                 inputMode="numeric"

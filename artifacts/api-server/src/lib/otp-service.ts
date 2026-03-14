@@ -1,17 +1,16 @@
 /**
  * OTP Service
- * Generates 6-digit OTPs, stores them in DB, and delivers via:
- *   - Email  → Resend API (env: RESEND_API_KEY)
- *   - WhatsApp → Twilio WhatsApp (Replit connector)
+ * In development: stores the OTP and returns the code directly (no delivery).
+ * In production: delivers via Email (Resend) or WhatsApp (Twilio).
  */
 
 import { db } from "@workspace/db";
 import { otpCodesTable } from "@workspace/db/schema";
 import { eq, and, gt } from "drizzle-orm";
-import { getTwilioClient, getTwilioFromNumber } from "./twilio-client";
 
 const OTP_TTL_MINUTES = 10;
-const APP_NAME = "Investment OS";
+const APP_NAME        = "Investment OS";
+const IS_DEV          = process.env.NODE_ENV !== "production";
 
 function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -19,24 +18,25 @@ function generateCode(): string {
 
 async function storeOtp(contact: string, contactType: "email" | "whatsapp", code: string) {
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
-
-  await db.insert(otpCodesTable).values({
-    contact,
-    contactType,
-    code,
-    expiresAt,
-    used: false,
-  });
-
+  await db.insert(otpCodesTable).values({ contact, contactType, code, expiresAt, used: false });
   return expiresAt;
 }
 
-export async function sendEmailOtp(email: string): Promise<void> {
+/**
+ * Send OTP to an email address.
+ * Returns the generated code (always in dev mode; never in production).
+ */
+export async function sendEmailOtp(email: string): Promise<string | null> {
   const code = generateCode();
   await storeOtp(email, "email", code);
 
+  if (IS_DEV) {
+    console.log(`[Auth][DEV] Email OTP for ${email}: ${code}`);
+    return code;
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error("RESEND_API_KEY is not configured. Please set it in Secrets.");
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured. Please add it in Secrets.");
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -66,13 +66,25 @@ export async function sendEmailOtp(email: string): Promise<void> {
     const err = await response.text();
     throw new Error(`Email send failed: ${err}`);
   }
+
+  return null;
 }
 
-export async function sendWhatsAppOtp(phone: string): Promise<void> {
+/**
+ * Send OTP to a WhatsApp number.
+ * Returns the generated code (always in dev mode; never in production).
+ */
+export async function sendWhatsAppOtp(phone: string): Promise<string | null> {
   const normalised = normalisePhone(phone);
-  const code = generateCode();
+  const code       = generateCode();
   await storeOtp(normalised, "whatsapp", code);
 
+  if (IS_DEV) {
+    console.log(`[Auth][DEV] WhatsApp OTP for ${normalised}: ${code}`);
+    return code;
+  }
+
+  const { getTwilioClient, getTwilioFromNumber } = await import("./twilio-client");
   const client    = await getTwilioClient();
   const fromPhone = await getTwilioFromNumber();
 
@@ -83,6 +95,8 @@ export async function sendWhatsAppOtp(phone: string): Promise<void> {
     to:   `whatsapp:${normalised}`,
     body: `Your ${APP_NAME} login code is: *${code}*\n\nValid for ${OTP_TTL_MINUTES} minutes. Do not share it.`,
   });
+
+  return null;
 }
 
 export async function verifyOtp(
@@ -91,7 +105,7 @@ export async function verifyOtp(
   type: "email" | "whatsapp"
 ): Promise<boolean> {
   const normalised = type === "whatsapp" ? normalisePhone(contact) : contact.toLowerCase().trim();
-  const now = new Date();
+  const now        = new Date();
 
   const rows = await db
     .select()

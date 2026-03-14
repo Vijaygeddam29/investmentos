@@ -52,13 +52,15 @@ router.post("/auth/request-otp", async (req, res) => {
 
     const normalised = normaliseContact(contact, type);
 
-    if (type === "email") {
-      await sendEmailOtp(normalised);
-    } else {
-      await sendWhatsAppOtp(normalised);
-    }
+    const devCode = type === "email"
+      ? await sendEmailOtp(normalised)
+      : await sendWhatsAppOtp(normalised);
 
-    res.json({ ok: true, message: `OTP sent to ${type === "email" ? normalised : contact}` });
+    res.json({
+      ok: true,
+      message: `OTP sent to ${type === "email" ? normalised : contact}`,
+      ...(devCode ? { devCode } : {}),
+    });
   } catch (err: any) {
     console.error("[Auth] request-otp error:", err.message);
     res.status(500).json({ error: err.message });
