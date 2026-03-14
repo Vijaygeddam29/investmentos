@@ -53,12 +53,13 @@ export async function getValueChain(ticker: string): Promise<{
 export async function generateValueChain(
   ticker: string,
   forceRegenerate = false
-): Promise<{ cached: boolean; generatedAt: Date; content: ValueChainContent }> {
+): Promise<{ cached: boolean; fresh: boolean; generatedAt: Date; content: ValueChainContent }> {
   const existing = await getValueChain(ticker);
 
   if (!forceRegenerate && existing.cached && existing.fresh) {
     return {
       cached: true,
+      fresh: true,
       generatedAt: existing.generatedAt!,
       content: existing.content!,
     };
@@ -151,7 +152,7 @@ Be specific. Name things. Avoid vague phrases like "strong management" or "growi
       content: parsed,
     });
 
-    return { cached: false, generatedAt: now, content: parsed };
+    return { cached: false, fresh: true, generatedAt: now, content: parsed };
   } catch (err) {
     const fallback = buildFallback(name, sector, industry, metrics, scores);
     const now = new Date();
@@ -163,7 +164,7 @@ Be specific. Name things. Avoid vague phrases like "strong management" or "growi
       generatedAt: now,
       content: fallback,
     });
-    return { cached: false, generatedAt: now, content: fallback };
+    return { cached: false, fresh: true, generatedAt: now, content: fallback };
   }
 }
 
