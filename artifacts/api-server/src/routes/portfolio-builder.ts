@@ -6,7 +6,7 @@ import {
   companiesTable,
   financialMetricsTable,
 } from "@workspace/db/schema";
-import { eq, desc, inArray, gte, and, isNotNull } from "drizzle-orm";
+import { eq, desc, inArray, gte, and, isNotNull, ilike, or, sql } from "drizzle-orm";
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 
 const router: IRouter = Router();
@@ -452,6 +452,80 @@ router.get("/portfolio/builder/countries", async (_req, res) => {
   } catch (err) {
     console.error("[PortfolioBuilder] countries error", err);
     res.status(500).json({ error: "Failed to fetch countries" });
+  }
+});
+
+router.get("/portfolio/builder/search", async (req, res) => {
+  try {
+    const q = ((req.query.q as string) ?? "").trim();
+    if (!q || q.length < 1) {
+      res.json({ results: [] });
+      return;
+    }
+
+    const pattern = `%${q}%`;
+    const matches = await db
+      .select()
+      .from(companiesTable)
+      .where(
+        or(
+          ilike(companiesTable.ticker, pattern),
+          ilike(companiesTable.name, pattern)
+        )
+      )
+      .limit(20);
+
+    if (!matches.length) {
+      res.json({ results: [] });
+      return;
+    }
+
+    const matchTickers = matches.map((c) => c.ticker);
+
+    const [latestRow] = await db
+      .select({ date: factorSnapshotsTable.date })
+      .from(factorSnapshotsTable)
+      .orderBy(desc(factorSnapshotsTable.date))
+      .limit(1);
+
+    let snapMap: Record<string, any> = {};
+    if (latestRow) {
+      const snaps = await db
+        .select()
+        .from(factorSnapshotsTable)
+        .where(
+          and(
+            eq(factorSnapshotsTable.date, latestRow.date),
+            inArray(factorSnapshotsTable.ticker, matchTickers)
+          )
+        );
+      for (const s of snaps) snapMap[s.ticker] = s;
+    }
+
+    const results = matches.map((c) => {
+      const s = snapMap[c.ticker];
+      return {
+        ticker: c.ticker,
+        name: c.name ?? c.ticker,
+        sector: c.sector ?? "Unknown",
+        country: normalizeCountry(c.country),
+        marketCap: s?.marketCap ?? null,
+        fortressScore: s?.fortressScore ?? null,
+        rocketScore: s?.rocketScore ?? null,
+        waveScore: s?.waveScore ?? null,
+        portfolioNetScore: (s as any)?.portfolioNetScore ?? null,
+        companyQualityScore: (s as any)?.companyQualityScore ?? null,
+        stockOpportunityScore: (s as any)?.stockOpportunityScore ?? null,
+        expectationScore: (s as any)?.expectationScore ?? null,
+        mispricingScore: (s as any)?.mispricingScore ?? null,
+        fragilityScore: (s as any)?.fragilityScore ?? null,
+      };
+    });
+
+    res.json({ results });
+  } catch (err) {
+    console.error("[PortfolioBuilder] search error", err);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 

@@ -3,11 +3,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2, AlertTriangle, CheckCircle2, TrendingDown } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2, AlertTriangle, CheckCircle2, TrendingDown, Brain } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { EntryExitPanel } from "./EntryExitPanel";
-import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
 import { ValueChainTab } from "./ValueChainTab";
@@ -206,14 +204,11 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
 
             <ScrollArea className="flex-1">
               <div className="p-6">
-                <Tabs defaultValue="thesis" className="w-full">
-                  <TabsList className="w-full grid grid-cols-7 mb-6 bg-secondary/50 text-[11px]">
-                    <TabsTrigger value="thesis" className="text-[11px] flex items-center gap-1">
-                      <Award className="w-3 h-3 text-violet-400" />Thesis
+                <Tabs defaultValue="intelligence" className="w-full">
+                  <TabsList className="w-full grid grid-cols-4 mb-6 bg-secondary/50 text-[11px]">
+                    <TabsTrigger value="intelligence" className="text-[11px] flex items-center gap-1">
+                      <Brain className="w-3 h-3 text-violet-400" />Intelligence
                     </TabsTrigger>
-                    <TabsTrigger value="overview" className="text-[11px]">AI Memo</TabsTrigger>
-                    <TabsTrigger value="factors" className="text-[11px]">Factors</TabsTrigger>
-                    <TabsTrigger value="valuation" className="text-[11px]">Entry/Exit</TabsTrigger>
                     <TabsTrigger value="charts" className="text-[11px] flex items-center gap-1">
                       <BarChart2 className="w-3 h-3" />Charts
                     </TabsTrigger>
@@ -228,178 +223,13 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* ── Investment Thesis ── */}
-                  <TabsContent value="thesis" className="animate-in fade-in duration-300">
+                  {/* ── Intelligence (6-Layer) ── */}
+                  <TabsContent value="intelligence" className="animate-in fade-in duration-300">
                     <InvestmentThesisTab
                       company={company}
                       scores={scores}
                       latestMetrics={latestMetrics}
                       countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
-                    />
-                  </TabsContent>
-
-                  {/* ── AI Memo ── */}
-                  <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
-                    {/* Compounder breakdown card */}
-                    {compounderScore != null && (
-                      <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                          <Award className="w-3.5 h-3.5" />Compounder Score — {compounderScore}/100
-                          <span className={`ml-1 text-[9px] px-1.5 py-0.5 rounded font-medium border border-current ${compounderColor}`}>{compounderRating}</span>
-                        </h4>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                          {[
-                            { label: "Growth",             w: "17%", score: scores?.growthScore },
-                            { label: "Profitability",      w: "13%", score: scores?.profitabilityScore },
-                            { label: "Capital Efficiency", w: "13%", score: scores?.capitalEfficiencyScore },
-                            { label: "Cash Flow Quality",  w: "13%", score: scores?.cashFlowQualityScore },
-                            { label: "Financial Strength", w: "12%", score: scores?.financialStrengthScore },
-                            { label: "Sentiment",          w: "12%", score: scores?.sentimentScore },
-                            { label: "Momentum",           w: "13%", score: scores?.momentumScore },
-                            { label: "Leadership",         w: "7%",  score: undefined },
-                          ].map(({ label, w, score }) => (
-                            <div key={label} className="space-y-0.5">
-                              <div className="flex justify-between text-[10px]">
-                                <span className="text-muted-foreground">{label} <span className="opacity-50">({w})</span></span>
-                                <span className="font-mono text-foreground">{score != null ? score.toFixed(2) : "—"}</span>
-                              </div>
-                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${score != null && score >= 0.7 ? "bg-emerald-400" : score != null && score >= 0.5 ? "bg-amber-400" : "bg-red-400"}`}
-                                  style={{ width: `${score != null ? score * 100 : 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {verdict ? (
-                      <div className="rounded-xl border border-border bg-gradient-to-br from-secondary/50 to-background p-5 shadow-lg relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                          <TrendingUp className="w-32 h-32" />
-                        </div>
-                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                          <span className="w-2 h-6 bg-primary rounded-full block" />
-                          AI Research Memo
-                        </h3>
-                        <div className="mb-4 flex items-center gap-3">
-                          <Badge className={
-                            verdict.verdict.toUpperCase() === 'BUY' ? 'bg-success text-white' :
-                            verdict.verdict.toUpperCase() === 'SELL' ? 'bg-destructive text-white' :
-                            'bg-warning text-warning-foreground'
-                          }>
-                            {verdict.verdict.toUpperCase()}
-                          </Badge>
-                          {verdict.classification && (
-                            <span className="text-xs font-mono text-muted-foreground border border-border px-2 py-0.5 rounded">
-                              {verdict.classification}
-                            </span>
-                          )}
-                        </div>
-                        <div className="prose prose-invert prose-sm max-w-none text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                          {verdict.memo}
-                        </div>
-                        <div className="mt-4 text-[10px] font-mono text-muted-foreground/50 text-right">
-                          Generated: {new Date(verdict.date).toLocaleString()}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No AI memo generated yet. Run the pipeline.
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* ── 120 Factors ── */}
-                  <TabsContent value="factors" className="animate-in fade-in duration-300 space-y-4">
-                    {/* Verdict rationale card */}
-                    {verdictData && (
-                      <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded border font-mono ${
-                              verdictData.verdict === "STRONG BUY" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" :
-                              verdictData.verdict === "BUY"        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" :
-                              verdictData.verdict === "ADD"        ? "bg-blue-500/15 border-blue-500/30 text-blue-400" :
-                              verdictData.verdict === "HOLD"       ? "bg-amber-500/15 border-amber-500/30 text-amber-400" :
-                              verdictData.verdict === "TRIM"       ? "bg-orange-500/15 border-orange-500/30 text-orange-400" :
-                              "bg-red-500/15 border-red-500/30 text-red-400"
-                            }`}>
-                              {verdictData.verdict}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              base {verdictData.base.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-[10px]">
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              {verdictData.rationale.topStrength}
-                            </span>
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <TrendingDown className="w-3 h-3 text-red-400" />
-                              {verdictData.rationale.topDrag}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          {verdictData.rationale.sentence}
-                        </p>
-                        {/* Quality vs Opportunity bar */}
-                        {(scores as any)?.companyQualityScore != null && (scores as any)?.stockOpportunityScore != null && (
-                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
-                            <div>
-                              <div className="flex justify-between text-[10px] mb-1">
-                                <span className="text-muted-foreground">Company Quality</span>
-                                <span className="font-mono text-foreground">{((scores as any).companyQualityScore * 100).toFixed(0)}</span>
-                              </div>
-                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <div className="h-full bg-violet-400 rounded-full" style={{ width: `${(scores as any).companyQualityScore * 100}%` }} />
-                              </div>
-                            </div>
-                            <div>
-                              <div className="flex justify-between text-[10px] mb-1">
-                                <span className="text-muted-foreground">Stock Opportunity</span>
-                                <span className="font-mono text-foreground">{((scores as any).stockOpportunityScore * 100).toFixed(0)}</span>
-                              </div>
-                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(scores as any).stockOpportunityScore * 100}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Risk flag amber banner */}
-                    {verdictData?.riskFlags && verdictData.riskFlags.length > 0 && (
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span className="text-xs font-semibold text-amber-400">Hard Gates Active — Verdict Capped</span>
-                        </div>
-                        {verdictData.riskFlags.map((flag, i) => (
-                          <p key={i} className="text-[11px] text-amber-300/80 pl-5">{flag}</p>
-                        ))}
-                      </div>
-                    )}
-
-                    {latestMetrics ? (
-                      <FactorAccordion metrics={latestMetrics} scores={scores} familyCoverage={familyCoverage} />
-                    ) : (
-                      <div className="p-8 text-center border border-dashed border-border rounded-xl text-muted-foreground">
-                        No factor data available. Run the pipeline first.
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* ── Entry/Exit Intelligence ── */}
-                  <TabsContent value="valuation" className="animate-in fade-in duration-300">
-                    <EntryExitPanel
-                      entryTimingScore={entryTimingScore ?? null}
-                      momentumIndicators={(data as any)?.momentumIndicators ?? null}
-                      valuation={valuation ?? null}
                     />
                   </TabsContent>
 

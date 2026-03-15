@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
@@ -7,7 +7,8 @@ import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
   TrendingUp, Globe, ChevronDown, ChevronRight, AlertCircle,
-  Zap, AlertTriangle, Sparkles, Crown, Star, Eye, Target
+  Zap, AlertTriangle, Sparkles, Crown, Star, Eye, Target,
+  Plus, Search, X, Trash2, Lock, Unlock, Brain, Layers
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -56,6 +57,27 @@ interface CountryOption {
   count: number;
 }
 
+interface SearchResult {
+  ticker: string;
+  name: string;
+  sector: string;
+  country: string;
+  marketCap: number | null;
+  fortressScore: number | null;
+  rocketScore: number | null;
+  waveScore: number | null;
+  portfolioNetScore: number | null;
+  companyQualityScore: number | null;
+  stockOpportunityScore: number | null;
+  expectationScore: number | null;
+  mispricingScore: number | null;
+  fragilityScore: number | null;
+}
+
+interface ManualHolding extends BuilderHolding {
+  isManual: boolean;
+}
+
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "United Kingdom": "🇬🇧", India: "🇮🇳",
   Germany: "🇩🇪", France: "🇫🇷", Italy: "🇮🇹", Japan: "🇯🇵",
@@ -65,6 +87,15 @@ const COUNTRY_FLAGS: Record<string, string> = {
   Uruguay: "🇺🇾",
 };
 
+const LAYER_DEFS = [
+  { key: "companyQualityScore",   label: "Quality",     short: "Q",  color: "bg-violet-500",  textColor: "text-violet-400" },
+  { key: "stockOpportunityScore", label: "Opportunity",  short: "O",  color: "bg-blue-500",    textColor: "text-blue-400" },
+  { key: "expectationScore",      label: "Expectation",  short: "E",  color: "bg-cyan-500",    textColor: "text-cyan-400" },
+  { key: "mispricingScore",       label: "Mispricing",   short: "M",  color: "bg-amber-500",   textColor: "text-amber-400" },
+  { key: "fragilityScore",        label: "Fragility",    short: "F",  color: "bg-red-500",     textColor: "text-red-400" },
+  { key: "portfolioNetScore",     label: "Net Score",    short: "N",  color: "bg-emerald-500", textColor: "text-emerald-400" },
+] as const;
+
 function formatMktCap(v?: number | null) {
   if (v == null) return "—";
   if (v >= 1000) return `${(v / 1000).toFixed(1)}T`;
@@ -72,15 +103,19 @@ function formatMktCap(v?: number | null) {
   return `${(v * 1000).toFixed(0)}M`;
 }
 
-function ScoreMini({ value, color }: { value: number | null; color: string }) {
-  if (value == null) return <span className="text-muted-foreground text-xs">—</span>;
+function LayerBar({ value, color }: { value: number | null; color: string }) {
+  if (value == null) return <span className="text-muted-foreground text-[10px]">—</span>;
   const pct = Math.round(value * 100);
+  const barColor =
+    pct >= 70 ? "bg-emerald-500" :
+    pct >= 50 ? "bg-amber-500" :
+    "bg-red-500";
   return (
-    <div className="flex items-center gap-1.5 min-w-[64px]">
-      <div className="h-1.5 w-14 bg-muted/40 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div className="flex items-center gap-1 min-w-[48px]">
+      <div className="h-1 w-8 bg-muted/40 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="font-mono text-xs text-muted-foreground">{pct}</span>
+      <span className="font-mono text-[10px] text-muted-foreground w-5 text-right">{pct}</span>
     </div>
   );
 }
@@ -96,19 +131,166 @@ function SummaryCard({
   const tier = val >= 70 ? "top-tier" : val >= 50 ? "solid" : "developing";
   const tierColor = val >= 70 ? "text-emerald-400" : val >= 50 ? "text-amber-400" : "text-red-400";
   return (
-    <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2">
+    <div className="bg-card border border-border rounded-xl p-3 flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <Icon className={`w-4 h-4 ${color}`} />
-        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</span>
+        <Icon className={`w-3.5 h-3.5 ${color}`} />
+        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}</span>
       </div>
-      <div className="flex items-end gap-2">
-        <span className={`text-3xl font-bold font-mono ${tierColor}`}>{val}</span>
-        <span className="text-xs text-muted-foreground mb-1">/100</span>
+      <div className="flex items-end gap-1.5">
+        <span className={`text-2xl font-bold font-mono ${tierColor}`}>{val}</span>
+        <span className="text-[10px] text-muted-foreground mb-0.5">/100</span>
       </div>
-      <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">
+      <div className="h-1 w-full bg-muted/30 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color.replace("text-", "bg-").replace("400", "500")}`} style={{ width: `${val}%` }} />
       </div>
-      <span className={`text-xs font-medium ${tierColor}`}>{tier}</span>
+    </div>
+  );
+}
+
+function IntelligenceSummaryCard({ holdings, weights }: { holdings: ManualHolding[]; weights: Record<string, number> }) {
+  if (!holdings.length) return null;
+
+  const totalWeight = Object.values(weights).reduce((s, w) => s + w, 0) || 1;
+
+  const layerAvgs = LAYER_DEFS.map((layer) => {
+    let weightedSum = 0;
+    let totalW = 0;
+    for (const h of holdings) {
+      const val = (h as any)[layer.key] as number | null;
+      const w = weights[h.ticker] ?? 0;
+      if (val != null && w > 0) {
+        weightedSum += val * w;
+        totalW += w;
+      }
+    }
+    return {
+      ...layer,
+      avg: totalW > 0 ? Math.round((weightedSum / totalW) * 100) : null,
+    };
+  });
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Brain className="w-4 h-4 text-violet-400" />
+        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Portfolio Intelligence</h3>
+        <span className="text-[10px] text-muted-foreground ml-auto">weighted avg across {holdings.length} holdings</span>
+      </div>
+      <div className="grid grid-cols-6 gap-2">
+        {layerAvgs.map((l) => (
+          <div key={l.key} className="text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">{l.label}</div>
+            <div className={`text-lg font-bold font-mono ${
+              l.avg == null ? "text-muted-foreground" :
+              l.avg >= 70 ? "text-emerald-400" :
+              l.avg >= 50 ? "text-amber-400" : "text-red-400"
+            }`}>
+              {l.avg ?? "—"}
+            </div>
+            {l.avg != null && (
+              <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden mt-1">
+                <div className={`h-full rounded-full ${l.color}`} style={{ width: `${l.avg}%` }} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AddStockPanel({
+  onAdd,
+  existingTickers,
+}: {
+  onAdd: (result: SearchResult) => void;
+  existingTickers: Set<string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: searchData, isLoading: searching } = useQuery<{ results: SearchResult[] }>({
+    queryKey: ["portfolio-search", query],
+    queryFn: () => customFetch(`/api/portfolio/builder/search?q=${encodeURIComponent(query)}`),
+    enabled: query.length >= 1,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+
+  const results = (searchData?.results ?? []).filter((r) => !existingTickers.has(r.ticker));
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-primary/40 text-primary text-xs font-medium hover:bg-primary/5 transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add Stock
+      </button>
+      {open && (
+        <div className="absolute top-10 right-0 w-80 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search by ticker or name..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+            />
+            <button onClick={() => { setOpen(false); setQuery(""); }} className="text-muted-foreground hover:text-foreground">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {searching && (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1" />Searching...
+              </div>
+            )}
+            {!searching && query.length >= 1 && results.length === 0 && (
+              <div className="p-4 text-center text-xs text-muted-foreground">No results found</div>
+            )}
+            {results.map((r) => {
+              const net = r.portfolioNetScore != null ? Math.round(r.portfolioNetScore * 100) : null;
+              return (
+                <button
+                  key={r.ticker}
+                  onClick={() => { onAdd(r); setQuery(""); setOpen(false); }}
+                  className="w-full px-3 py-2.5 text-left hover:bg-muted/20 transition-colors border-b border-border/30 last:border-0"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CountryFlag country={r.country} />
+                      <span className="font-mono font-semibold text-sm text-foreground">{r.ticker}</span>
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px]">{r.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {net != null && (
+                        <span className={`font-mono text-xs font-bold ${
+                          net >= 70 ? "text-emerald-400" : net >= 50 ? "text-amber-400" : "text-red-400"
+                        }`}>
+                          Net {net}
+                        </span>
+                      )}
+                      <Plus className="w-3 h-3 text-primary" />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {r.sector} · {formatMktCap(r.marketCap)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -126,6 +308,11 @@ export default function PortfolioBuilder() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen]         = useState(false);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+
+  const [manualWeights, setManualWeights] = useState<Record<string, number>>({});
+  const [lockedWeights, setLockedWeights] = useState<Set<string>>(new Set());
+  const [manualMode, setManualMode]       = useState(false);
+  const [manualHoldings, setManualHoldings] = useState<ManualHolding[]>([]);
 
   const { data: countriesData } = useQuery<{ countries: CountryOption[] }>({
     queryKey: ["portfolio-builder-countries"],
@@ -151,20 +338,126 @@ export default function PortfolioBuilder() {
     staleTime: 5 * 60 * 1000,
   });
 
+  useEffect(() => {
+    if (data?.holdings?.length && !manualMode) {
+      const apiHoldings: ManualHolding[] = data.holdings.map((h) => ({ ...h, isManual: false }));
+      setManualHoldings(apiHoldings);
+      const wMap: Record<string, number> = {};
+      for (const h of data.holdings) {
+        wMap[h.ticker] = parseFloat((h.weight * 100).toFixed(1));
+      }
+      setManualWeights(wMap);
+      setLockedWeights(new Set());
+    }
+  }, [data?.holdings]);
+
   function handleBuild() {
+    setManualMode(false);
     setBuildParams({ strategy, size, weightMethod, sectorCap, country, marketCap });
     setHasBuilt(true);
   }
 
-  const holdings = data?.holdings ?? [];
+  const handleWeightChange = useCallback((ticker: string, newVal: string) => {
+    const parsed = parseFloat(newVal);
+    if (isNaN(parsed) || parsed < 0) return;
+
+    setManualMode(true);
+    setManualWeights((prev) => {
+      const next = { ...prev, [ticker]: parsed };
+      return next;
+    });
+  }, []);
+
+  const redistributeWeights = useCallback(() => {
+    setManualWeights((prev) => {
+      const next = { ...prev };
+      const lockedTotal = Array.from(lockedWeights).reduce((s, t) => s + (next[t] ?? 0), 0);
+      const unlockedTickers = Object.keys(next).filter((t) => !lockedWeights.has(t));
+      const remaining = Math.max(0, 100 - lockedTotal);
+
+      if (unlockedTickers.length === 0) return next;
+      const each = parseFloat((remaining / unlockedTickers.length).toFixed(1));
+      for (const t of unlockedTickers) {
+        next[t] = each;
+      }
+      return next;
+    });
+  }, [lockedWeights]);
+
+  const toggleLock = useCallback((ticker: string) => {
+    setLockedWeights((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  }, []);
+
+  const removeHolding = useCallback((ticker: string) => {
+    setManualMode(true);
+    setManualHoldings((prev) => prev.filter((h) => h.ticker !== ticker));
+    setManualWeights((prev) => {
+      const next = { ...prev };
+      delete next[ticker];
+      return next;
+    });
+    setLockedWeights((prev) => {
+      const next = new Set(prev);
+      next.delete(ticker);
+      return next;
+    });
+  }, []);
+
+  const handleAddStock = useCallback((result: SearchResult) => {
+    setManualMode(true);
+    const newHolding: ManualHolding = {
+      rank: manualHoldings.length + 1,
+      ticker: result.ticker,
+      name: result.name,
+      sector: result.sector,
+      country: result.country,
+      weight: 0,
+      compositeScore: result.portfolioNetScore ?? 0,
+      fortressScore: result.fortressScore,
+      rocketScore: result.rocketScore,
+      waveScore: result.waveScore,
+      entryScore: null,
+      marketCap: result.marketCap,
+      volatility: null,
+      highValuation: false,
+      innovationTier: null,
+      rationale: "Manually added",
+      portfolioNetScore: result.portfolioNetScore,
+      expectationScore: result.expectationScore,
+      mispricingScore: result.mispricingScore,
+      fragilityScore: result.fragilityScore,
+      companyQualityScore: result.companyQualityScore,
+      stockOpportunityScore: result.stockOpportunityScore,
+      positionBand: null,
+      isManual: true,
+    };
+    setManualHoldings((prev) => [...prev, newHolding]);
+    setManualWeights((prev) => ({ ...prev, [result.ticker]: 0 }));
+  }, [manualHoldings]);
+
+  const holdings = manualHoldings;
   const score    = data?.portfolioScore;
   const regimeInfo = data?.regime;
   const isPowerLaw = (buildParams?.weightMethod as string) === "power";
+
+  const totalWeight = useMemo(() =>
+    Object.values(manualWeights).reduce((s, w) => s + w, 0),
+    [manualWeights]
+  );
+
+  const weightDelta = useMemo(() => parseFloat((100 - totalWeight).toFixed(1)), [totalWeight]);
 
   const sectorCounts: Record<string, number> = {};
   for (const h of holdings) {
     sectorCounts[h.sector] = (sectorCounts[h.sector] ?? 0) + 1;
   }
+
+  const existingTickers = useMemo(() => new Set(holdings.map((h) => h.ticker)), [holdings]);
 
   const countryOptions = countriesData?.countries ?? [];
 
@@ -265,7 +558,7 @@ export default function PortfolioBuilder() {
                     { id: "equal", label: "Equal weight",          desc: "Each stock gets the same allocation." },
                     { id: "score", label: "Score-proportional",    desc: "Higher scorers get a larger slice." },
                     { id: "risk",  label: "Risk-adjusted",         desc: "Score ÷ volatility — reward per unit risk." },
-                    { id: "power", label: "Power Law (α=1.8)",     desc: "Regime-composite, sector-normalised, valuation-checked. Concentrates in highest-conviction names." },
+                    { id: "power", label: "Power Law (α=1.8)",     desc: "Regime-composite, sector-normalised, valuation-checked." },
                   ] as const).map(({ id, label, desc }) => (
                     <button
                       key={id}
@@ -442,15 +735,44 @@ export default function PortfolioBuilder() {
               </div>
             )}
 
+            {!isLoading && hasBuilt && holdings.length > 0 && (
+              <IntelligenceSummaryCard holdings={holdings} weights={manualWeights} />
+            )}
+
             {!isLoading && hasBuilt && data && (
-              <div className="flex items-center gap-4 text-xs text-muted-foreground px-1">
-                <div className="flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>Universe: <strong className="text-foreground">{data.universeSize}</strong> eligible stocks</span>
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Universe: <strong className="text-foreground">{data.universeSize}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Selected: <strong className="text-foreground">{holdings.length}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" />
+                    <span className={`font-mono font-semibold ${
+                      Math.abs(weightDelta) < 0.2 ? "text-emerald-400" : "text-amber-400"
+                    }`}>
+                      {totalWeight.toFixed(1)}% allocated
+                    </span>
+                    {Math.abs(weightDelta) >= 0.2 && (
+                      <span className="text-amber-400 text-[10px]">({weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(1)}% to go)</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Selected: <strong className="text-foreground">{holdings.length}</strong></span>
+                <div className="flex items-center gap-2">
+                  {manualMode && (
+                    <button
+                      onClick={redistributeWeights}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-colors"
+                    >
+                      <Target className="w-3 h-3" />
+                      Even out unlocked
+                    </button>
+                  )}
+                  <AddStockPanel onAdd={handleAddStock} existingTickers={existingTickers} />
                 </div>
               </div>
             )}
@@ -461,25 +783,25 @@ export default function PortfolioBuilder() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/20">
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3 w-8">#</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Ticker</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Company</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Sector</th>
-                        <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Score</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Fortress</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Rocket</th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Wave</th>
-                        <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <span className="inline-flex items-center gap-1"><Crown className="w-3 h-3 text-violet-400" />Net</span>
+                        <th className="text-left text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 w-6">#</th>
+                        <th className="text-left text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5">Ticker</th>
+                        <th className="text-left text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5">Company</th>
+                        <th className="text-left text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5">Sector</th>
+                        {LAYER_DEFS.map((l) => (
+                          <th key={l.key} className="text-center text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-1 py-2.5" title={l.label}>
+                            <span className={l.textColor}>{l.short}</span>
+                          </th>
+                        ))}
+                        <th className="text-left text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5">Band</th>
+                        <th className="text-right text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5">Mkt Cap</th>
+                        <th className="text-right text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-2 py-2.5 min-w-[90px]">
+                          Weight %
                         </th>
-                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Band</th>
-                        <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Mkt Cap</th>
-                        <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Weight</th>
+                        <th className="text-center text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-1 py-2.5 w-6"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {(() => {
-                        // Group holdings by country, inserting separator rows
                         const rows: React.ReactNode[] = [];
                         let lastCountry: string | null = null;
 
@@ -488,18 +810,17 @@ export default function PortfolioBuilder() {
                           const countryFlag = COUNTRY_FLAGS[countryName] ?? "🌐";
 
                           if (countryName !== lastCountry) {
-                            // Calculate total weight and count for this country group
                             const countryHoldings = holdings.filter(x => (x.country || "Unknown") === countryName);
-                            const totalWeight = countryHoldings.reduce((s, x) => s + x.weight, 0);
+                            const totalW = countryHoldings.reduce((s, x) => s + (manualWeights[x.ticker] ?? 0), 0);
                             rows.push(
                               <tr key={`sep-${countryName}`} className="bg-muted/15 border-y border-border/40">
-                                <td colSpan={12} className="px-4 py-1.5">
+                                <td colSpan={13} className="px-3 py-1.5">
                                   <div className="flex items-center gap-2">
                                     <span className="text-base leading-none">{countryFlag}</span>
                                     <span className="text-[11px] font-semibold text-foreground">{countryName}</span>
                                     <span className="text-[10px] text-muted-foreground">{countryHoldings.length} stocks</span>
                                     <span className="text-[10px] text-muted-foreground ml-1">
-                                      total weight <strong className="text-foreground font-mono">{(totalWeight * 100).toFixed(1)}%</strong>
+                                      total <strong className="text-foreground font-mono">{totalW.toFixed(1)}%</strong>
                                     </span>
                                   </div>
                                 </td>
@@ -508,104 +829,107 @@ export default function PortfolioBuilder() {
                             lastCountry = countryName;
                           }
 
-                        const composite = Math.round(h.compositeScore * 100);
-                        const compColor =
-                          composite >= 70 ? "text-emerald-400" :
-                          composite >= 50 ? "text-amber-400" :
-                                           "text-red-400";
-                        const netPct = h.portfolioNetScore != null ? Math.round(h.portfolioNetScore * 100) : null;
-                        const pb = h.positionBand;
-                        const bandColor =
-                          pb?.band === "core"      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" :
-                          pb?.band === "standard"  ? "bg-blue-500/15 text-blue-400 border-blue-500/20" :
-                          pb?.band === "starter"   ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
-                          pb?.band === "tactical"  ? "bg-orange-500/15 text-orange-400 border-orange-500/20" :
-                          pb?.band === "watchlist" ? "bg-secondary text-muted-foreground border-border/40" :
-                                                      "bg-secondary text-muted-foreground border-border/40";
-                        const netColor =
-                          netPct != null && netPct >= 75 ? "text-emerald-400" :
-                          netPct != null && netPct >= 60 ? "text-blue-400" :
-                          netPct != null && netPct >= 45 ? "text-amber-400" :
-                          netPct != null && netPct >= 30 ? "text-orange-400" :
-                                                           "text-red-400";
-                        rows.push(
-                          <tr
-                            key={h.ticker}
-                            className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors ${
-                              i % 2 === 0 ? "" : "bg-muted/5"
-                            }`}
-                            onClick={() => { setSelectedTicker(h.ticker); setDrawerOpen(true); }}
-                          >
-                            <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{h.rank}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <CountryFlag country={h.country} />
-                                <span className="font-mono font-semibold text-foreground text-sm">{h.ticker}</span>
-                                {h.innovationTier && (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
-                                    <Sparkles className="w-2.5 h-2.5" />
-                                    {h.innovationTier}
+                          const netPct = h.portfolioNetScore != null ? Math.round(h.portfolioNetScore * 100) : null;
+                          const pb = h.positionBand;
+                          const bandColor =
+                            pb?.band === "core"      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" :
+                            pb?.band === "standard"  ? "bg-blue-500/15 text-blue-400 border-blue-500/20" :
+                            pb?.band === "starter"   ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
+                            pb?.band === "tactical"  ? "bg-orange-500/15 text-orange-400 border-orange-500/20" :
+                            pb?.band === "watchlist" ? "bg-secondary text-muted-foreground border-border/40" :
+                                                        "bg-secondary text-muted-foreground border-border/40";
+                          const curWeight = manualWeights[h.ticker] ?? 0;
+                          const isLocked = lockedWeights.has(h.ticker);
+
+                          rows.push(
+                            <tr
+                              key={h.ticker}
+                              className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${
+                                i % 2 === 0 ? "" : "bg-muted/5"
+                              } ${h.isManual ? "border-l-2 border-l-primary/40" : ""}`}
+                            >
+                              <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono">{i + 1}</td>
+                              <td
+                                className="px-3 py-2.5 cursor-pointer"
+                                onClick={() => { setSelectedTicker(h.ticker); setDrawerOpen(true); }}
+                              >
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <CountryFlag country={h.country} />
+                                  <span className="font-mono font-semibold text-foreground text-sm hover:text-primary transition-colors">{h.ticker}</span>
+                                  {h.innovationTier && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[9px] font-semibold">
+                                      <Sparkles className="w-2 h-2" />
+                                      {h.innovationTier}
+                                    </span>
+                                  )}
+                                  {h.highValuation && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[9px] font-semibold">
+                                      <AlertTriangle className="w-2 h-2" />
+                                      Rich
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className="text-xs text-muted-foreground line-clamp-1 max-w-[120px]">{h.name}</span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">{h.sector}</Badge>
+                              </td>
+                              {LAYER_DEFS.map((l) => (
+                                <td key={l.key} className="px-1 py-2.5">
+                                  <LayerBar value={(h as any)[l.key]} color={l.color} />
+                                </td>
+                              ))}
+                              <td className="px-3 py-2.5">
+                                {pb ? (
+                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${bandColor}`}>
+                                    <Star className="w-2 h-2" />
+                                    {pb.label}
                                   </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-[10px]">—</span>
                                 )}
-                                {h.highValuation && (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px] font-semibold">
-                                    <AlertTriangle className="w-2.5 h-2.5" />
-                                    Rich
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <span className="text-xs text-muted-foreground line-clamp-1 max-w-[160px]">{h.name}</span>
-                                {h.rationale && (
-                                  <div className="text-[10px] text-muted-foreground/70 mt-0.5 line-clamp-1">{h.rationale}</div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className="text-xs font-normal">{h.sector}</Badge>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className={`font-mono font-bold text-sm ${compColor}`}>{composite}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <ScoreMini value={h.fortressScore} color="bg-blue-500" />
-                            </td>
-                            <td className="px-4 py-3">
-                              <ScoreMini value={h.rocketScore} color="bg-orange-500" />
-                            </td>
-                            <td className="px-4 py-3">
-                              <ScoreMini value={h.waveScore} color="bg-cyan-500" />
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {netPct != null ? (
-                                <span className={`font-mono font-bold text-sm ${netColor}`}>{netPct}</span>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {pb ? (
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${bandColor}`}>
-                                  <Star className="w-2.5 h-2.5" />
-                                  {pb.label}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right text-xs font-mono text-muted-foreground">
-                              {formatMktCap(h.marketCap)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className="font-mono text-xs font-semibold text-foreground">
-                                {(h.weight * 100).toFixed(1)}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                        }); // end holdings.forEach
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-[10px] font-mono text-muted-foreground">
+                                {formatMktCap(h.marketCap)}
+                              </td>
+                              <td className="px-2 py-2.5 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleLock(h.ticker); }}
+                                    className={`p-0.5 rounded transition-colors ${isLocked ? "text-amber-400" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+                                    title={isLocked ? "Unlock weight" : "Lock weight"}
+                                  >
+                                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={0.1}
+                                    value={curWeight}
+                                    onChange={(e) => handleWeightChange(h.ticker, e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={`w-14 text-right bg-muted/30 border rounded px-1.5 py-0.5 text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-primary ${
+                                      isLocked ? "border-amber-500/30 text-amber-400" : "border-border text-foreground"
+                                    }`}
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">%</span>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2.5 text-center">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeHolding(h.ticker); }}
+                                  className="p-0.5 rounded text-muted-foreground/30 hover:text-red-400 transition-colors"
+                                  title="Remove from portfolio"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
 
                         return rows;
                       })()}

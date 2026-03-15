@@ -85,12 +85,34 @@ artifacts-monorepo/
 - India NSE: 10 large-cap + 8 mid-cap growth (TITAN, DIVISLAB, PIDILITIND, etc.)
 - marketCap stored in **billions** in factor_snapshots (e.g. 283.7 = $283.7B)
 
+### 6-Layer Investment Intelligence Framework
+Each company is scored across 6 layers (0–100 scale):
+1. **Quality** (L1): Business fundamentals — profitability, capital efficiency, financial strength
+2. **Opportunity** (L2): Stock-level value — valuation, entry timing, sentiment
+3. **Expectation** (L3): Growth trajectory — revenue/EPS acceleration, margin trends
+4. **Mispricing** (L4): Market pricing gap — intrinsic value vs market price
+5. **Fragility** (L5): Risk assessment — volatility, debt, concentration risk
+6. **Portfolio Net Score** (L6): Final blended score across all layers
+
+Position bands (plain English):
+- CORE HOLDING (≥75, 6–10%), STRONG POSITION (≥60, 3–5%), STARTER (≥45, 1–2%), SPECULATIVE (≥30, 0.5–1%), DO NOT BUY (<30)
+
+### CompanyDrawer (4 tabs)
+- **Intelligence** (default): 6-layer panel with collapsible sections, bar charts, narratives, position bands
+- **Charts**: Price vs strategy scores, valuation bands
+- **Signals**: Drift signals and risk alerts
+- **Chain**: Value chain analysis
+
 ### Portfolio Builder (`GET /api/portfolio/builder`)
 Constructs an optimal N-stock portfolio from the universe:
-- Parameters: `strategy` (fortress/rocket/wave), `size`, `weightMethod` (equal/score/risk), `sectorCap`, `country`, `marketCap`
+- Parameters: `strategy` (fortress/rocket/wave), `size`, `weightMethod` (equal/score/risk/power), `sectorCap`, `country`, `marketCap`
 - Iterative sector-cap fill prevents over-concentration
-- Returns weighted holdings, per-engine scores, portfolio-level aggregate scores, universe metadata
-- Frontend page: `/portfolio/builder` — control panel + score summary cards + ranked results table
+- Returns weighted holdings, per-engine scores, 6-layer intelligence scores, portfolio-level aggregate scores
+- **Manual weight control**: Editable weight inputs per holding, lock/unlock individual weights, redistribute unlocked weights
+- **Add Stock**: Search panel to manually add stocks from the universe with full score data
+- **Portfolio Intelligence summary**: Weighted-average 6-layer scores across all holdings
+- **Search API**: `GET /api/portfolio/builder/search?q=TERM` returns matching companies with scores
+- Frontend page: `/portfolio/builder` — control panel + strategy scores + intelligence summary + interactive table
 
 ### Signal Detection
 - **Drift Signals**: Detects ROIC deterioration, margin compression, debt increases, FCF decline
