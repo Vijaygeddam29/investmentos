@@ -1039,11 +1039,33 @@ export default function PortfolioBuilder() {
 
                 {/* ── Portfolio Bank ─────────────────────────── */}
                 <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Banknote className="w-4 h-4 text-violet-400" />
-                    <span className="text-sm font-semibold text-foreground">Portfolio Bank</span>
-                    <span className="text-[10px] text-muted-foreground ml-1">Allocation by conviction tier</span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Banknote className="w-4 h-4 text-violet-400" />
+                      <span className="text-sm font-semibold text-foreground">Portfolio Bank</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">Allocation by conviction tier</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-muted-foreground">Allocated: <strong className={`font-mono ${Math.abs(weightDelta) < 0.2 ? "text-emerald-400" : "text-amber-400"}`}>{totalWeight.toFixed(1)}%</strong></span>
+                      <span className="text-muted-foreground">Remaining: <strong className={`font-mono ${weightDelta > 0.2 ? "text-amber-400" : "text-emerald-400"}`}>{Math.max(0, 100 - totalWeight).toFixed(1)}%</strong></span>
+                    </div>
                   </div>
+
+                  {/* Segmented 100% allocation bar */}
+                  <div className="h-3 w-full flex rounded-full overflow-hidden bg-muted/30 mb-3" title="Portfolio allocation by conviction tier">
+                    {BAND_ORDER.filter(b => b !== "watchlist").map(b => {
+                      const alloc = bandWeights[b] ?? 0;
+                      const pct   = Math.min(alloc, 100);
+                      if (pct <= 0) return null;
+                      return <div key={b} className={`${BAND_META[b].barColor} transition-all`} style={{ width: `${pct}%` }} title={`${BAND_META[b].label}: ${alloc.toFixed(1)}%`} />;
+                    })}
+                    {/* Remaining (unallocated) */}
+                    {totalWeight < 100 && (
+                      <div className="flex-1 bg-transparent" />
+                    )}
+                  </div>
+
+                  {/* Per-band stats */}
                   <div className="grid grid-cols-5 gap-2">
                     {BAND_ORDER.map(b => {
                       const meta  = BAND_META[b];
@@ -1054,9 +1076,6 @@ export default function PortfolioBuilder() {
                           <span className={`text-[10px] font-bold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
                           <div className={`text-xl font-bold font-mono leading-none ${meta.color}`}>{alloc.toFixed(1)}<span className="text-xs">%</span></div>
                           <div className="text-[9px] text-muted-foreground">{count} stock{count !== 1 ? "s" : ""}</div>
-                          <div className="h-1 w-full bg-muted/30 rounded-full overflow-hidden mt-0.5">
-                            <div className={`h-full rounded-full ${meta.barColor}`} style={{ width: `${Math.min(alloc, 100)}%` }} />
-                          </div>
                           <div className="text-[8px] text-muted-foreground/70 mt-0.5">{meta.suggestLabel}</div>
                         </div>
                       );
@@ -1131,11 +1150,11 @@ export default function PortfolioBuilder() {
                           <div className="shrink-0 hidden sm:block">
                             <span className={`text-[10px] font-bold ${bs.actionColor}`}>{bs.action}</span>
                           </div>
-                          {/* Suggested range */}
+                          {/* Suggested range — band-colored */}
                           {band && band.minPct != null && band.maxPct != null && (
-                            <div className="text-[9px] text-muted-foreground text-center shrink-0 hidden lg:block w-14">
+                            <div className="text-[9px] text-center shrink-0 hidden lg:block w-14">
                               <div className="text-[8px] text-muted-foreground/60">suggest</div>
-                              <div className="font-mono text-foreground/70">{band.minPct}–{band.maxPct}%</div>
+                              <div className={`font-mono font-semibold ${BAND_META[band.band]?.color ?? "text-muted-foreground"}`}>{band.minPct}–{band.maxPct}%</div>
                             </div>
                           )}
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -1199,7 +1218,7 @@ export default function PortfolioBuilder() {
                           );
                         })}
 
-                        {/* Watchlist section — collapsible */}
+                        {/* Watch / Avoid section — collapsible */}
                         {(bandGroups["watchlist"] ?? []).length > 0 && (
                           <div>
                             <button
@@ -1207,7 +1226,7 @@ export default function PortfolioBuilder() {
                               className="w-full flex items-center gap-2 px-2 py-2 rounded-t-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
                             >
                               <EyeOff className="w-3.5 h-3.5 text-red-400" />
-                              <span className="text-xs font-bold uppercase tracking-wide text-red-400">Watchlist</span>
+                              <span className="text-xs font-bold uppercase tracking-wide text-red-400">Watch / Avoid</span>
                               <span className="text-[10px] text-muted-foreground">{(bandGroups["watchlist"] ?? []).length} stock{(bandGroups["watchlist"] ?? []).length !== 1 ? "s" : ""}</span>
                               <span className="text-[10px] text-muted-foreground">· No position recommended</span>
                               <span className="ml-auto">
