@@ -18,6 +18,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Brain, Loader2, AlertTriangle, CheckCircle2, Target, BarChart3,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus,
@@ -1000,8 +1001,30 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
               <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-[10px] font-mono text-violet-400 uppercase tracking-wider font-semibold">Score Derivation</span>
             </div>
-            <div className="text-xs font-mono text-muted-foreground mb-3">
-              Net = (<span className="text-emerald-400">2×Quality</span> + <span className="text-blue-400">1×Opportunity</span> + <span className="text-amber-400">2×Mispricing</span> − <span className="text-orange-400">1×Expectation</span> − <span className="text-red-400">1×Fragility</span> + 200) ÷ 700 × 100
+            <div className="text-xs font-mono text-muted-foreground mb-3 flex flex-wrap items-center gap-x-1">
+              Net = (
+              {[
+                { term: "2×Quality",      color: "text-emerald-400", tip: "Company Quality — double-weighted. Measures business durability: ROIC, margins, balance sheet strength, revenue/EPS growth. The single most important driver of long-term returns." },
+                { term: "+1×Opportunity", color: "text-blue-400",    tip: "Stock Opportunity — single-weighted. Measures how attractive the stock setup is right now: undervaluation, momentum signals, insider buying, analyst revisions." },
+                { term: "+2×Mispricing",  color: "text-amber-400",   tip: "Mispricing — double-weighted. Measures how far the market has mispriced the stock relative to intrinsic value: FCF yield gap, margin-of-safety, P/E vs peers." },
+                { term: "−1×Expectation", color: "text-orange-400",  tip: "Expectation Risk — subtracted. How much optimism is already priced in: forward P/E premium, analyst upgrade saturation, revenue multiple vs growth. High expectations are a headwind." },
+                { term: "−1×Fragility",   color: "text-red-400",     tip: "Fragility — subtracted. Thesis risk factors: balance sheet stress, high short interest, cash flow volatility, SBC dilution, earnings quality concerns. High fragility penalises the score." },
+              ].map(({ term, color, tip }) => (
+                <Tooltip key={term} delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <span className={`${color} cursor-help underline decoration-dotted underline-offset-2`}>{term}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] p-0 bg-card border border-border shadow-xl rounded-xl overflow-hidden z-[9999]">
+                    <div className={`px-3.5 py-2.5 border-b border-border bg-secondary/50`}>
+                      <p className="text-xs font-semibold text-foreground">{term.replace(/[+\-×\d]/g, "").trim()}</p>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{tip}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+               + 200) ÷ 700 × 100
             </div>
 
             {rawWeighted != null ? (

@@ -100,7 +100,7 @@ export default function Dashboard() {
                 Scores heavily weight Profitability (30%) and Capital Efficiency (20%).
               </div>
             </div>
-            <CompanyTable data={fortressData?.scores || []} isLoading={fLoading} />
+            <CompanyTable data={fortressData?.scores || []} isLoading={fLoading} defaultSortBy="fortressScore" />
           </TabsContent>
 
           <TabsContent value="rocket" className="m-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -112,7 +112,7 @@ export default function Dashboard() {
                 Scores heavily weight Growth (30%) and Innovation (30%).
               </div>
             </div>
-            <CompanyTable data={rocketData?.scores || []} isLoading={rLoading} />
+            <CompanyTable data={rocketData?.scores || []} isLoading={rLoading} defaultSortBy="rocketScore" />
           </TabsContent>
 
           <TabsContent value="wave" className="m-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -124,7 +124,7 @@ export default function Dashboard() {
                 Scores heavily weight Market Momentum (40%) and Valuation (30%).
               </div>
             </div>
-            <CompanyTable data={waveData?.scores || []} isLoading={wLoading} />
+            <CompanyTable data={waveData?.scores || []} isLoading={wLoading} defaultSortBy="waveScore" />
           </TabsContent>
         </Tabs>
 

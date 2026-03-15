@@ -15,10 +15,11 @@ import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 interface CompanyTableProps {
   data: ScoreItem[];
   isLoading: boolean;
+  defaultSortBy?: string;
 }
 
-export function CompanyTable({ data, isLoading }: CompanyTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+export function CompanyTable({ data, isLoading, defaultSortBy = "fortressScore" }: CompanyTableProps) {
+  const [sorting, setSorting] = useState<SortingState>([{ id: defaultSortBy, desc: true }]);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
 
   const columns = [

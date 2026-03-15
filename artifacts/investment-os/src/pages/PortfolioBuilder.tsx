@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
@@ -1111,9 +1112,20 @@ export default function PortfolioBuilder() {
                     const isExp    = expandedTicker === h.ticker;
                     const isLocked = lockedWeights.has(h.ticker);
                     const netColor = pct == null ? "text-muted-foreground" : pct >= 75 ? "text-emerald-400" : pct >= 60 ? "text-blue-400" : pct >= 45 ? "text-amber-400" : pct >= 30 ? "text-orange-400" : "text-red-400";
+                    const SCORE_BARS = [
+                      { v: h.companyQualityScore,   label: "Q", color: "bg-emerald-500", tip: "Quality ×2 — ROIC, margins, capital allocation. Double-weighted." },
+                      { v: h.stockOpportunityScore, label: "O", color: "bg-blue-500",    tip: "Opportunity ×1 — stock attractiveness: valuation, timing, insider signals." },
+                      { v: h.mispricingScore,       label: "M", color: "bg-amber-500",   tip: "Mispricing ×2 — market edge: temporary discount vs intrinsic value. Double-weighted." },
+                      { v: h.expectationScore,      label: "E", color: "bg-orange-500",  tip: "Expectation −1 — penalised. High = crowded optimism already priced in." },
+                      { v: h.fragilityScore,        label: "F", color: "bg-red-500",     tip: "Fragility −1 — penalised. High = balance sheet risk, revenue concentration, SBC dilution." },
+                    ];
                     return (
                       <div className="bg-card border border-border rounded-xl overflow-hidden mb-2">
-                        <div className="flex items-center gap-2 px-3 py-3 hover:bg-muted/10 transition-colors">
+                        <div
+                          className="flex items-center gap-2 px-3 py-3 hover:bg-muted/10 transition-colors cursor-pointer select-none"
+                          onClick={() => setExpandedTicker(isExp ? null : h.ticker)}
+                          title={isExp ? "Click to collapse analysis" : "Click to expand analysis"}
+                        >
                           <span className="text-[10px] text-muted-foreground/50 font-mono w-5">{rank}</span>
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <span className="text-sm">{flag(h.country)}</span>
@@ -1132,19 +1144,21 @@ export default function PortfolioBuilder() {
                             </div>
                           )}
                           <div className="hidden lg:flex items-center gap-2 w-48 shrink-0">
-                            {[
-                              { v: h.companyQualityScore,   label: "Q", color: "bg-emerald-500" },
-                              { v: h.stockOpportunityScore, label: "O", color: "bg-blue-500" },
-                              { v: h.mispricingScore,       label: "M", color: "bg-amber-500" },
-                              { v: h.expectationScore,      label: "E", color: "bg-orange-500" },
-                              { v: h.fragilityScore,        label: "F", color: "bg-red-500" },
-                            ].map(s => (
-                              <div key={s.label} className="flex flex-col items-center gap-0.5 flex-1" title={`${s.label}: ${s.v != null ? Math.round(s.v * 100) : "—"}`}>
-                                <div className="h-6 w-3 bg-muted/30 rounded-sm overflow-hidden flex flex-col justify-end">
-                                  {s.v != null && <div className={`w-full rounded-sm ${s.color}`} style={{ height: `${Math.round(s.v * 100)}%` }} />}
-                                </div>
-                                <span className="text-[8px] text-muted-foreground">{s.label}</span>
-                              </div>
+                            {SCORE_BARS.map(s => (
+                              <Tooltip key={s.label} delayDuration={200}>
+                                <TooltipTrigger asChild>
+                                  <div className="flex flex-col items-center gap-0.5 flex-1 cursor-help">
+                                    <div className="h-6 w-3 bg-muted/30 rounded-sm overflow-hidden flex flex-col justify-end">
+                                      {s.v != null && <div className={`w-full rounded-sm ${s.color}`} style={{ height: `${Math.round(s.v * 100)}%` }} />}
+                                    </div>
+                                    <span className="text-[8px] text-muted-foreground">{s.label}</span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed z-[9999]">
+                                  <strong className="block mb-0.5">{s.label}: {s.v != null ? Math.round(s.v * 100) : "—"}</strong>
+                                  {s.tip}
+                                </TooltipContent>
+                              </Tooltip>
                             ))}
                           </div>
                           <div className="shrink-0 hidden sm:block">
@@ -1157,7 +1171,7 @@ export default function PortfolioBuilder() {
                               <div className={`font-mono font-semibold ${BAND_META[band.band]?.color ?? "text-muted-foreground"}`}>{band.minPct}–{band.maxPct}%</div>
                             </div>
                           )}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                             <button onClick={() => toggleLock(h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors">
                               {isLocked ? <Lock className="w-3 h-3 text-primary" /> : <Unlock className="w-3 h-3" />}
                             </button>
@@ -1171,10 +1185,10 @@ export default function PortfolioBuilder() {
                               <span className="absolute right-1.5 top-1 text-[9px] text-muted-foreground">%</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => setExpandedTicker(isExp ? null : h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View Intelligence analysis">
+                          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                            <span className="p-1 text-muted-foreground/50 inline-flex">
                               {isExp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
+                            </span>
                             <button onClick={() => {
                               setDrawerSnapshot({
                                 ticker: h.ticker,

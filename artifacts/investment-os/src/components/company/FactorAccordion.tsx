@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { MetricSnapshot, ScoreItem } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { getMetricInfo } from "@/lib/metrics-glossary";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, ChevronRight } from "lucide-react";
 
 interface FactorAccordionProps {
   metrics: MetricSnapshot;
@@ -146,13 +146,20 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
     return { label: "Low confidence", color: "text-red-400" };
   };
 
+  const sortedFamilies = [...families].sort((a, b) => {
+    if (a.score == null && b.score == null) return 0;
+    if (a.score == null) return 1;
+    if (b.score == null) return -1;
+    return b.score - a.score;
+  });
+
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4 px-1">
-        120+ factors across 9 families. Hover any metric name to learn what it means.
+        120+ factors across 9 families, sorted highest to lowest. Click any row to drill into individual metrics. Hover a metric name for a full explanation.
       </p>
       <Accordion type="multiple" className="w-full space-y-2">
-        {families.map((family) => {
+        {sortedFamilies.map((family) => {
           const allEntries = family.data
             ? Object.entries(family.data)
             : [];
@@ -165,43 +172,46 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
             <AccordionItem
               value={family.id}
               key={family.id}
-              className="border border-border rounded-lg bg-secondary/20 px-1 overflow-hidden data-[state=open]:bg-secondary/40 transition-colors"
+              className="border border-border rounded-lg bg-secondary/20 overflow-hidden data-[state=open]:bg-secondary/40 data-[state=open]:border-border/70 transition-colors"
             >
-              <AccordionTrigger className="px-3 hover:no-underline py-3">
-                <div className="flex items-center justify-between w-full pr-4">
-                  <div className="text-left">
-                    <div className="font-semibold text-sm flex items-center gap-2">
-                      {family.label}
-                      {isSentimentUnavailable && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400 bg-amber-500/10 font-medium">
-                          Unavailable
+              <AccordionTrigger className="px-3 hover:no-underline hover:bg-muted/20 py-3 cursor-pointer w-full [&>svg]:hidden">
+                <div className="flex items-center gap-2.5 w-full">
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200 group-data-[state=open]:rotate-90 [[data-state=open]_&]:rotate-90" />
+                  <div className="flex items-center justify-between w-full">
+                    <div className="text-left">
+                      <div className="font-semibold text-sm flex items-center gap-2">
+                        {family.label}
+                        {isSentimentUnavailable && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400 bg-amber-500/10 font-medium">
+                            Unavailable
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{family.description}</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 pr-1">
+                      {coverage && (
+                        <span className={`text-[9px] font-mono opacity-60 ${confidence?.color ?? ""}`}>
+                          {coverage.available}/{coverage.total}
                         </span>
                       )}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{family.description}</div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {coverage && (
-                      <span className={`text-[9px] font-mono opacity-60 ${confidence?.color ?? ""}`}>
-                        {coverage.available}/{coverage.total}
+                      {confidence && (
+                        <Tooltip delayDuration={400}>
+                          <TooltipTrigger asChild>
+                            <span className={`text-[9px] px-1 py-0.5 rounded border border-current font-medium cursor-help ${confidence.color} opacity-80`}>
+                              {confidence.label.split(" ")[0]}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            {coverage.available}/{coverage.total} signals available ({coverage.pct}% coverage)
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      <span className={`text-xs font-mono font-bold ${getScoreColor(family.score)}`}>
+                        {family.score != null ? Math.round(family.score * 100) : "—"}
                       </span>
-                    )}
-                    {confidence && (
-                      <Tooltip delayDuration={400}>
-                        <TooltipTrigger asChild>
-                          <span className={`text-[9px] px-1 py-0.5 rounded border border-current font-medium cursor-help ${confidence.color} opacity-80`}>
-                            {confidence.label.split(" ")[0]}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          {coverage.available}/{coverage.total} signals available ({coverage.pct}% coverage)
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    <span className={`text-xs font-mono font-bold ${getScoreColor(family.score)}`}>
-                      {family.score != null ? family.score.toFixed(2) : "—"}
-                    </span>
-                    <ScoreBadge score={family.score} type="neutral" />
+                      <ScoreBadge score={family.score} type="neutral" />
+                    </div>
                   </div>
                 </div>
               </AccordionTrigger>

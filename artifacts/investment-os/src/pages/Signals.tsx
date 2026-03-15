@@ -4,6 +4,7 @@ import { useListFactorSnapshots } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { PipelineTimestampBar } from "@/components/pipeline/PipelineTimestampBar";
 import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Crown, ChevronDown, ChevronUp, ChevronsUpDown, Filter,
   Loader2, Info, Brain, ChevronRight, Globe, ArrowUpDown,
@@ -164,22 +165,29 @@ function ExpandedRow({ s, onOpenDrawer }: { s: any; onOpenDrawer: () => void }) 
         {/* Formula calculation */}
         {rawWeighted != null && (
           <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-950/10 px-4 py-3">
-            <div className="text-[10px] text-violet-400 uppercase tracking-wider font-semibold mb-2">Score Derivation</div>
+            <div className="text-[10px] text-violet-400 uppercase tracking-wider font-semibold mb-2">Score Derivation — hover each term for explanation</div>
             <div className="flex items-center gap-2 flex-wrap font-mono text-xs">
-              <span className="text-emerald-400">2×{Q}</span>
-              <span className="text-muted-foreground">+</span>
-              <span className="text-blue-400">1×{O}</span>
-              <span className="text-muted-foreground">+</span>
-              <span className="text-amber-400">2×{M}</span>
-              <span className="text-muted-foreground">−</span>
-              <span className="text-orange-400">1×{E}</span>
-              <span className="text-muted-foreground">−</span>
-              <span className="text-red-400">1×{F}</span>
+              {[
+                { val: `2×${Q}`, color: "text-emerald-400", tip: "Quality ×2 — business durability: ROIC, margins, capital allocation. Double-weighted as the strongest long-term predictor." },
+                { val: `+1×${O}`, color: "text-blue-400",    tip: "Opportunity ×1 — stock attractiveness: FCF yield, valuation vs history, entry timing, insider signals." },
+                { val: `+2×${M}`, color: "text-amber-400",   tip: "Mispricing ×2 — market edge: temporary factors depressing the price vs intrinsic value. Double-weighted for high-conviction opportunities." },
+                { val: `−1×${E}`, color: "text-orange-400",  tip: "Expectation ×1 — penalised. Priced-in optimism: forward P/E premium, analyst saturation, crowded long positioning." },
+                { val: `−1×${F}`, color: "text-red-400",     tip: "Fragility ×1 — penalised. Thesis risks: high leverage, revenue concentration, SBC dilution, cash flow instability." },
+              ].map(({ val, color, tip }, i) => (
+                <Tooltip key={i} delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <span className={`${color} cursor-help underline decoration-dotted underline-offset-2`}>{val}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-[11px] leading-relaxed z-[9999]">
+                    {tip}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
               <span className="text-muted-foreground">=</span>
               <span className="text-foreground font-bold">{rawWeighted} raw</span>
               <span className="text-muted-foreground">→</span>
               <span className={`font-bold ${N != null && N >= 75 ? "text-emerald-400" : N != null && N >= 60 ? "text-blue-400" : N != null && N >= 45 ? "text-amber-400" : "text-orange-400"}`}>
-                {N}/100 normalised
+                {N}/100
               </span>
             </div>
             <div className="text-[9px] text-muted-foreground/50 mt-1 font-mono">Normalisation: (raw + 200) ÷ 700 × 100</div>
@@ -411,14 +419,18 @@ export default function Signals() {
 
     return (
       <Fragment key={s.ticker}>
-        <tr className={`border-b border-border/30 hover:bg-muted/10 transition-colors ${isExpanded ? "bg-muted/5" : ""}`}>
+        <tr
+          className={`border-b border-border/30 hover:bg-muted/10 transition-colors cursor-pointer select-none ${isExpanded ? "bg-muted/5" : ""}`}
+          onClick={() => toggleExpand(s.ticker)}
+          title={isExpanded ? "Click to collapse" : "Click to expand analysis"}
+        >
           {/* Rank */}
           <td className="px-3 py-2.5 text-[10px] text-muted-foreground/50 font-mono w-8">{rank}</td>
 
-          {/* Company — click opens Intelligence Drawer */}
+          {/* Company — click opens Intelligence Drawer (stop row expand propagation) */}
           <td className="px-3 py-2.5">
             <button
-              onClick={() => openDrawer(s)}
+              onClick={(e) => { e.stopPropagation(); openDrawer(s); }}
               className="flex items-center gap-2 hover:text-primary transition-colors text-left"
             >
               <span className="text-sm leading-none">{flag(s.country)}</span>
@@ -460,15 +472,11 @@ export default function Signals() {
             {band && <span className={`text-[10px] font-bold whitespace-nowrap ${band.ac}`}>{band.action}</span>}
           </td>
 
-          {/* Expand toggle */}
+          {/* Expand indicator (row click handles expand) */}
           <td className="px-2 py-2.5">
-            <button
-              onClick={() => toggleExpand(s.ticker)}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded"
-              title={isExpanded ? "Collapse" : "Show analysis"}
-            >
+            <span className="p-1 text-muted-foreground/50 inline-flex">
               {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+            </span>
           </td>
         </tr>
 

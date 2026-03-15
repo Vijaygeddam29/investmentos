@@ -440,74 +440,17 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                   </TabsContent>
 
                   {/* ── 120 Factors ── */}
-                  <TabsContent value="factors" className="animate-in fade-in duration-300 space-y-3">
-                    {scores ? (
-                      <>
-                        <div className="rounded-xl border border-border/50 bg-secondary/10 p-3 mb-1">
-                          <p className="text-[10px] text-muted-foreground/70 leading-relaxed flex items-start gap-1.5">
-                            <Info className="w-3 h-3 shrink-0 mt-0.5 text-muted-foreground/40" />
-                            Factor scores are computed from up to 120 individual metrics grouped into 9 families. Each family score drives one or more of the three strategy engines (Fortress, Rocket, Wave). Missing metrics are flagged — they indicate data gaps, not poor performance.
-                          </p>
-                        </div>
-                        {[
-                          { key: "profitabilityScore",     label: "Profitability",      desc: "ROE, ROIC, gross margin, operating margin, net margin, FCF margin",           weight: "Fortress 30%" },
-                          { key: "growthScore",            label: "Growth",             desc: "Revenue growth 1/3/5yr, EPS growth, FCF growth, operating income growth",     weight: "Rocket 35%" },
-                          { key: "capitalEfficiencyScore", label: "Capital Efficiency", desc: "Asset turnover, CAPEX efficiency, shareholder yield, incremental margins",     weight: "Fortress 20% / Rocket 20%" },
-                          { key: "financialStrengthScore", label: "Financial Strength", desc: "Debt/equity, net debt/EBITDA, interest coverage, current ratio, Altman Z",     weight: "Fortress 20% / Rocket 15%" },
-                          { key: "cashFlowQualityScore",   label: "Cash Flow Quality",  desc: "FCF/net income, accrual ratio, cash conversion, earnings surprises, SBC%",     weight: "Fortress 15%" },
-                          { key: "innovationScore",        label: "Innovation",         desc: "R&D/revenue, R&D productivity, R&D expense trend",                             weight: "Rocket 20%" },
-                          { key: "momentumScore",          label: "Price Momentum",     desc: "RSI, MA50, MA200, 52-week range position, MACD",                              weight: "Wave 30% / Rocket 20%" },
-                          { key: "valuationScore",         label: "Valuation",          desc: "P/E, forward P/E, PEG, EV/EBITDA, EV/Sales, FCF yield, Rule of 40",           weight: "Fortress 15% / Wave 20%" },
-                          { key: "sentimentScore",         label: "Sentiment",          desc: "Insider buying, institutional ownership, analyst upside, P/E vs peers",         weight: "Wave 25% / Rocket 15%" },
-                        ].map(({ key, label, desc, weight }) => {
-                          const raw = (scores as any)?.[key] as number | null | undefined;
-                          const pct = raw != null ? Math.round(raw * 100) : null;
-                          const color = pct == null ? "bg-muted/30" : pct >= 65 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct >= 35 ? "bg-amber-500" : "bg-red-500";
-                          const textColor = pct == null ? "text-muted-foreground/50" : pct >= 65 ? "text-emerald-400" : pct >= 50 ? "text-blue-400" : pct >= 35 ? "text-amber-400" : "text-red-400";
-                          return (
-                            <div key={key} className="rounded-xl border border-border/50 bg-card p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <div>
-                                  <span className="text-xs font-semibold text-foreground">{label}</span>
-                                  <span className="ml-2 text-[9px] text-muted-foreground/50">{weight}</span>
-                                </div>
-                                <span className={`text-sm font-mono font-bold ${textColor}`}>
-                                  {pct != null ? pct : <span className="text-[10px] font-normal">No data</span>}
-                                </span>
-                              </div>
-                              <div className="h-1.5 bg-muted/20 rounded-full overflow-hidden mb-2">
-                                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: pct != null ? `${pct}%` : "0%" }} />
-                              </div>
-                              <p className="text-[9px] text-muted-foreground/60 leading-relaxed">{desc}</p>
-                              {pct == null && (
-                                <div className="mt-1.5 flex items-center gap-1 text-[9px] text-amber-400/70">
-                                  <AlertCircle className="w-2.5 h-2.5" />
-                                  Score not available — insufficient financial metrics in pipeline
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {familyCoverage && (
-                          <div className="rounded-xl border border-border/30 p-3 mt-2">
-                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground/50 mb-2 font-semibold">Data Coverage</div>
-                            <div className="grid grid-cols-3 gap-2">
-                              {Object.entries(familyCoverage).map(([family, { available, total, pct }]) => (
-                                <div key={family} className="text-center">
-                                  <div className="text-xs font-mono font-bold text-foreground">{pct}%</div>
-                                  <div className="text-[8px] text-muted-foreground/50 capitalize">{family.replace(/([A-Z])/g, " $1").trim()}</div>
-                                  <div className="text-[8px] text-muted-foreground/40">{available}/{total} metrics</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
+                  <TabsContent value="factors" className="animate-in fade-in duration-300">
+                    {latestMetrics ? (
+                      <FactorAccordion
+                        metrics={latestMetrics}
+                        scores={scores ?? undefined}
+                        familyCoverage={familyCoverage}
+                      />
                     ) : (
-                      <div className="rounded-xl border border-border bg-secondary/20 p-5 text-center">
+                      <div className="rounded-xl border border-border bg-secondary/20 p-5 text-center mt-2">
                         <Info className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                        <p className="text-sm font-medium text-muted-foreground">Factor scores not available</p>
+                        <p className="text-sm font-medium text-muted-foreground">Factor data not available</p>
                         <p className="text-xs text-muted-foreground/60 mt-1">Run the pipeline to compute all 120 factor scores across 9 families for this company.</p>
                       </div>
                     )}
