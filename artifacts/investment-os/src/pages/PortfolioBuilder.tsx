@@ -7,7 +7,7 @@ import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
   TrendingUp, Globe, ChevronDown, ChevronRight, AlertCircle,
-  Zap, AlertTriangle, Sparkles
+  Zap, AlertTriangle, Sparkles, Crown, Star, Eye, Target
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,19 +19,26 @@ interface BuilderHolding {
   rank:           number;
   ticker:         string;
   name:           string;
-  sector:         string;
-  country:        string;
-  weight:         number;
-  compositeScore: number;
-  fortressScore:  number | null;
-  rocketScore:    number | null;
-  waveScore:      number | null;
-  entryScore:     number | null;
-  marketCap:      number | null;
-  volatility:     number | null;
-  highValuation:  boolean;
-  innovationTier: string | null;
-  rationale:      string;
+  sector:                string;
+  country:               string;
+  weight:                number;
+  compositeScore:        number;
+  fortressScore:         number | null;
+  rocketScore:           number | null;
+  waveScore:             number | null;
+  entryScore:            number | null;
+  marketCap:             number | null;
+  volatility:            number | null;
+  highValuation:         boolean;
+  innovationTier:        string | null;
+  rationale:             string;
+  portfolioNetScore:     number | null;
+  expectationScore:      number | null;
+  mispricingScore:       number | null;
+  fragilityScore:        number | null;
+  companyQualityScore:   number | null;
+  stockOpportunityScore: number | null;
+  positionBand:          { band: string; label: string; minPct: number; maxPct: number } | null;
 }
 
 interface BuilderResponse {
@@ -462,6 +469,10 @@ export default function PortfolioBuilder() {
                         <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Fortress</th>
                         <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Rocket</th>
                         <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Wave</th>
+                        <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">
+                          <span className="inline-flex items-center gap-1"><Crown className="w-3 h-3 text-violet-400" />Net</span>
+                        </th>
+                        <th className="text-left text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Band</th>
                         <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Mkt Cap</th>
                         <th className="text-right text-xs font-mono text-muted-foreground uppercase tracking-wider px-4 py-3">Weight</th>
                       </tr>
@@ -473,6 +484,21 @@ export default function PortfolioBuilder() {
                           composite >= 70 ? "text-emerald-400" :
                           composite >= 50 ? "text-amber-400" :
                                            "text-red-400";
+                        const netPct = h.portfolioNetScore != null ? Math.round(h.portfolioNetScore * 100) : null;
+                        const pb = h.positionBand;
+                        const bandColor =
+                          pb?.band === "core"      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" :
+                          pb?.band === "standard"  ? "bg-blue-500/15 text-blue-400 border-blue-500/20" :
+                          pb?.band === "starter"   ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
+                          pb?.band === "tactical"  ? "bg-orange-500/15 text-orange-400 border-orange-500/20" :
+                          pb?.band === "watchlist" ? "bg-secondary text-muted-foreground border-border/40" :
+                                                      "bg-secondary text-muted-foreground border-border/40";
+                        const netColor =
+                          netPct != null && netPct >= 75 ? "text-emerald-400" :
+                          netPct != null && netPct >= 60 ? "text-blue-400" :
+                          netPct != null && netPct >= 45 ? "text-amber-400" :
+                          netPct != null && netPct >= 30 ? "text-orange-400" :
+                                                           "text-red-400";
                         return (
                           <tr
                             key={h.ticker}
@@ -483,7 +509,7 @@ export default function PortfolioBuilder() {
                           >
                             <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{h.rank}</td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <CountryFlag country={h.country} />
                                 <span className="font-mono font-semibold text-foreground text-sm">{h.ticker}</span>
                                 {h.innovationTier && (
@@ -495,14 +521,14 @@ export default function PortfolioBuilder() {
                                 {h.highValuation && (
                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px] font-semibold">
                                     <AlertTriangle className="w-2.5 h-2.5" />
-                                    High valuation
+                                    Rich
                                   </span>
                                 )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
                               <div>
-                                <span className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">{h.name}</span>
+                                <span className="text-xs text-muted-foreground line-clamp-1 max-w-[160px]">{h.name}</span>
                                 {h.rationale && (
                                   <div className="text-[10px] text-muted-foreground/70 mt-0.5 line-clamp-1">{h.rationale}</div>
                                 )}
@@ -522,6 +548,23 @@ export default function PortfolioBuilder() {
                             </td>
                             <td className="px-4 py-3">
                               <ScoreMini value={h.waveScore} color="bg-cyan-500" />
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {netPct != null ? (
+                                <span className={`font-mono font-bold text-sm ${netColor}`}>{netPct}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {pb ? (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${bandColor}`}>
+                                  <Star className="w-2.5 h-2.5" />
+                                  {pb.label}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-right text-xs font-mono text-muted-foreground">
                               {formatMktCap(h.marketCap)}
@@ -558,7 +601,7 @@ export default function PortfolioBuilder() {
       <CompanyDrawer
         ticker={selectedTicker ?? ""}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onOpenChange={(v) => setDrawerOpen(v)}
       />
     </Layout>
   );

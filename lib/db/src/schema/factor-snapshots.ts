@@ -44,6 +44,20 @@ export const factorSnapshotsTable = pgTable("factor_snapshots", {
   waveDelta: real("wave_delta"),
   entryDelta: real("entry_delta"),
 
+  // ── Two-score architecture ─────────────────────────────────────────────
+  companyQualityScore: real("company_quality_score"),
+  stockOpportunityScore: real("stock_opportunity_score"),
+
+  // ── Four-layer investment intelligence ────────────────────────────────
+  // expectationScore: how much success is already priced in (0=depressed, 1=euphoric)
+  expectationScore: real("expectation_score"),
+  // mispricingScore: evidence the market is wrong (0=no edge, 1=strong mispricing)
+  mispricingScore: real("mispricing_score"),
+  // fragilityScore: how easily the thesis can break (0=robust, 1=very fragile)
+  fragilityScore: real("fragility_score"),
+  // portfolioNetScore: (2*quality + 1*opportunity + 2*mispricing - expectation - fragility) / 7
+  portfolioNetScore: real("portfolio_net_score"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

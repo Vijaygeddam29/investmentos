@@ -36,22 +36,33 @@ async function enrichTickers(tickers: string[]) {
     name: string; sector: string; industry: string; country: string; currency: string;
     fortressScore: number | null; rocketScore: number | null; waveScore: number | null;
     entryScore: number | null; marketCap: number | null;
+    companyQualityScore: number | null; stockOpportunityScore: number | null;
+    expectationScore: number | null; mispricingScore: number | null;
+    fragilityScore: number | null; portfolioNetScore: number | null;
+    valuationScore: number | null;
   }> = {};
 
   for (const ticker of tickers) {
     const co = companyMap[ticker];
     const sn = snapshotMap[ticker];
     result[ticker] = {
-      name:          co?.name     ?? ticker,
-      sector:        co?.sector   ?? sn?.sector   ?? "Unknown",
-      industry:      co?.industry ?? "Unknown",
-      country:       co?.country  ?? "Unknown",
-      currency:      co?.currency ?? "USD",
-      fortressScore: sn?.fortressScore ?? null,
-      rocketScore:   sn?.rocketScore   ?? null,
-      waveScore:     sn?.waveScore     ?? null,
-      entryScore:    sn?.entryScore    ?? null,
-      marketCap:     sn?.marketCap     ?? null,
+      name:                  co?.name     ?? ticker,
+      sector:                co?.sector   ?? sn?.sector   ?? "Unknown",
+      industry:              co?.industry ?? "Unknown",
+      country:               co?.country  ?? "Unknown",
+      currency:              co?.currency ?? "USD",
+      fortressScore:         sn?.fortressScore         ?? null,
+      rocketScore:           sn?.rocketScore           ?? null,
+      waveScore:             sn?.waveScore             ?? null,
+      entryScore:            sn?.entryScore            ?? null,
+      marketCap:             sn?.marketCap             ?? null,
+      companyQualityScore:   (sn as any)?.companyQualityScore   ?? null,
+      stockOpportunityScore: (sn as any)?.stockOpportunityScore ?? null,
+      expectationScore:      (sn as any)?.expectationScore      ?? null,
+      mispricingScore:       (sn as any)?.mispricingScore       ?? null,
+      fragilityScore:        (sn as any)?.fragilityScore        ?? null,
+      portfolioNetScore:     (sn as any)?.portfolioNetScore     ?? null,
+      valuationScore:        sn?.valuationScore        ?? null,
     };
   }
   return result;

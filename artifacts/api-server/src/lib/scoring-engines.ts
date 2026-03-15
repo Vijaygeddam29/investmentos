@@ -432,6 +432,115 @@ export function scoreLeadershipConviction(ticker: string, metrics: any[]): numbe
   );
 }
 
+// ─── LAYER 3: EXPECTATION SCORE ───────────────────────────────────────────────
+// How much success is already priced in.
+// Higher = market has high expectations = LESS attractive entry (fully priced / euphoric).
+// Uses: P/E premium vs peers/history, FCF yield (inverted), margin of safety (inverted),
+//       analyst upside (inverted), EV/EBITDA, EV/Sales.
+
+export function scoreExpectation(metrics: any[]): number {
+  if (!metrics.length) return 0.5;
+  const latest = metrics[0];
+
+  const scores = [
+    normalize(latest.peVsPeerMedian, 0.5, 2.0),         // premium vs peers = high expectation
+    normalize(latest.forwardPe, 10, 60),                 // high forward PE = priced-to-perfection
+    1 - normalize(latest.fcfYield, 0.01, 0.09),          // low yield = expensive = high expectation
+    1 - normalize(latest.marginOfSafety, -0.25, 0.35),   // low margin of safety = high expectation
+    1 - normalize(latest.analystUpside, 0, 0.40),        // low upside = mostly priced in
+    normalize(latest.evToEbitda, 5, 35),                 // high EV/EBITDA = high expectation
+    normalize(latest.evToSales, 1, 15),                  // high EV/Sales = high expectation
+  ];
+
+  return avg(scores);
+}
+
+// ─── LAYER 4: MISPRICING SCORE ────────────────────────────────────────────────
+// Evidence the market is wrong — specifically, that reality will be better than priced.
+// Higher = stronger evidence of market mispricing = MORE attractive.
+// Uses: earnings surprises, insider conviction, margin recovery, analyst upside,
+//       quality-vs-price gap, FCF yield on quality, Altman Z (healthy but cheap).
+
+export function scoreMispricing(metrics: any[], qualityScore = 0.5, valuationScore = 0.5): number {
+  if (!metrics.length) return 0.5;
+  const latest = metrics[0];
+
+  const scores = [
+    normalize(latest.earningsSurprises, -0.05, 0.15),       // market underestimated earnings
+    normalize(latest.insiderBuying, 0, 1),                   // insiders see undervaluation
+    normalize(latest.analystUpside, 0, 0.50),                // analysts see disconnect from fair value
+    normalize(latest.grossMarginTrend, -0.05, 0.05),         // margins recovering (trough used by mkt)
+    normalize(latest.operatingMarginTrend, -0.05, 0.05),     // improving fundamentals not repriced
+    normalize(latest.altmanZScore, 1.8, 5),                  // financially sound (false distress fear)
+    normalize(latest.fcfYield, 0.01, 0.10),                  // generates cash, not priced in
+    clamp(qualityScore + valuationScore - 0.5),              // quality not rewarded in price
+  ];
+
+  return avg(scores);
+}
+
+// ─── LAYER 5: FRAGILITY SCORE ─────────────────────────────────────────────────
+// How easily can the investment thesis break?
+// Higher = more fragile = thesis depends on conditions that can collapse quickly.
+// Uses: leverage, interest coverage, liquidity, margin stability, FCF conversion.
+
+export function scoreFragility(metrics: any[]): number {
+  if (!metrics.length) return 0.5;
+  const latest = metrics[0];
+
+  const scores = [
+    normalize(latest.netDebtEbitda, 0, 6),             // high debt = refinancing risk
+    1 - normalize(latest.interestCoverage, 0, 20),     // low coverage = debt servicing risk
+    normalize(latest.debtToEquity, 0, 3),              // high leverage = equity fragility
+    1 - normalize(latest.currentRatio, 0.5, 3),        // illiquidity = short-term thesis risk
+    1 - stability(metrics.map(m => m.grossMargin)),    // volatile margins = uncontrollable costs
+    1 - stability(metrics.map(m => m.operatingMargin)),// earnings unpredictability
+    1 - normalize(latest.fcfToNetIncome, 0.3, 1.5),    // poor cash conversion = low earnings quality
+  ];
+
+  return avg(scores);
+}
+
+// ─── LAYER 6: PORTFOLIO NET SCORE ─────────────────────────────────────────────
+// Investment-grade composite score for portfolio construction decisions.
+// Formula: (2 × quality + 1 × opportunity + 2 × mispricing - 1 × expectation - 1 × fragility)
+// Raw range: -2 (all bad) → +5 (all good). Normalized to [0, 1].
+// Higher = stronger portfolio candidate.
+
+export function computePortfolioNetScore(params: {
+  companyQualityScore: number;
+  stockOpportunityScore: number;
+  mispricingScore: number;
+  expectationScore: number;
+  fragilityScore: number;
+}): number {
+  const raw =
+    2.0 * params.companyQualityScore   +
+    1.0 * params.stockOpportunityScore +
+    2.0 * params.mispricingScore       -
+    1.0 * params.expectationScore      -
+    1.0 * params.fragilityScore;
+  return clamp((raw + 2) / 7);
+}
+
+// ─── Position sizing bands (based on portfolioNetScore) ──────────────────────
+
+export interface PositionBand {
+  band: "core" | "standard" | "starter" | "tactical" | "watchlist";
+  label: string;
+  minPct: number;
+  maxPct: number;
+  color: string;
+}
+
+export function getPositionBand(portfolioNetScore: number): PositionBand {
+  if (portfolioNetScore >= 0.75) return { band: "core",      label: "Core",      minPct: 6,   maxPct: 10,  color: "emerald" };
+  if (portfolioNetScore >= 0.60) return { band: "standard",  label: "Standard",  minPct: 3,   maxPct: 5,   color: "blue" };
+  if (portfolioNetScore >= 0.45) return { band: "starter",   label: "Starter",   minPct: 1,   maxPct: 2.5, color: "amber" };
+  if (portfolioNetScore >= 0.30) return { band: "tactical",  label: "Tactical",  minPct: 0.5, maxPct: 1,   color: "orange" };
+  return                               { band: "watchlist", label: "Watchlist", minPct: 0,   maxPct: 0,   color: "red" };
+}
+
 // ─── Engine weights ────────────────────────────────────────────────────────────
 
 const FORTRESS_WEIGHTS = {
@@ -534,6 +643,17 @@ export async function calculateAllScores(ticker: string) {
   const today = new Date().toISOString().split("T")[0];
   const r = (v: number) => Math.round(v * 100) / 100;
 
+  const expectationScore  = r(scoreExpectation(metrics));
+  const mispricingScore   = r(scoreMispricing(metrics, companyQualityScore, valuation));
+  const fragilityScore    = r(scoreFragility(metrics));
+  const portfolioNetScore = r(computePortfolioNetScore({
+    companyQualityScore,
+    stockOpportunityScore,
+    mispricingScore,
+    expectationScore,
+    fragilityScore,
+  }));
+
   const scoreRow = {
     ticker,
     date: today,
@@ -552,6 +672,10 @@ export async function calculateAllScores(ticker: string) {
     compounderScore,
     companyQualityScore:    r(companyQualityScore),
     stockOpportunityScore:  r(stockOpportunityScore),
+    expectationScore,
+    mispricingScore,
+    fragilityScore,
+    portfolioNetScore,
   };
 
   const existing = await db.select({ id: scoresTable.id, date: scoresTable.date })

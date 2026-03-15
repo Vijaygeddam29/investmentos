@@ -1,0 +1,139 @@
+I turned it into a working Python engine you can build on in Replit.
+
+It gives you:
+
+a clear Investment OS structure
+
+support for your 2-principle model: Company Quality + Stock Opportunity
+
+the 4 added layers:
+
+Expectation score
+
+Mispricing score
+
+Fragility score
+
+Position sizing rule
+
+explicit formulas
+
+CSV-based inputs so you can plug in your own 120 factors gradually
+
+What’s in the script
+
+The code includes:
+
+derived fields like:
+
+pe_vs_history_raw = forward_pe / forward_pe_5y_avg
+
+valuation_vs_peers_raw
+
+multiple_expansion_share_raw
+
+interest_coverage_inverse_raw
+
+scoring engines for:
+
+company_quality_score
+
+stock_opportunity_score
+
+expectation_score
+
+mispricing_score
+
+fragility_score
+
+a final formula:
+
+portfolio_net_score = (
+    2.0 * company_quality_score
+    + 1.0 * stock_opportunity_score
+    + 2.0 * mispricing_score
+    - 1.0 * expectation_score
+    - 1.0 * fragility_score
+)
+
+position bands:
+
+core
+
+standard
+
+starter
+
+tactical
+
+watchlist
+
+The core logic
+
+This is the architecture:
+
+Company Quality = business strength
+
+Stock Opportunity = attractiveness of the stock
+
+Expectation = how much success is already priced in
+
+Mispricing = evidence the market is wrong
+
+Fragility = how easily the thesis can break
+
+Position size = function of all the above
+
+So it stops the system from overbuying “great but fully priced” companies and also avoids loading up on “cheap but fragile” names.
+
+Input structure
+
+The script expects a companies.csv with columns like:
+
+ticker
+
+company_name
+
+forward_pe
+
+forward_pe_5y_avg
+
+ev_ebit
+
+peer_forward_pe_median
+
+fcf_yield
+
+reverse_dcf_implied_revenue_cagr
+
+temporary_issue
+
+margin_normalization
+
+net_debt_ebitda
+
+interest_coverage
+
+etc.
+
+You can start with partial columns and expand.
+
+Best next move
+
+What you really need now is not more theory — it’s a proper mapping layer from your existing 120 factors into this engine.
+
+The next thing I’d build for you is:
+
+a factor mapping table
+
+your 120 factors
+
+which principle they belong to
+
+which bucket they feed
+
+whether higher/lower is better
+
+normalization rule
+
+weight

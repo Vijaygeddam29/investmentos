@@ -47,6 +47,12 @@ export interface ScorePayload {
   momentumScore: number | null;
   valuationScore: number | null;
   sentimentScore: number | null;
+  companyQualityScore: number | null;
+  stockOpportunityScore: number | null;
+  expectationScore: number | null;
+  mispricingScore: number | null;
+  fragilityScore: number | null;
+  portfolioNetScore: number | null;
 }
 
 // ── Main writer ───────────────────────────────────────────────────────────────
@@ -141,6 +147,16 @@ export async function writeFactorSnapshot(
     rocketDelta: delta(scores.rocketScore, prevSnapshot?.rocketScore ?? null),
     waveDelta: delta(scores.waveScore, prevSnapshot?.waveScore ?? null),
     entryDelta: delta(entryScore, prevSnapshot?.entryScore ?? null),
+
+    // Two-score architecture
+    companyQualityScore: scores.companyQualityScore,
+    stockOpportunityScore: scores.stockOpportunityScore,
+
+    // Four-layer investment intelligence
+    expectationScore: scores.expectationScore,
+    mispricingScore: scores.mispricingScore,
+    fragilityScore: scores.fragilityScore,
+    portfolioNetScore: scores.portfolioNetScore,
   };
 
   // Upsert: one row per ticker per date

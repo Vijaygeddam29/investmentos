@@ -373,23 +373,39 @@ router.get("/portfolio/builder", async (req, res) => {
         rationale = parts.join("; ");
       }
 
+      const pns = (s as any).portfolioNetScore as number | null ?? null;
+      const positionBand = pns != null
+        ? pns >= 0.75 ? { band: "core",      label: "Core",      minPct: 6,   maxPct: 10  }
+        : pns >= 0.60 ? { band: "standard",  label: "Standard",  minPct: 3,   maxPct: 5   }
+        : pns >= 0.45 ? { band: "starter",   label: "Starter",   minPct: 1,   maxPct: 2.5 }
+        : pns >= 0.30 ? { band: "tactical",  label: "Tactical",  minPct: 0.5, maxPct: 1   }
+        :               { band: "watchlist", label: "Watchlist", minPct: 0,   maxPct: 0   }
+        : null;
+
       return {
-        rank:           i + 1,
-        ticker:         s.ticker,
-        name:           co?.name    ?? s.ticker,
+        rank:                  i + 1,
+        ticker:                s.ticker,
+        name:                  co?.name    ?? s.ticker,
         sector,
-        country:        normalizeCountry(co?.country),
-        weight:         weights[i],
+        country:               normalizeCountry(co?.country),
+        weight:                weights[i],
         compositeScore,
-        fortressScore:  s.fortressScore  ?? null,
-        rocketScore:    s.rocketScore    ?? null,
-        waveScore:      s.waveScore      ?? null,
-        entryScore:     s.entryScore     ?? null,
-        marketCap:      s.marketCap      ?? null,
-        volatility:     weightMethod === "risk" ? (vols[s.ticker] ?? null) : null,
+        fortressScore:         s.fortressScore  ?? null,
+        rocketScore:           s.rocketScore    ?? null,
+        waveScore:             s.waveScore      ?? null,
+        entryScore:            s.entryScore     ?? null,
+        marketCap:             s.marketCap      ?? null,
+        volatility:            weightMethod === "risk" ? (vols[s.ticker] ?? null) : null,
         highValuation,
         innovationTier,
         rationale,
+        portfolioNetScore:     pns,
+        expectationScore:      (s as any).expectationScore     ?? null,
+        mispricingScore:       (s as any).mispricingScore      ?? null,
+        fragilityScore:        (s as any).fragilityScore       ?? null,
+        companyQualityScore:   (s as any).companyQualityScore  ?? null,
+        stockOpportunityScore: (s as any).stockOpportunityScore ?? null,
+        positionBand,
       };
     });
 

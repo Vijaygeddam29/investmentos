@@ -32,6 +32,12 @@ export const scoresTable = pgTable("scores", {
   // Stock Opportunity Score: is now a good entry? (Valuation/Momentum/Sentiment)
   stockOpportunityScore: real("stock_opportunity_score"),
 
+  // Four-layer investment intelligence
+  expectationScore: real("expectation_score"),
+  mispricingScore: real("mispricing_score"),
+  fragilityScore: real("fragility_score"),
+  portfolioNetScore: real("portfolio_net_score"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
