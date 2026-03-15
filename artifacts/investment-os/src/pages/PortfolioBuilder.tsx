@@ -1036,24 +1036,207 @@ export default function PortfolioBuilder() {
             {/* Holdings list */}
             {!isLoading && holdings.length > 0 && (
               <div className="space-y-2">
-                {/* Country grouping */}
+
+                {/* ── Portfolio Bank ─────────────────────────── */}
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Banknote className="w-4 h-4 text-violet-400" />
+                    <span className="text-sm font-semibold text-foreground">Portfolio Bank</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">Allocation by conviction tier</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {BAND_ORDER.map(b => {
+                      const meta  = BAND_META[b];
+                      const alloc = bandWeights[b] ?? 0;
+                      const count = (bandGroups[b] ?? []).length;
+                      return (
+                        <div key={b} className={`rounded-lg border ${meta.borderColor} bg-muted/10 p-2.5 flex flex-col gap-1`}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                          <div className={`text-xl font-bold font-mono leading-none ${meta.color}`}>{alloc.toFixed(1)}<span className="text-xs">%</span></div>
+                          <div className="text-[9px] text-muted-foreground">{count} stock{count !== 1 ? "s" : ""}</div>
+                          <div className="h-1 w-full bg-muted/30 rounded-full overflow-hidden mt-0.5">
+                            <div className={`h-full rounded-full ${meta.barColor}`} style={{ width: `${Math.min(alloc, 100)}%` }} />
+                          </div>
+                          <div className="text-[8px] text-muted-foreground/70 mt-0.5">{meta.suggestLabel}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── View toggle ─────────────────────────────── */}
+                <div className="flex items-center justify-end gap-1 px-1">
+                  <span className="text-[10px] text-muted-foreground mr-1">View:</span>
+                  <button
+                    onClick={() => setViewMode("band")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${viewMode === "band" ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"}`}
+                  >
+                    <LayoutGrid className="w-3 h-3" />Band
+                  </button>
+                  <button
+                    onClick={() => setViewMode("country")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${viewMode === "country" ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"}`}
+                  >
+                    <MapPin className="w-3 h-3" />Country
+                  </button>
+                </div>
+
+                {/* ── Shared holding row renderer ─────────────── */}
                 {(() => {
+                  function HoldingRow({ h, rank, showBandBadge }: { h: ManualHolding; rank: number; showBandBadge: boolean }) {
+                    const w        = manualWeights[h.ticker] ?? 0;
+                    const pns      = h.portfolioNetScore;
+                    const pct      = pns != null ? Math.round(pns * 100) : null;
+                    const bs       = bandStyle(h.positionBand?.band);
+                    const band     = h.positionBand;
+                    const isExp    = expandedTicker === h.ticker;
+                    const isLocked = lockedWeights.has(h.ticker);
+                    const netColor = pct == null ? "text-muted-foreground" : pct >= 75 ? "text-emerald-400" : pct >= 60 ? "text-blue-400" : pct >= 45 ? "text-amber-400" : pct >= 30 ? "text-orange-400" : "text-red-400";
+                    return (
+                      <div className="bg-card border border-border rounded-xl overflow-hidden mb-2">
+                        <div className="flex items-center gap-2 px-3 py-3 hover:bg-muted/10 transition-colors">
+                          <span className="text-[10px] text-muted-foreground/50 font-mono w-5">{rank}</span>
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="text-sm">{flag(h.country)}</span>
+                            <span className="font-mono font-bold text-foreground text-sm">{h.ticker}</span>
+                            <span className="text-xs text-muted-foreground truncate hidden sm:block">{h.name}</span>
+                            {showBandBadge && band && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 hidden md:inline ${bs.badge}`}>
+                                {band.label}
+                              </span>
+                            )}
+                          </div>
+                          {pct != null && (
+                            <div className="text-right shrink-0">
+                              <div className={`text-lg font-bold font-mono leading-none ${netColor}`}>{pct}</div>
+                              <div className="text-[9px] text-muted-foreground">net</div>
+                            </div>
+                          )}
+                          <div className="hidden lg:flex items-center gap-2 w-48 shrink-0">
+                            {[
+                              { v: h.companyQualityScore,   label: "Q", color: "bg-emerald-500" },
+                              { v: h.stockOpportunityScore, label: "O", color: "bg-blue-500" },
+                              { v: h.mispricingScore,       label: "M", color: "bg-amber-500" },
+                              { v: h.expectationScore,      label: "E", color: "bg-orange-500" },
+                              { v: h.fragilityScore,        label: "F", color: "bg-red-500" },
+                            ].map(s => (
+                              <div key={s.label} className="flex flex-col items-center gap-0.5 flex-1" title={`${s.label}: ${s.v != null ? Math.round(s.v * 100) : "—"}`}>
+                                <div className="h-6 w-3 bg-muted/30 rounded-sm overflow-hidden flex flex-col justify-end">
+                                  {s.v != null && <div className={`w-full rounded-sm ${s.color}`} style={{ height: `${Math.round(s.v * 100)}%` }} />}
+                                </div>
+                                <span className="text-[8px] text-muted-foreground">{s.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="shrink-0 hidden sm:block">
+                            <span className={`text-[10px] font-bold ${bs.actionColor}`}>{bs.action}</span>
+                          </div>
+                          {/* Suggested range */}
+                          {band && band.minPct != null && band.maxPct != null && (
+                            <div className="text-[9px] text-muted-foreground text-center shrink-0 hidden lg:block w-14">
+                              <div className="text-[8px] text-muted-foreground/60">suggest</div>
+                              <div className="font-mono text-foreground/70">{band.minPct}–{band.maxPct}%</div>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button onClick={() => toggleLock(h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors">
+                              {isLocked ? <Lock className="w-3 h-3 text-primary" /> : <Unlock className="w-3 h-3" />}
+                            </button>
+                            <div className="relative w-16">
+                              <input
+                                type="number" min={0} max={100} step={0.1}
+                                value={w.toFixed(1)}
+                                onChange={e => handleWeightChange(h.ticker, e.target.value)}
+                                className="w-full bg-muted/30 border border-border rounded-md px-2 py-1 text-xs font-mono text-right text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                              <span className="absolute right-1.5 top-1 text-[9px] text-muted-foreground">%</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => setExpandedTicker(isExp ? null : h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View Intelligence analysis">
+                              {isExp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                            <button onClick={() => { setSelectedTicker(h.ticker); setDrawerOpen(true); }} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View full thesis">
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => removeHolding(h.ticker)} className="text-muted-foreground hover:text-red-400 transition-colors p-1">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                        {isExp && <HoldingIntelPanel h={h} weight={w} />}
+                      </div>
+                    );
+                  }
+
+                  /* ── Band view ─────────────────────────────── */
+                  if (viewMode === "band") {
+                    let globalRank = 0;
+                    return (
+                      <>
+                        {BAND_ORDER.filter(b => b !== "watchlist").map(b => {
+                          const group = bandGroups[b] ?? [];
+                          if (group.length === 0) return null;
+                          const meta  = BAND_META[b];
+                          const alloc = bandWeights[b] ?? 0;
+                          return (
+                            <div key={b}>
+                              <div className={`flex items-center gap-2 px-2 py-2 rounded-t-lg border-b ${meta.borderColor} bg-muted/5`}>
+                                <span className={`text-xs font-bold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                                <span className="text-[10px] text-muted-foreground">{group.length} stock{group.length !== 1 ? "s" : ""}</span>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  <strong className={`font-mono ${meta.color}`}>{alloc.toFixed(1)}%</strong> allocated
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <span className={`text-[10px] text-muted-foreground/70`}>suggested: {meta.suggestLabel}</span>
+                              </div>
+                              {group.map(h => {
+                                globalRank++;
+                                return <HoldingRow key={h.ticker} h={h} rank={globalRank} showBandBadge={false} />;
+                              })}
+                            </div>
+                          );
+                        })}
+
+                        {/* Watchlist section — collapsible */}
+                        {(bandGroups["watchlist"] ?? []).length > 0 && (
+                          <div>
+                            <button
+                              onClick={() => setWatchlistOpen(o => !o)}
+                              className="w-full flex items-center gap-2 px-2 py-2 rounded-t-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+                            >
+                              <EyeOff className="w-3.5 h-3.5 text-red-400" />
+                              <span className="text-xs font-bold uppercase tracking-wide text-red-400">Watchlist</span>
+                              <span className="text-[10px] text-muted-foreground">{(bandGroups["watchlist"] ?? []).length} stock{(bandGroups["watchlist"] ?? []).length !== 1 ? "s" : ""}</span>
+                              <span className="text-[10px] text-muted-foreground">· No position recommended</span>
+                              <span className="ml-auto">
+                                {watchlistOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                              </span>
+                            </button>
+                            {watchlistOpen && (bandGroups["watchlist"] ?? []).map((h, i) => (
+                              <HoldingRow key={h.ticker} h={h} rank={holdings.length - (bandGroups["watchlist"] ?? []).length + i + 1} showBandBadge={false} />
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  }
+
+                  /* ── Country view ──────────────────────────── */
                   const byCountry = new Map<string, ManualHolding[]>();
                   for (const h of holdings) {
                     const c = h.country || "Unknown";
                     if (!byCountry.has(c)) byCountry.set(c, []);
                     byCountry.get(c)!.push(h);
                   }
+                  let countryRank = 0;
                   return Array.from(byCountry.entries()).map(([countryName, countryHoldings]) => {
                     const totalW = countryHoldings.reduce((s, h) => s + (manualWeights[h.ticker] ?? 0), 0);
-                    const avgNet = countryHoldings
-                      .map(h => h.portfolioNetScore)
-                      .filter((v): v is number => v != null)
-                      .reduce((s, v, _, a) => s + v / a.length, 0);
-
+                    const avgNetArr = countryHoldings.map(h => h.portfolioNetScore).filter((v): v is number => v != null);
+                    const avgNet   = avgNetArr.length ? avgNetArr.reduce((s, v) => s + v, 0) / avgNetArr.length : null;
                     return (
                       <div key={countryName}>
-                        {/* Country header */}
                         <div className="flex items-center gap-2 px-1 py-1.5">
                           <span className="text-base leading-none">{flag(countryName)}</span>
                           <span className="text-xs font-semibold text-foreground">{countryName}</span>
@@ -1062,122 +1245,16 @@ export default function PortfolioBuilder() {
                           <span className="text-[10px] text-muted-foreground">
                             <strong className="text-foreground font-mono">{totalW.toFixed(1)}%</strong> allocated
                           </span>
-                          {isFinite(avgNet) && (
+                          {avgNet != null && (
                             <>
                               <span className="text-[10px] text-muted-foreground">·</span>
                               <span className="text-[10px] text-muted-foreground">avg net <strong className="text-foreground font-mono">{Math.round(avgNet * 100)}</strong></span>
                             </>
                           )}
                         </div>
-
-                        {/* Holdings */}
-                        {countryHoldings.map((h, i) => {
-                          const w     = manualWeights[h.ticker] ?? 0;
-                          const pns   = h.portfolioNetScore;
-                          const pct   = pns != null ? Math.round(pns * 100) : null;
-                          const bs    = bandStyle(h.positionBand?.band);
-                          const band  = h.positionBand;
-                          const isExp = expandedTicker === h.ticker;
-                          const isLocked = lockedWeights.has(h.ticker);
-
-                          const netColor = pct == null ? "text-muted-foreground" : pct >= 75 ? "text-emerald-400" : pct >= 60 ? "text-blue-400" : pct >= 45 ? "text-amber-400" : pct >= 30 ? "text-orange-400" : "text-red-400";
-
-                          return (
-                            <div key={h.ticker} className="bg-card border border-border rounded-xl overflow-hidden mb-2">
-                              {/* Holding header row */}
-                              <div className="flex items-center gap-2 px-3 py-3 hover:bg-muted/10 transition-colors">
-                                {/* Rank */}
-                                <span className="text-[10px] text-muted-foreground/50 font-mono w-5">{i + 1}</span>
-
-                                {/* Ticker + company */}
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <span className="text-sm">{flag(h.country)}</span>
-                                  <span className="font-mono font-bold text-foreground text-sm">{h.ticker}</span>
-                                  <span className="text-xs text-muted-foreground truncate hidden sm:block">{h.name}</span>
-                                  {band && (
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 hidden md:inline ${bs.badge}`}>
-                                      {band.label}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Net score */}
-                                {pct != null && (
-                                  <div className="text-right shrink-0">
-                                    <div className={`text-lg font-bold font-mono leading-none ${netColor}`}>{pct}</div>
-                                    <div className="text-[9px] text-muted-foreground">net</div>
-                                  </div>
-                                )}
-
-                                {/* Mini score bars (compact) */}
-                                <div className="hidden lg:flex items-center gap-2 w-48 shrink-0">
-                                  {[
-                                    { v: h.companyQualityScore,   label: "Q", interp: qualityInterp,     color: "bg-emerald-500" },
-                                    { v: h.stockOpportunityScore, label: "O", interp: opportunityInterp, color: "bg-blue-500" },
-                                    { v: h.mispricingScore,       label: "M", interp: mispricingInterp,  color: "bg-amber-500" },
-                                    { v: h.expectationScore,      label: "E", interp: expectationInterp, color: "bg-orange-500" },
-                                    { v: h.fragilityScore,        label: "F", interp: fragilityInterp,   color: "bg-red-500" },
-                                  ].map(s => (
-                                    <div key={s.label} className="flex flex-col items-center gap-0.5 flex-1" title={`${s.label}: ${s.v != null ? Math.round(s.v * 100) : "—"}`}>
-                                      <div className="h-6 w-3 bg-muted/30 rounded-sm overflow-hidden flex flex-col justify-end">
-                                        {s.v != null && (
-                                          <div className={`w-full rounded-sm ${s.color}`} style={{ height: `${Math.round(s.v * 100)}%` }} />
-                                        )}
-                                      </div>
-                                      <span className="text-[8px] text-muted-foreground">{s.label}</span>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                {/* Action */}
-                                <div className="shrink-0 hidden sm:block">
-                                  <span className={`text-[10px] font-bold ${bs.actionColor}`}>{bs.action}</span>
-                                </div>
-
-                                {/* Weight input */}
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button onClick={() => toggleLock(h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors">
-                                    {isLocked ? <Lock className="w-3 h-3 text-primary" /> : <Unlock className="w-3 h-3" />}
-                                  </button>
-                                  <div className="relative w-16">
-                                    <input
-                                      type="number" min={0} max={100} step={0.1}
-                                      value={w.toFixed(1)}
-                                      onChange={e => handleWeightChange(h.ticker, e.target.value)}
-                                      className="w-full bg-muted/30 border border-border rounded-md px-2 py-1 text-xs font-mono text-right text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                                    />
-                                    <span className="absolute right-1.5 top-1 text-[9px] text-muted-foreground">%</span>
-                                  </div>
-                                </div>
-
-                                {/* Expand + remove */}
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    onClick={() => setExpandedTicker(isExp ? null : h.ticker)}
-                                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                                    title="View Intelligence analysis"
-                                  >
-                                    {isExp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                  </button>
-                                  <button
-                                    onClick={() => { setSelectedTicker(h.ticker); setDrawerOpen(true); }}
-                                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                                    title="View full thesis"
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={() => removeHolding(h.ticker)}
-                                    className="text-muted-foreground hover:text-red-400 transition-colors p-1"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Expanded Intelligence panel */}
-                              {isExp && <HoldingIntelPanel h={h} weight={w} />}
-                            </div>
-                          );
+                        {countryHoldings.map(h => {
+                          countryRank++;
+                          return <HoldingRow key={h.ticker} h={h} rank={countryRank} showBandBadge={true} />;
                         })}
                       </div>
                     );
