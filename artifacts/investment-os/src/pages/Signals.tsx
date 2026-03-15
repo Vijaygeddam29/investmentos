@@ -2,12 +2,11 @@ import { useState, useMemo, Fragment } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { PipelineTimestampBar } from "@/components/pipeline/PipelineTimestampBar";
+import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
 import {
   Crown, ChevronDown, ChevronUp, ChevronsUpDown, Filter,
-  Loader2, ArrowUpDown, Info, LayoutGrid, List, ExternalLink,
-  Shield, TrendingUp, AlertTriangle, Star, Brain, Zap, Globe,
+  Loader2, Info, Brain, ChevronRight, Globe, ArrowUpDown,
 } from "lucide-react";
 
 // ─── Country flags ─────────────────────────────────────────────────────────────
@@ -21,191 +20,246 @@ const FLAGS: Record<string, string> = {
 };
 const flag = (c?: string | null) => (c ? FLAGS[c] ?? "🌐" : "🌐");
 
-// ─── Score interpretation engine ────────────────────────────────────────────────
+// ─── Score interpretation ──────────────────────────────────────────────────────
 
-interface Interp { label: string; narration: string; color: string; bar: string }
+interface Interp { label: string; color: string; bar: string }
 
 function qualityInterp(v: number): Interp {
-  if (v >= 0.75) return { label: "Exceptional", color: "text-emerald-400", bar: "bg-emerald-500", narration: "Best-in-class business — high ROIC, durable margins, strong capital allocation and genuine pricing power across the cycle" };
-  if (v >= 0.60) return { label: "Strong",      color: "text-blue-400",    bar: "bg-blue-500",    narration: "Above-average fundamentals — consistent profitability, solid capital returns and good balance sheet strength" };
-  if (v >= 0.45) return { label: "Moderate",    color: "text-amber-400",   bar: "bg-amber-500",   narration: "Average quality — some competitive strengths but limited moat depth or meaningful cyclical revenue exposure" };
-  if (v >= 0.30) return { label: "Below Avg",   color: "text-orange-400",  bar: "bg-orange-500",  narration: "Below-average returns — thin margins, limited pricing power or capital-intensive model compressing value creation" };
-  return              { label: "Weak",          color: "text-red-400",     bar: "bg-red-500",     narration: "Weak fundamentals — poor capital returns, margin pressure or structural challenges threatening the business model" };
+  if (v >= 75) return { label: "Exceptional",       color: "text-emerald-400", bar: "bg-emerald-500" };
+  if (v >= 60) return { label: "Strong",            color: "text-blue-400",    bar: "bg-blue-500"    };
+  if (v >= 45) return { label: "Moderate",          color: "text-amber-400",   bar: "bg-amber-500"   };
+  if (v >= 30) return { label: "Below Average",     color: "text-orange-400",  bar: "bg-orange-500"  };
+  return              { label: "Weak",              color: "text-red-400",     bar: "bg-red-500"     };
 }
-
 function opportunityInterp(v: number): Interp {
-  if (v >= 0.75) return { label: "Highly Attractive", color: "text-emerald-400", bar: "bg-emerald-500", narration: "Compelling stock setup — meaningful discount to intrinsic value vs history and peers, positive estimate revisions and improving momentum" };
-  if (v >= 0.60) return { label: "Attractive",        color: "text-blue-400",    bar: "bg-blue-500",    narration: "Good opportunity — stock appears undervalued relative to fundamentals with favourable technical setup and rising estimates" };
-  if (v >= 0.45) return { label: "Moderate",          color: "text-amber-400",   bar: "bg-amber-500",   narration: "Mixed setup — reasonably priced but lacking a clear directional catalyst or showing neutral momentum signals" };
-  if (v >= 0.30) return { label: "Limited",           color: "text-orange-400",  bar: "bg-orange-500",  narration: "Modest opportunity — near full value, flat revisions and limited near-term upside based on current FCF yield" };
-  return              { label: "Unattractive",        color: "text-red-400",     bar: "bg-red-500",     narration: "Poor setup — overvalued vs history and peers, or negative earnings revisions creating material downside risk" };
+  if (v >= 75) return { label: "Highly Attractive", color: "text-emerald-400", bar: "bg-emerald-500" };
+  if (v >= 60) return { label: "Attractive",        color: "text-blue-400",    bar: "bg-blue-500"    };
+  if (v >= 45) return { label: "Moderate",          color: "text-amber-400",   bar: "bg-amber-500"   };
+  if (v >= 30) return { label: "Limited",           color: "text-orange-400",  bar: "bg-orange-500"  };
+  return              { label: "Unattractive",      color: "text-red-400",     bar: "bg-red-500"     };
 }
-
 function mispricingInterp(v: number): Interp {
-  if (v >= 0.75) return { label: "Strong Edge",  color: "text-emerald-400", bar: "bg-emerald-500", narration: "High-conviction mispricing — temporary issue is masking durable quality, clear catalyst visible within 6–24 months" };
-  if (v >= 0.60) return { label: "Clear Edge",   color: "text-blue-400",    bar: "bg-blue-500",    narration: "Market understates structural strengths — revisions turning positive, margin normalisation ahead and optionality underpriced" };
-  if (v >= 0.45) return { label: "Plausible",    color: "text-amber-400",   bar: "bg-amber-500",   narration: "Some mispricing possible — temporary factors may be suppressing reported economics, thesis still building evidence" };
-  if (v >= 0.30) return { label: "Weak",         color: "text-orange-400",  bar: "bg-orange-500",  narration: "Limited evidence of mispricing — market appears reasonably informed, limited near-term re-rating catalyst" };
-  return              { label: "No Edge",        color: "text-red-400",     bar: "bg-red-500",     narration: "No clear market mispricing — stock appears fairly valued or even optimistically priced relative to visible fundamentals" };
+  if (v >= 75) return { label: "Strong Edge",       color: "text-emerald-400", bar: "bg-emerald-500" };
+  if (v >= 60) return { label: "Clear Edge",        color: "text-blue-400",    bar: "bg-blue-500"    };
+  if (v >= 45) return { label: "Plausible",         color: "text-amber-400",   bar: "bg-amber-500"   };
+  if (v >= 30) return { label: "Weak",              color: "text-orange-400",  bar: "bg-orange-500"  };
+  return              { label: "No Edge",           color: "text-red-400",     bar: "bg-red-500"     };
 }
-
+// For Expectation and Fragility: LOWER is better, so colours are inverted
 function expectationInterp(v: number): Interp {
-  if (v >= 0.75) return { label: "Euphoric",   color: "text-red-400",     bar: "bg-red-500",     narration: "Perfection priced in — very high consensus bar means any disappointment risks a sharp de-rating; crowded long" };
-  if (v >= 0.60) return { label: "Elevated",   color: "text-orange-400",  bar: "bg-orange-500",  narration: "High expectations — strong consensus optimism creates significant execution risk if growth misses or margins disappoint" };
-  if (v >= 0.45) return { label: "Moderate",   color: "text-amber-400",   bar: "bg-amber-500",   narration: "Balanced bar — consensus is achievable; neither dangerously optimistic nor excessively pessimistic" };
-  if (v >= 0.30) return { label: "Modest",     color: "text-blue-400",    bar: "bg-blue-500",    narration: "Low bar — meaningful room to positively surprise consensus and drive multiple expansion on a beat-and-raise quarter" };
-  return              { label: "Depressed",    color: "text-emerald-400", bar: "bg-emerald-500", narration: "Market assumes failure — even modest positive news or earnings beat could trigger a significant sentiment re-rating" };
+  if (v >= 75) return { label: "Euphoric",          color: "text-red-400",     bar: "bg-red-500"     };
+  if (v >= 60) return { label: "Elevated",          color: "text-orange-400",  bar: "bg-orange-500"  };
+  if (v >= 45) return { label: "Moderate",          color: "text-amber-400",   bar: "bg-amber-500"   };
+  if (v >= 30) return { label: "Modest",            color: "text-blue-400",    bar: "bg-blue-500"    };
+  return              { label: "Depressed",         color: "text-emerald-400", bar: "bg-emerald-500" };
 }
-
 function fragilityInterp(v: number): Interp {
-  if (v >= 0.75) return { label: "High Risk",   color: "text-red-400",     bar: "bg-red-500",     narration: "Fragile thesis — concentrated revenue, high leverage, regulatory overhang or technology disruption materially threatens the story" };
-  if (v >= 0.60) return { label: "Elevated",    color: "text-orange-400",  bar: "bg-orange-500",  narration: "Multiple vulnerabilities — one or more structural weaknesses could derail the thesis; requires close monitoring" };
-  if (v >= 0.45) return { label: "Moderate",    color: "text-amber-400",   bar: "bg-amber-500",   narration: "Manageable risks — thesis intact under most scenarios but execution quality and macro sensitivity matter here" };
-  if (v >= 0.30) return { label: "Robust",      color: "text-blue-400",    bar: "bg-blue-500",    narration: "Resilient business — limited structural vulnerabilities, diversified revenue and strong interest coverage" };
-  return              { label: "Very Robust",   color: "text-emerald-400", bar: "bg-emerald-500", narration: "Fortress-grade resilience — clean balance sheet, diversified revenue base and low regulatory or disruption exposure" };
+  if (v >= 75) return { label: "High Risk",         color: "text-red-400",     bar: "bg-red-500"     };
+  if (v >= 60) return { label: "Elevated",          color: "text-orange-400",  bar: "bg-orange-500"  };
+  if (v >= 45) return { label: "Moderate",          color: "text-amber-400",   bar: "bg-amber-500"   };
+  if (v >= 30) return { label: "Robust",            color: "text-blue-400",    bar: "bg-blue-500"    };
+  return              { label: "Very Robust",       color: "text-emerald-400", bar: "bg-emerald-500" };
 }
 
-function bandConfig(pns: number | null | undefined) {
-  if (pns == null) return null;
-  if (pns >= 0.75) return { label: "CORE",      border: "border-emerald-500/30 bg-emerald-950/20", badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", minPct: 6,   maxPct: 10,  action: "Strong Buy", actionColor: "text-emerald-400", desc: "High-conviction, build to full position size" };
-  if (pns >= 0.60) return { label: "STANDARD",  border: "border-blue-500/30 bg-blue-950/10",       badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",           minPct: 3,   maxPct: 5,   action: "Buy",        actionColor: "text-blue-400",    desc: "Quality position, establish at standard size" };
-  if (pns >= 0.45) return { label: "STARTER",   border: "border-amber-500/30 bg-amber-950/10",     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",         minPct: 1,   maxPct: 2.5, action: "Add",        actionColor: "text-amber-400",   desc: "Initial stake, build further on confirmation" };
-  if (pns >= 0.30) return { label: "TACTICAL",  border: "border-orange-500/30 bg-orange-950/10",   badge: "bg-orange-500/15 text-orange-400 border-orange-500/30",      minPct: 0.5, maxPct: 1,   action: "Watch",      actionColor: "text-orange-400",  desc: "Speculative only with tight risk controls" };
-  return                  { label: "WATCHLIST", border: "border-border bg-card",                    badge: "bg-secondary text-muted-foreground border-border/50",        minPct: 0,   maxPct: 0,   action: "Avoid",      actionColor: "text-red-400",     desc: "Monitor only — do not add to portfolio" };
+function bandConfig(n: number | null | undefined) {
+  if (n == null) return null;
+  if (n >= 75) return { label: "CORE",      badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", action: "Strong Buy", ac: "text-emerald-400", minPct: 6,   maxPct: 10  };
+  if (n >= 60) return { label: "STANDARD",  badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",          action: "Buy",        ac: "text-blue-400",    minPct: 3,   maxPct: 5   };
+  if (n >= 45) return { label: "STARTER",   badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",       action: "Add",        ac: "text-amber-400",   minPct: 1,   maxPct: 2.5 };
+  if (n >= 30) return { label: "TACTICAL",  badge: "bg-orange-500/15 text-orange-400 border-orange-500/30",    action: "Watch",      ac: "text-orange-400",  minPct: 0.5, maxPct: 1   };
+  return              { label: "WATCHLIST", badge: "bg-secondary text-muted-foreground border-border/50",       action: "Avoid",      ac: "text-red-400",     minPct: 0,   maxPct: 0   };
 }
 
-// ─── Score bar component ────────────────────────────────────────────────────────
+// ─── Inline score bar (compact, for table rows) ────────────────────────────────
 
-function ScoreBar({ label, value, interp, weight, invert = false }: {
-  label: string; value: number | null | undefined;
-  interp: (v: number) => Interp; weight?: string; invert?: boolean;
-}) {
-  if (value == null) return (
-    <div className="space-y-0.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}{weight && <span className="ml-1 opacity-60">{weight}</span>}</span>
-        <span className="text-muted-foreground/40 text-xs">—</span>
-      </div>
-    </div>
-  );
-  const i = interp(value);
-  const pct = Math.round(value * 100);
-  const displayPct = invert ? (100 - pct) : pct; // For fragility/expectation, invert bar fill to show "goodness"
+function MiniBar({ value, interp }: { value: number | null | undefined; interp: Interp | null }) {
+  if (value == null || interp == null) return <span className="text-muted-foreground/30 text-xs">—</span>;
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider whitespace-nowrap">{label}</span>
-          {weight && <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${invert ? "bg-red-500/10 text-red-400 border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"}`}>{weight}</span>}
+    <div className="flex flex-col items-end gap-0.5 min-w-[52px]">
+      <div className="flex items-center gap-1 w-full justify-end">
+        <div className="h-1.5 w-10 bg-muted/30 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${interp.bar}`} style={{ width: `${value}%` }} />
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`text-[10px] font-semibold ${i.color}`}>{i.label}</span>
-          <span className={`text-sm font-bold font-mono ${i.color}`}>{pct}</span>
-        </div>
+        <span className={`font-mono text-[11px] font-bold ${interp.color}`}>{value}</span>
       </div>
-      <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${i.bar}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="text-[10px] text-muted-foreground leading-relaxed">{i.narration}</p>
+      <span className={`text-[9px] ${interp.color} opacity-80 leading-none`}>{interp.label}</span>
     </div>
   );
 }
 
-// ─── Company Intelligence Card ─────────────────────────────────────────────────
+// ─── Expanded analysis row ─────────────────────────────────────────────────────
 
-function CompanyCard({ s, onOpen }: { s: any; onOpen: () => void }) {
-  const pns  = s.portfolioNetScore as number | null | undefined;
-  const band = bandConfig(pns);
-  const pct  = pns != null ? Math.round(pns * 100) : null;
+function ExpandedRow({ s, onOpenDrawer }: { s: any; onOpenDrawer: () => void }) {
+  const Q = s.companyQualityScore   != null ? Math.round(s.companyQualityScore   * 100) : null;
+  const O = s.stockOpportunityScore != null ? Math.round(s.stockOpportunityScore * 100) : null;
+  const M = s.mispricingScore       != null ? Math.round(s.mispricingScore       * 100) : null;
+  const E = s.expectationScore      != null ? Math.round(s.expectationScore      * 100) : null;
+  const F = s.fragilityScore        != null ? Math.round(s.fragilityScore        * 100) : null;
+  const N = s.portfolioNetScore     != null ? Math.round(s.portfolioNetScore     * 100) : null;
 
-  const netColor =
-    pct == null      ? "text-muted-foreground" :
-    pct >= 75        ? "text-emerald-400" :
-    pct >= 60        ? "text-blue-400" :
-    pct >= 45        ? "text-amber-400" :
-    pct >= 30        ? "text-orange-400" : "text-red-400";
+  const rawWeighted = Q != null && O != null && M != null && E != null && F != null
+    ? (2 * Q + 1 * O + 2 * M - 1 * E - 1 * F) : null;
+
+  const band = bandConfig(N);
+
+  const narrations: { label: string; color: string; bg: string; weight: string; v: number | null; text: string }[] = [
+    {
+      label: "Company Quality", color: "text-emerald-400", bg: "border-emerald-500/20 bg-emerald-950/5",
+      weight: "+2×",
+      v: Q,
+      text: Q == null ? "" : Q >= 75 ? "Exceptional business — high ROIC, durable margins, strong capital allocation and genuine pricing power."
+        : Q >= 60 ? "Above-average fundamentals — consistent profitability, solid capital returns and healthy balance sheet."
+        : Q >= 45 ? "Average quality business with some competitive strengths but limited moat depth."
+        : Q >= 30 ? "Below-average returns — thin margins or capital-intensive model compressing value creation."
+        : "Weak fundamentals — poor capital returns, margin pressure or structural business challenges.",
+    },
+    {
+      label: "Stock Opportunity", color: "text-blue-400", bg: "border-blue-500/20 bg-blue-950/5",
+      weight: "+1×",
+      v: O,
+      text: O == null ? "" : O >= 75 ? "Compelling setup — meaningful discount to intrinsic value with positive revisions and improving entry timing."
+        : O >= 60 ? "Good opportunity — stock undervalued vs fundamentals with favourable momentum signals."
+        : O >= 45 ? "Mixed setup — reasonably priced but lacks a clear directional catalyst."
+        : O >= 30 ? "Limited upside — near full value with flat revisions and limited near-term potential."
+        : "Poor setup — overvalued vs history and peers, or negative revisions creating downside risk.",
+    },
+    {
+      label: "Mispricing", color: "text-amber-400", bg: "border-amber-500/20 bg-amber-950/5",
+      weight: "+2×",
+      v: M,
+      text: M == null ? "" : M >= 75 ? "High-conviction edge — temporary issue masking durable quality. Clear catalyst visible within 6–24 months."
+        : M >= 60 ? "Market understates structural strengths — revisions turning positive with margin normalisation ahead."
+        : M >= 45 ? "Plausible mispricing — temporary factors may be suppressing true economics. Thesis still building."
+        : M >= 30 ? "Limited evidence of mispricing — market appears reasonably informed about business conditions."
+        : "No detectable edge — stock appears fairly or optimistically priced vs visible fundamentals.",
+    },
+    {
+      label: "Expectation", color: E != null && E >= 60 ? "text-orange-400" : E != null && E >= 45 ? "text-amber-400" : "text-emerald-400",
+      bg: E != null && E >= 60 ? "border-orange-500/20 bg-orange-950/5" : "border-emerald-500/20 bg-emerald-950/5",
+      weight: "−1×",
+      v: E,
+      text: E == null ? "" : E >= 75 ? "Perfection priced in — very high bar. Any disappointment risks a sharp de-rating from a crowded long."
+        : E >= 60 ? "High consensus optimism creates execution risk — the bar to beat is demanding."
+        : E >= 45 ? "Balanced expectation bar — consensus achievable, neither too optimistic nor too pessimistic."
+        : E >= 30 ? "Low bar — meaningful room to positively surprise consensus and drive multiple expansion."
+        : "Market assumes failure — even modest positive news could trigger a significant re-rating.",
+    },
+    {
+      label: "Fragility", color: F != null && F >= 60 ? "text-red-400" : F != null && F >= 45 ? "text-amber-400" : "text-emerald-400",
+      bg: F != null && F >= 60 ? "border-red-500/20 bg-red-950/5" : "border-emerald-500/20 bg-emerald-950/5",
+      weight: "−1×",
+      v: F,
+      text: F == null ? "" : F >= 75 ? "Fragile thesis — concentrated revenue, high leverage or regulatory exposure threatens the investment story."
+        : F >= 60 ? "Multiple vulnerabilities present — structural weaknesses could derail the thesis."
+        : F >= 45 ? "Manageable risks — thesis intact under most scenarios but execution quality matters."
+        : F >= 30 ? "Resilient business — limited vulnerabilities, diversified revenue and strong interest coverage."
+        : "Fortress-grade resilience — clean balance sheet, diversified revenue and low disruption exposure.",
+    },
+  ];
 
   return (
-    <div className={`rounded-xl border bg-card overflow-hidden hover:shadow-lg transition-all cursor-pointer group ${band?.border ?? "border-border"}`}
-      onClick={onOpen}
-    >
-      {/* Card header */}
-      <div className="px-4 pt-4 pb-3 border-b border-border/50">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg leading-none">{flag(s.country)}</span>
-            <span className="font-mono font-bold text-foreground text-base">{s.ticker}</span>
-            {band && (
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${band.badge}`}>
-                {band.label}
+    <tr>
+      <td colSpan={12} className="px-4 pb-4 pt-2 bg-muted/5 border-b border-border/40">
+
+        {/* Formula calculation */}
+        {rawWeighted != null && (
+          <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-950/10 px-4 py-3">
+            <div className="text-[10px] text-violet-400 uppercase tracking-wider font-semibold mb-2">Score Derivation</div>
+            <div className="flex items-center gap-2 flex-wrap font-mono text-xs">
+              <span className="text-emerald-400">2×{Q}</span>
+              <span className="text-muted-foreground">+</span>
+              <span className="text-blue-400">1×{O}</span>
+              <span className="text-muted-foreground">+</span>
+              <span className="text-amber-400">2×{M}</span>
+              <span className="text-muted-foreground">−</span>
+              <span className="text-orange-400">1×{E}</span>
+              <span className="text-muted-foreground">−</span>
+              <span className="text-red-400">1×{F}</span>
+              <span className="text-muted-foreground">=</span>
+              <span className="text-foreground font-bold">{rawWeighted} raw</span>
+              <span className="text-muted-foreground">→</span>
+              <span className={`font-bold ${N != null && N >= 75 ? "text-emerald-400" : N != null && N >= 60 ? "text-blue-400" : N != null && N >= 45 ? "text-amber-400" : "text-orange-400"}`}>
+                {N}/100 normalised
               </span>
-            )}
+            </div>
+            <div className="text-[9px] text-muted-foreground/50 mt-1 font-mono">Normalisation: (raw + 200) ÷ 700 × 100</div>
           </div>
-          {pct != null && (
-            <div className="text-right shrink-0">
-              <div className={`text-2xl font-bold font-mono leading-none ${netColor}`}>{pct}</div>
-              <div className="text-[9px] text-muted-foreground">Net Score</div>
+        )}
+
+        {/* 5-component narration grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 mb-3">
+          {narrations.map(n => (
+            <div key={n.label} className={`rounded-lg border px-3 py-2.5 ${n.bg}`}>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <div className="flex items-center gap-1">
+                  <span className={`text-[9px] font-bold ${n.v != null && n.label === "Expectation" && n.v <= 45 ? "text-emerald-400" : n.v != null && n.label === "Fragility" && n.v <= 45 ? "text-emerald-400" : n.color}`}>{n.weight}</span>
+                  <span className="text-[10px] font-semibold text-foreground">{n.label}</span>
+                </div>
+                {n.v != null && <span className={`font-mono text-xs font-bold ${n.color}`}>{n.v}</span>}
+              </div>
+              {n.v != null && (
+                <div className="h-1 w-full bg-muted/30 rounded-full overflow-hidden mb-1.5">
+                  <div className={`h-full rounded-full ${
+                    n.label === "Expectation" ? (n.v >= 60 ? "bg-orange-500" : n.v >= 45 ? "bg-amber-500" : "bg-emerald-500") :
+                    n.label === "Fragility"   ? (n.v >= 60 ? "bg-red-500"    : n.v >= 45 ? "bg-amber-500" : "bg-emerald-500") :
+                    n.v >= 65 ? "bg-emerald-500" : n.v >= 50 ? "bg-blue-500" : n.v >= 35 ? "bg-amber-500" : "bg-red-500"
+                  }`} style={{ width: `${n.v}%` }} />
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground leading-relaxed">{n.text || "No data"}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Recommendation + drill-down */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {band && (
+            <div className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+              band.label === "CORE" ? "border-emerald-500/30 bg-emerald-950/10" :
+              band.label === "STANDARD" ? "border-blue-500/30 bg-blue-950/10" :
+              band.label === "STARTER" ? "border-amber-500/30 bg-amber-950/10" :
+              band.label === "TACTICAL" ? "border-orange-500/30 bg-orange-950/10" :
+              "border-border"
+            }`}>
+              <div>
+                <div className={`text-sm font-bold ${band.ac}`}>{band.action}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  Band: <strong className="text-foreground">{band.label}</strong>
+                  {band.minPct > 0 && <span> · Suggested size: <strong className={`font-mono ${band.ac}`}>{band.minPct}–{band.maxPct}%</strong></span>}
+                </div>
+              </div>
             </div>
           )}
+          <button
+            onClick={onOpenDrawer}
+            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 font-medium border border-primary/30 hover:border-primary/60 rounded-lg px-3 py-2 transition-colors"
+          >
+            <Brain className="w-3.5 h-3.5" />
+            Full Intelligence Thesis
+            <ChevronRight className="w-3 h-3" />
+          </button>
         </div>
-        <p className="text-xs text-muted-foreground font-medium truncate">{s.name ?? s.ticker}</p>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          {s.sector && <span className="text-[10px] text-muted-foreground/70 bg-secondary/50 px-1.5 py-0.5 rounded border border-border/30">{s.sector}</span>}
-          {s.country && <span className="text-[10px] text-muted-foreground/60">{s.country}</span>}
-        </div>
-      </div>
-
-      {/* Score bars */}
-      <div className="px-4 py-3 space-y-3.5">
-        <ScoreBar label="Company Quality"    value={s.companyQualityScore}   interp={qualityInterp}     weight="+2×" />
-        <ScoreBar label="Stock Opportunity"  value={s.stockOpportunityScore} interp={opportunityInterp} weight="+1×" />
-        <ScoreBar label="Mispricing"         value={s.mispricingScore}       interp={mispricingInterp}  weight="+2×" />
-        <ScoreBar label="Expectation"        value={s.expectationScore}      interp={expectationInterp} weight="−1×" invert />
-        <ScoreBar label="Fragility"          value={s.fragilityScore}        interp={fragilityInterp}   weight="−1×" invert />
-      </div>
-
-      {/* Card footer — action + position guidance */}
-      <div className="px-4 pb-4">
-        <div className={`rounded-lg border px-3 py-2 ${band?.border ?? "border-border"}`}>
-          {band ? (
-            <>
-              <div className={`text-xs font-bold ${band.actionColor}`}>{band.action}</div>
-              {band.minPct > 0 ? (
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Position: <span className="text-foreground font-mono font-semibold">{band.minPct}–{band.maxPct}%</span> · {band.desc}
-                </div>
-              ) : (
-                <div className="text-[10px] text-muted-foreground mt-0.5">{band.desc}</div>
-              )}
-            </>
-          ) : (
-            <div className="text-xs text-muted-foreground">No Intelligence score available</div>
-          )}
-        </div>
-        <button className="w-full mt-2 text-[10px] text-muted-foreground hover:text-primary flex items-center justify-center gap-1 group-hover:text-primary transition-colors">
-          <ExternalLink className="w-3 h-3" />
-          View full Investment Thesis
-        </button>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
-// ─── Sortable table header ──────────────────────────────────────────────────────
+// ─── Sort key types ────────────────────────────────────────────────────────────
 
 type SortKey = "portfolioNetScore" | "companyQualityScore" | "stockOpportunityScore"
   | "expectationScore" | "mispricingScore" | "fragilityScore";
 type SortDir = "asc" | "desc";
+type BandFilter = "all" | "core" | "standard" | "starter" | "tactical" | "watchlist";
 
 function SortTh({ label, col, active, dir, onSort, className }: {
   label: string; col: SortKey; active: boolean; dir: SortDir;
   onSort: (c: SortKey) => void; className?: string;
 }) {
   return (
-    <th className={`text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 cursor-pointer hover:text-foreground select-none whitespace-nowrap ${className ?? ""}`}
+    <th className={`cursor-pointer hover:text-foreground select-none whitespace-nowrap ${className ?? ""}`}
       onClick={() => onSort(col)}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         {label}
         {active ? dir === "desc" ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />
           : <ChevronsUpDown className="w-2.5 h-2.5 opacity-30" />}
@@ -214,87 +268,19 @@ function SortTh({ label, col, active, dir, onSort, className }: {
   );
 }
 
-// ─── Table row ─────────────────────────────────────────────────────────────────
-
-function TableRow({ s, rank, onOpen }: { s: any; rank: number; onOpen: () => void }) {
-  const pns   = s.portfolioNetScore as number | null | undefined;
-  const band  = bandConfig(pns);
-  const q     = s.companyQualityScore   != null ? qualityInterp(s.companyQualityScore)     : null;
-  const op    = s.stockOpportunityScore != null ? opportunityInterp(s.stockOpportunityScore) : null;
-  const mi    = s.mispricingScore       != null ? mispricingInterp(s.mispricingScore)       : null;
-  const ex    = s.expectationScore      != null ? expectationInterp(s.expectationScore)     : null;
-  const fr    = s.fragilityScore        != null ? fragilityInterp(s.fragilityScore)         : null;
-
-  function MiniBar({ value, interp }: { value: number | null | undefined; interp: ((v: number) => Interp) | null }) {
-    if (value == null || interp == null) return <span className="text-muted-foreground/30 text-xs">—</span>;
-    const i = interp(value);
-    const pct = Math.round(value * 100);
-    return (
-      <div className="flex flex-col items-end gap-0.5">
-        <div className="flex items-center gap-1">
-          <div className="h-1 w-10 bg-muted/30 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${i.bar}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className={`font-mono text-[11px] font-bold ${i.color}`}>{pct}</span>
-        </div>
-        <span className={`text-[9px] ${i.color} opacity-80`}>{i.label}</span>
-      </div>
-    );
-  }
-
-  return (
-    <tr className="border-b border-border/30 hover:bg-muted/20 cursor-pointer transition-colors" onClick={onOpen}>
-      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground/50">{rank}</td>
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">{flag(s.country)}</span>
-          <span className="font-mono font-bold text-foreground text-sm">{s.ticker}</span>
-        </div>
-      </td>
-      <td className="px-3 py-2.5">
-        <span className="text-xs text-muted-foreground line-clamp-1 max-w-[160px]">{s.name ?? s.ticker}</span>
-      </td>
-      <td className="px-3 py-2.5 hidden lg:table-cell">
-        {s.sector && <span className="text-[10px] text-muted-foreground/70 bg-secondary/50 px-1.5 py-0.5 rounded border border-border/30">{s.sector}</span>}
-      </td>
-      <td className="px-3 py-2.5 text-right"><MiniBar value={s.companyQualityScore}   interp={q   ? qualityInterp   : null} /></td>
-      <td className="px-3 py-2.5 text-right"><MiniBar value={s.stockOpportunityScore} interp={op  ? opportunityInterp : null} /></td>
-      <td className="px-3 py-2.5 text-right"><MiniBar value={s.mispricingScore}       interp={mi  ? mispricingInterp  : null} /></td>
-      <td className="px-3 py-2.5 text-right"><MiniBar value={s.expectationScore}      interp={ex  ? expectationInterp : null} /></td>
-      <td className="px-3 py-2.5 text-right"><MiniBar value={s.fragilityScore}        interp={fr  ? fragilityInterp   : null} /></td>
-      <td className="px-3 py-2.5 text-right">
-        {pns != null ? (
-          <span className={`text-sm font-mono font-bold ${
-            pns >= 0.75 ? "text-emerald-400" : pns >= 0.60 ? "text-blue-400" :
-            pns >= 0.45 ? "text-amber-400"   : pns >= 0.30 ? "text-orange-400" : "text-red-400"
-          }`}>{Math.round(pns * 100)}</span>
-        ) : <span className="text-muted-foreground/30 text-xs">—</span>}
-      </td>
-      <td className="px-3 py-2.5">
-        {band ? (
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${band.badge}`}>{band.label}</span>
-        ) : <span className="text-muted-foreground/30 text-xs">—</span>}
-      </td>
-      <td className="px-3 py-2.5">
-        {band && <span className={`text-[10px] font-semibold ${band.actionColor}`}>{band.action}</span>}
-      </td>
-    </tr>
-  );
-}
-
 // ─── Country separator ─────────────────────────────────────────────────────────
 
 function CountrySep({ country, count, avgNet }: { country: string; count: number; avgNet: number | null }) {
   return (
-    <tr className="bg-muted/15 border-y border-border/40">
-      <td colSpan={13} className="px-4 py-1.5">
+    <tr className="bg-muted/20 border-y border-border/50">
+      <td colSpan={12} className="px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-base leading-none">{flag(country)}</span>
-          <span className="text-[11px] font-semibold text-foreground">{country}</span>
+          <span className="text-xs font-bold text-foreground">{country}</span>
           <span className="text-[10px] text-muted-foreground">{count} companies</span>
           {avgNet != null && (
-            <span className="text-[10px] text-muted-foreground ml-1">
-              avg net <strong className="text-foreground font-mono">{Math.round(avgNet * 100)}</strong>
+            <span className="text-[10px] text-muted-foreground">
+              · avg net <strong className="text-foreground font-mono">{avgNet}</strong>
             </span>
           )}
         </div>
@@ -305,18 +291,16 @@ function CountrySep({ country, count, avgNet }: { country: string; count: number
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
-type ViewMode = "cards" | "table";
-type BandFilter = "all" | "core" | "standard" | "starter" | "tactical" | "watchlist";
-
 export default function Signals() {
-  const [sortKey, setSortKey]       = useState<SortKey>("portfolioNetScore");
-  const [sortDir, setSortDir]       = useState<SortDir>("desc");
-  const [viewMode, setViewMode]     = useState<ViewMode>("cards");
-  const [tableGroup, setTableGroup] = useState<"ranked" | "by-country">("ranked");
+  const [sortKey, setSortKey]         = useState<SortKey>("portfolioNetScore");
+  const [sortDir, setSortDir]         = useState<SortDir>("desc");
   const [sectorFilter, setSectorFilter] = useState("all");
-  const [bandFilter, setBandFilter]     = useState<BandFilter>("all");
-  const [drawerTicker, setDrawerTicker] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen]     = useState(false);
+  const [bandFilter, setBandFilter]   = useState<BandFilter>("all");
+  const [groupBy, setGroupBy]         = useState<"ranked" | "country">("ranked");
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [drawerSnapshot, setDrawerSnapshot] = useState<IntelligenceSnapshot | null>(null);
+  const [drawerOpen, setDrawerOpen]   = useState(false);
+  const [defsOpen, setDefsOpen]       = useState(false);
 
   const { market } = useAuth();
   const countryParam = market !== "All" ? market : undefined;
@@ -338,12 +322,12 @@ export default function Signals() {
     if (sectorFilter !== "all") out = out.filter(r => r.sector === sectorFilter);
     if (bandFilter !== "all") {
       out = out.filter(r => {
-        const pns = (r as any).portfolioNetScore as number | null;
-        if (bandFilter === "core")      return pns != null && pns >= 0.75;
-        if (bandFilter === "standard")  return pns != null && pns >= 0.60 && pns < 0.75;
-        if (bandFilter === "starter")   return pns != null && pns >= 0.45 && pns < 0.60;
-        if (bandFilter === "tactical")  return pns != null && pns >= 0.30 && pns < 0.45;
-        if (bandFilter === "watchlist") return pns == null || pns < 0.30;
+        const n = (r as any).portfolioNetScore != null ? Math.round((r as any).portfolioNetScore * 100) : null;
+        if (bandFilter === "core")      return n != null && n >= 75;
+        if (bandFilter === "standard")  return n != null && n >= 60 && n < 75;
+        if (bandFilter === "starter")   return n != null && n >= 45 && n < 60;
+        if (bandFilter === "tactical")  return n != null && n >= 30 && n < 45;
+        if (bandFilter === "watchlist") return n == null || n < 30;
         return true;
       });
     }
@@ -367,8 +351,8 @@ export default function Signals() {
     }
     return Array.from(map.entries())
       .map(([country, rows]) => {
-        const nets = rows.map(r => (r as any).portfolioNetScore as number | null).filter((v): v is number => v != null);
-        const avgNet = nets.length ? nets.reduce((a, b) => a + b, 0) / nets.length : null;
+        const nets = rows.map(r => (r as any).portfolioNetScore).filter((v): v is number => v != null);
+        const avgNet = nets.length ? Math.round(nets.reduce((a, b) => a + b, 0) / nets.length * 100) : null;
         return { country, rows, avgNet };
       })
       .sort((a, b) => (b.avgNet ?? -1) - (a.avgNet ?? -1));
@@ -379,207 +363,254 @@ export default function Signals() {
     else { setSortKey(col); setSortDir("desc"); }
   }
 
-  function openDrawer(ticker: string) {
-    setDrawerTicker(ticker);
+  function toggleExpand(ticker: string) {
+    setExpandedTicker(prev => prev === ticker ? null : ticker);
+  }
+
+  function openDrawer(s: any) {
+    setDrawerSnapshot({
+      ticker: s.ticker,
+      name: s.name,
+      sector: s.sector,
+      country: s.country,
+      marketCap: s.marketCap,
+      companyQualityScore: (s as any).companyQualityScore,
+      stockOpportunityScore: (s as any).stockOpportunityScore,
+      mispricingScore: (s as any).mispricingScore,
+      expectationScore: (s as any).expectationScore,
+      fragilityScore: (s as any).fragilityScore,
+      portfolioNetScore: (s as any).portfolioNetScore,
+      profitabilityScore: (s as any).profitabilityScore,
+      growthScore: (s as any).growthScore,
+      capitalEfficiencyScore: (s as any).capitalEfficiencyScore,
+      financialStrengthScore: (s as any).financialStrengthScore,
+      cashFlowQualityScore: (s as any).cashFlowQualityScore,
+      valuationScore: (s as any).valuationScore,
+      momentumScore: (s as any).momentumScore,
+      sentimentScore: (s as any).sentimentScore,
+      entryScore: (s as any).entryScore,
+      marginOfSafety: (s as any).marginOfSafety,
+      rsi: (s as any).rsi,
+      ret3m: (s as any).ret3m,
+    });
     setDrawerOpen(true);
   }
 
-  const withScore    = sorted.filter(r => (r as any).portfolioNetScore != null).length;
-  const coreCount    = sorted.filter(r => (r as any).portfolioNetScore >= 0.75).length;
-  const buyCount     = sorted.filter(r => (r as any).portfolioNetScore >= 0.60).length;
-  const starterCount = sorted.filter(r => { const v = (r as any).portfolioNetScore; return v >= 0.45 && v < 0.60; }).length;
+  function renderRow(s: any, rank: number) {
+    const n  = (s as any).portfolioNetScore   != null ? Math.round((s as any).portfolioNetScore   * 100) : null;
+    const q  = (s as any).companyQualityScore != null ? Math.round((s as any).companyQualityScore * 100) : null;
+    const o  = (s as any).stockOpportunityScore != null ? Math.round((s as any).stockOpportunityScore * 100) : null;
+    const m  = (s as any).mispricingScore      != null ? Math.round((s as any).mispricingScore      * 100) : null;
+    const e  = (s as any).expectationScore     != null ? Math.round((s as any).expectationScore     * 100) : null;
+    const fr = (s as any).fragilityScore       != null ? Math.round((s as any).fragilityScore       * 100) : null;
 
-  const tableHeader = (
-    <thead>
-      <tr className="border-b border-border/60 bg-muted/10">
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 w-8 text-left">#</th>
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left">Ticker</th>
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left">Company</th>
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left hidden lg:table-cell">Sector</th>
-        <SortTh label="Quality"     col="companyQualityScore"   active={sortKey==="companyQualityScore"}   dir={sortDir} onSort={handleSort} className="text-right" />
-        <SortTh label="Opportunity" col="stockOpportunityScore" active={sortKey==="stockOpportunityScore"} dir={sortDir} onSort={handleSort} className="text-right" />
-        <SortTh label="Mispricing"  col="mispricingScore"       active={sortKey==="mispricingScore"}       dir={sortDir} onSort={handleSort} className="text-right" />
-        <SortTh label="Expectation" col="expectationScore"      active={sortKey==="expectationScore"}      dir={sortDir} onSort={handleSort} className="text-right" />
-        <SortTh label="Fragility"   col="fragilityScore"        active={sortKey==="fragilityScore"}        dir={sortDir} onSort={handleSort} className="text-right" />
-        <SortTh label="Net Score"   col="portfolioNetScore"     active={sortKey==="portfolioNetScore"}     dir={sortDir} onSort={handleSort} className="text-right" />
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left">Band</th>
-        <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left">Action</th>
-      </tr>
-    </thead>
-  );
+    const band      = bandConfig(n);
+    const isExpanded = expandedTicker === s.ticker;
+
+    const netColor = n == null ? "text-muted-foreground" : n >= 75 ? "text-emerald-400" : n >= 60 ? "text-blue-400" : n >= 45 ? "text-amber-400" : n >= 30 ? "text-orange-400" : "text-red-400";
+
+    return (
+      <Fragment key={s.ticker}>
+        <tr className={`border-b border-border/30 hover:bg-muted/10 transition-colors ${isExpanded ? "bg-muted/5" : ""}`}>
+          {/* Rank */}
+          <td className="px-3 py-2.5 text-[10px] text-muted-foreground/50 font-mono w-8">{rank}</td>
+
+          {/* Company — click opens Intelligence Drawer */}
+          <td className="px-3 py-2.5">
+            <button
+              onClick={() => openDrawer(s)}
+              className="flex items-center gap-2 hover:text-primary transition-colors text-left"
+            >
+              <span className="text-sm leading-none">{flag(s.country)}</span>
+              <div>
+                <div className="font-mono font-bold text-foreground text-sm leading-tight hover:text-primary">{s.ticker}</div>
+                <div className="text-[10px] text-muted-foreground truncate max-w-[140px] leading-tight">{s.name ?? s.ticker}</div>
+              </div>
+            </button>
+          </td>
+
+          {/* Sector */}
+          <td className="px-3 py-2.5 hidden lg:table-cell">
+            {s.sector && <span className="text-[10px] text-muted-foreground/70 bg-secondary/50 px-1.5 py-0.5 rounded border border-border/30 whitespace-nowrap">{s.sector}</span>}
+          </td>
+
+          {/* 5 score bars */}
+          <td className="px-2 py-2.5 text-right"><MiniBar value={q}  interp={q  != null ? qualityInterp(q)     : null} /></td>
+          <td className="px-2 py-2.5 text-right"><MiniBar value={o}  interp={o  != null ? opportunityInterp(o) : null} /></td>
+          <td className="px-2 py-2.5 text-right"><MiniBar value={m}  interp={m  != null ? mispricingInterp(m)  : null} /></td>
+          <td className="px-2 py-2.5 text-right"><MiniBar value={e}  interp={e  != null ? expectationInterp(e) : null} /></td>
+          <td className="px-2 py-2.5 text-right"><MiniBar value={fr} interp={fr != null ? fragilityInterp(fr)  : null} /></td>
+
+          {/* Net score */}
+          <td className="px-3 py-2.5 text-right">
+            {n != null ? (
+              <span className={`text-sm font-bold font-mono ${netColor}`}>{n}</span>
+            ) : <span className="text-muted-foreground/30 text-xs">—</span>}
+          </td>
+
+          {/* Band */}
+          <td className="px-2 py-2.5">
+            {band ? (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${band.badge}`}>{band.label}</span>
+            ) : <span className="text-muted-foreground/30 text-xs">—</span>}
+          </td>
+
+          {/* Action */}
+          <td className="px-2 py-2.5">
+            {band && <span className={`text-[10px] font-bold whitespace-nowrap ${band.ac}`}>{band.action}</span>}
+          </td>
+
+          {/* Expand toggle */}
+          <td className="px-2 py-2.5">
+            <button
+              onClick={() => toggleExpand(s.ticker)}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded"
+              title={isExpanded ? "Collapse" : "Show analysis"}
+            >
+              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </td>
+        </tr>
+
+        {/* Expanded analysis row */}
+        {isExpanded && <ExpandedRow s={s} onOpenDrawer={() => openDrawer(s)} />}
+      </Fragment>
+    );
+  }
+
+  // Column header definitions (always visible)
+  const COLUMN_DEFS = [
+    { key: "companyQualityScore",   label: "Quality",     abbr: "Q", color: "text-emerald-400", def: "Business strength: ROIC, margins, capital allocation — double weight in formula", weight: "+2×" },
+    { key: "stockOpportunityScore", label: "Opportunity", abbr: "O", color: "text-blue-400",    def: "Stock attractiveness: valuation vs history, FCF yield, entry timing",              weight: "+1×" },
+    { key: "mispricingScore",       label: "Mispricing",  abbr: "M", color: "text-amber-400",   def: "Market edge: temporary issues, catalyst visibility, revisions inflecting — double weight", weight: "+2×" },
+    { key: "expectationScore",      label: "Expectation", abbr: "E", color: "text-orange-400",  def: "Priced-in optimism: high = overvalued/crowded = PENALISED in formula",            weight: "−1×" },
+    { key: "fragilityScore",        label: "Fragility",   abbr: "F", color: "text-red-400",     def: "Thesis risk: leverage, concentration, disruption exposure — PENALISED in formula", weight: "−1×" },
+  ] as const;
 
   return (
     <Layout>
-      <div className="max-w-[1600px] mx-auto space-y-5">
+      <div className="max-w-[1600px] mx-auto space-y-4">
 
-        {/* ── Header ────────────────────────────────────────── */}
-        <div className="flex items-start justify-between flex-wrap gap-4">
+        {/* ── Header ─────────────────────────────────────── */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold tracking-tight mb-1 flex items-center gap-3">
-              <Crown className="w-7 h-7 text-violet-400" />
+            <h1 className="text-2xl font-display font-bold tracking-tight flex items-center gap-2.5">
+              <Crown className="w-6 h-6 text-violet-400" />
               Investment Intelligence
             </h1>
-            <p className="text-muted-foreground text-sm mb-2">
-              5-layer premium scoring model. Each factor explained — click any company for full Investment Thesis.
+            <p className="text-muted-foreground text-sm mt-0.5">
+              5-layer premium scoring model. Click any ticker for full Intelligence Thesis. Expand rows for analysis.
             </p>
-            <PipelineTimestampBar />
+            <div className="mt-1.5">
+              <PipelineTimestampBar />
+            </div>
           </div>
         </div>
 
-        {/* ── Formula banner ────────────────────────────────── */}
-        <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Brain className="w-4 h-4 text-violet-400" />
-            <span className="text-xs font-mono text-violet-400 uppercase tracking-wider font-semibold">Investment Intelligence Formula</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap font-mono text-sm">
-            <span className="text-foreground font-semibold">Net Score</span>
-            <span className="text-muted-foreground">=</span>
-            <span className="text-emerald-400 font-bold">2 × Quality</span>
-            <span className="text-muted-foreground">+</span>
-            <span className="text-blue-400 font-bold">1 × Opportunity</span>
-            <span className="text-muted-foreground">+</span>
-            <span className="text-amber-400 font-bold">2 × Mispricing</span>
-            <span className="text-muted-foreground">−</span>
-            <span className="text-orange-400 font-bold">1 × Expectation</span>
-            <span className="text-muted-foreground">−</span>
-            <span className="text-red-400 font-bold">1 × Fragility</span>
-          </div>
-          <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-            {[
-              { label: "Quality",     desc: "Business strength — ROIC, margins, moat",           color: "text-emerald-400" },
-              { label: "Opportunity", desc: "Stock attractiveness — value vs history & peers",   color: "text-blue-400" },
-              { label: "Mispricing",  desc: "Market edge — temporary issues, catalyst present",  color: "text-amber-400" },
-              { label: "Expectation", desc: "How priced-in the good news already is (lower=better)",  color: "text-orange-400" },
-              { label: "Fragility",   desc: "Thesis risk — leverage, concentration, disruption (lower=better)", color: "text-red-400" },
-            ].map(f => (
-              <div key={f.label} className="bg-background/40 rounded-lg px-2.5 py-2">
-                <div className={`text-[10px] font-bold uppercase tracking-wider ${f.color}`}>{f.label}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{f.desc}</div>
+        {/* ── Formula + definitions (collapsible) ─────────── */}
+        <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 overflow-hidden">
+          <button
+            onClick={() => setDefsOpen(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-950/20 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-violet-400" />
+              <span className="text-xs font-mono text-violet-400 uppercase tracking-wider font-semibold">Formula &amp; Definitions</span>
+              <div className="flex items-center gap-1 font-mono text-xs ml-2">
+                <span className="text-emerald-400">2×Q</span>
+                <span className="text-muted-foreground">+</span>
+                <span className="text-blue-400">1×O</span>
+                <span className="text-muted-foreground">+</span>
+                <span className="text-amber-400">2×M</span>
+                <span className="text-muted-foreground">−</span>
+                <span className="text-orange-400">1×E</span>
+                <span className="text-muted-foreground">−</span>
+                <span className="text-red-400">1×F</span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Stats row ─────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-xl border border-border bg-card p-3 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Universe</div>
-            <div className="text-2xl font-bold">{filtered.length}</div>
-            <div className="text-[10px] text-muted-foreground">companies</div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-3 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Scored</div>
-            <div className="text-2xl font-bold text-blue-400">{withScore}</div>
-            <div className="text-[10px] text-muted-foreground">with full 5-layer data</div>
-          </div>
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/10 p-3 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Buy-Grade</div>
-            <div className="text-2xl font-bold text-emerald-400">{buyCount}</div>
-            <div className="text-[10px] text-muted-foreground">Core + Standard</div>
-          </div>
-          <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 p-3 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Core</div>
-            <div className="text-2xl font-bold text-violet-400">{coreCount}</div>
-            <div className="text-[10px] text-muted-foreground">High-conviction picks</div>
-          </div>
-        </div>
-
-        {/* ── Band breakdown bar ────────────────────────────── */}
-        {withScore > 0 && (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3 font-semibold flex items-center gap-2">
-              <Star className="w-3 h-3" /> Position Band Distribution
             </div>
-            <div className="flex h-4 rounded-full overflow-hidden gap-px">
-              {[
-                { count: coreCount, color: "bg-emerald-500", label: "Core" },
-                { count: buyCount - coreCount, color: "bg-blue-500", label: "Standard" },
-                { count: starterCount, color: "bg-amber-500", label: "Starter" },
-                { count: sorted.filter(r => { const v = (r as any).portfolioNetScore; return v >= 0.30 && v < 0.45; }).length, color: "bg-orange-500", label: "Tactical" },
-                { count: sorted.filter(r => { const v = (r as any).portfolioNetScore; return v == null || v < 0.30; }).length, color: "bg-muted/50", label: "Watchlist" },
-              ].map(b => b.count > 0 && (
-                <div key={b.label} className={`${b.color} transition-all`} style={{ width: `${(b.count / filtered.length) * 100}%` }} title={`${b.label}: ${b.count}`} />
-              ))}
-            </div>
-            <div className="flex items-center gap-4 mt-2 flex-wrap">
-              {[
-                { label: "CORE ≥75",     color: "text-emerald-400", count: coreCount },
-                { label: "STANDARD ≥60", color: "text-blue-400",    count: buyCount - coreCount },
-                { label: "STARTER ≥45",  color: "text-amber-400",   count: starterCount },
-                { label: "TACTICAL ≥30", color: "text-orange-400",  count: sorted.filter(r => { const v = (r as any).portfolioNetScore; return v >= 0.30 && v < 0.45; }).length },
-                { label: "WATCHLIST",    color: "text-muted-foreground", count: sorted.filter(r => { const v = (r as any).portfolioNetScore; return v == null || v < 0.30; }).length },
-              ].map(b => (
-                <div key={b.label} className="flex items-center gap-1">
-                  <span className={`text-[10px] font-semibold ${b.color}`}>{b.label}</span>
-                  <span className="text-[10px] text-muted-foreground/60">({b.count})</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+            {defsOpen ? <ChevronUp className="w-4 h-4 text-violet-400" /> : <ChevronDown className="w-4 h-4 text-violet-400" />}
+          </button>
 
-        {/* ── Controls ──────────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-wrap justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* View mode */}
-            <div className="flex items-center rounded-lg border border-border overflow-hidden">
-              <button onClick={() => setViewMode("cards")}
-                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "cards" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <LayoutGrid className="w-3 h-3" />Cards
-              </button>
-              <button onClick={() => setViewMode("table")}
-                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "table" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <List className="w-3 h-3" />Table
-              </button>
-            </div>
-
-            {/* Sector filter */}
-            <div className="relative">
-              <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
-                className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {sectors.map(s => <option key={s} value={s}>{s === "all" ? "All Sectors" : s}</option>)}
-              </select>
-              <Filter className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
-
-            {/* Band filter */}
-            <div className="relative">
-              <select value={bandFilter} onChange={e => setBandFilter(e.target.value as BandFilter)}
-                className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="all">All Bands</option>
-                <option value="core">CORE ≥75</option>
-                <option value="standard">STANDARD ≥60</option>
-                <option value="starter">STARTER ≥45</option>
-                <option value="tactical">TACTICAL ≥30</option>
-                <option value="watchlist">WATCHLIST</option>
-              </select>
-              <ChevronDown className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Table sub-controls (shown only in table view) */}
-          {viewMode === "table" && (
-            <div className="flex items-center rounded-lg border border-border overflow-hidden">
-              <button onClick={() => setTableGroup("ranked")}
-                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${tableGroup === "ranked" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <ArrowUpDown className="w-3 h-3" />Ranked
-              </button>
-              <button onClick={() => setTableGroup("by-country")}
-                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${tableGroup === "by-country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <Globe className="w-3 h-3" />By Country
-              </button>
+          {defsOpen && (
+            <div className="px-4 pb-4 border-t border-violet-500/20">
+              <p className="text-xs text-muted-foreground mt-3 mb-3">
+                <strong className="text-foreground">Net Score = (2×Quality + 1×Opportunity + 2×Mispricing − 1×Expectation − 1×Fragility + 200) ÷ 700 × 100</strong><br/>
+                Raw range is −200 to +500. Normalised to 0–100. Quality and Mispricing carry double weight because they are the most predictive of long-term risk-adjusted returns.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                {COLUMN_DEFS.map(c => (
+                  <div key={c.key} className="bg-background/40 rounded-lg px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`text-[9px] font-bold ${c.color}`}>{c.weight}</span>
+                      <span className={`text-[11px] font-bold ${c.color}`}>{c.label}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{c.def}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10px]">
+                {[
+                  { band: "CORE ≥75",      color: "text-emerald-400", size: "6–10%",  action: "Strong Buy" },
+                  { band: "STANDARD ≥60",  color: "text-blue-400",    size: "3–5%",   action: "Buy" },
+                  { band: "STARTER ≥45",   color: "text-amber-400",   size: "1–2.5%", action: "Add" },
+                  { band: "TACTICAL ≥30",  color: "text-orange-400",  size: "0.5–1%", action: "Watch" },
+                  { band: "WATCHLIST <30", color: "text-red-400",     size: "0%",     action: "Avoid" },
+                ].map(b => (
+                  <div key={b.band} className="bg-background/30 rounded-lg px-2.5 py-2">
+                    <div className={`font-bold ${b.color}`}>{b.band}</div>
+                    <div className="text-muted-foreground mt-0.5">{b.action} · {b.size} of portfolio</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        {/* ── Content ───────────────────────────────────────── */}
+        {/* ── Filter bar ──────────────────────────────────── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Group by */}
+          <div className="flex items-center rounded-lg border border-border overflow-hidden">
+            <button onClick={() => setGroupBy("ranked")}
+              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${groupBy === "ranked" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <ArrowUpDown className="w-3 h-3" />Ranked
+            </button>
+            <button onClick={() => setGroupBy("country")}
+              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${groupBy === "country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Globe className="w-3 h-3" />By Country
+            </button>
+          </div>
+
+          {/* Sector filter */}
+          <div className="relative">
+            <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
+              className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {sectors.map(s => <option key={s} value={s}>{s === "all" ? "All Sectors" : s}</option>)}
+            </select>
+            <Filter className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          </div>
+
+          {/* Band filter */}
+          <div className="relative">
+            <select value={bandFilter} onChange={e => setBandFilter(e.target.value as BandFilter)}
+              className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All Bands</option>
+              <option value="core">CORE ≥75</option>
+              <option value="standard">STANDARD ≥60</option>
+              <option value="starter">STARTER ≥45</option>
+              <option value="tactical">TACTICAL ≥30</option>
+              <option value="watchlist">WATCHLIST</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          </div>
+
+          <span className="text-xs text-muted-foreground ml-1">{sorted.length} companies</span>
+        </div>
+
+        {/* ── Table ───────────────────────────────────────── */}
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -589,47 +620,81 @@ export default function Signals() {
             <Info className="w-8 h-8 opacity-30" />
             <p>No companies found. Run the pipeline to generate Intelligence scores.</p>
           </div>
-        ) : viewMode === "cards" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sorted.map(s => (
-              <CompanyCard key={s.ticker} s={s} onOpen={() => openDrawer(s.ticker)} />
-            ))}
-          </div>
         ) : (
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="overflow-x-auto">
-              {tableGroup === "ranked" ? (
-                <table className="w-full text-sm">
-                  {tableHeader}
-                  <tbody>
-                    {sorted.map((s, i) => <TableRow key={s.ticker} s={s} rank={i + 1} onOpen={() => openDrawer(s.ticker)} />)}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full text-sm">
-                  {tableHeader}
-                  <tbody>
-                    {byCountry.map(({ country, rows, avgNet }) => (
-                      <Fragment key={country}>
-                        <CountrySep country={country} count={rows.length} avgNet={avgNet} />
-                        {rows.map((s, i) => <TableRow key={s.ticker} s={s} rank={i + 1} onOpen={() => openDrawer(s.ticker)} />)}
-                      </Fragment>
+              <table className="w-full text-sm">
+
+                {/* Sticky header with definitions on hover */}
+                <thead className="sticky top-0 z-10 bg-card border-b border-border/60">
+                  {/* Column header */}
+                  <tr className="bg-muted/10">
+                    <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left w-8">#</th>
+                    <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left">Ticker / Company</th>
+                    <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-left hidden lg:table-cell">Sector</th>
+
+                    {COLUMN_DEFS.map(c => (
+                      <th key={c.key} className="text-right px-2 py-2.5 group relative">
+                        <button
+                          onClick={() => handleSort(c.key as SortKey)}
+                          className="flex flex-col items-end gap-0 cursor-pointer"
+                          title={c.def}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <span className={`text-[9px] font-bold ${c.color}`}>{c.weight}</span>
+                            {sortKey === c.key
+                              ? sortDir === "desc" ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />
+                              : <ChevronsUpDown className="w-2.5 h-2.5 opacity-30" />}
+                          </div>
+                          <span className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${c.color}`}>{c.abbr}</span>
+                          <span className="text-[9px] text-muted-foreground/70">{c.label}</span>
+                        </button>
+                        {/* Tooltip on hover */}
+                        <div className="absolute top-full right-0 mt-1 w-48 bg-popover border border-border rounded-lg p-2.5 text-[10px] text-muted-foreground z-50 hidden group-hover:block shadow-xl text-left">
+                          <strong className={`block mb-0.5 ${c.color}`}>{c.label} {c.weight}</strong>
+                          {c.def}
+                        </div>
+                      </th>
                     ))}
-                  </tbody>
-                </table>
-              )}
+
+                    <SortTh label="Net" col="portfolioNetScore" active={sortKey === "portfolioNetScore"} dir={sortDir} onSort={handleSort}
+                      className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-3 py-2.5 text-right" />
+                    <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-2 py-2.5 text-left">Band</th>
+                    <th className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider px-2 py-2.5 text-left">Action</th>
+                    <th className="w-8 px-2 py-2.5"></th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {groupBy === "ranked"
+                    ? sorted.map((s, i) => renderRow(s, i + 1))
+                    : byCountry.map(({ country, rows, avgNet }) => (
+                        <Fragment key={country}>
+                          <CountrySep country={country} count={rows.length} avgNet={avgNet} />
+                          {rows.map((s, i) => renderRow(s, i + 1))}
+                        </Fragment>
+                      ))
+                  }
+                </tbody>
+              </table>
             </div>
-            <div className="px-4 py-3 border-t border-border/40 bg-muted/10 flex items-center gap-3 flex-wrap">
-              <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Formula:</span>
-              <span className="text-[10px] font-mono text-muted-foreground">Net = 2×Quality + 1×Opp + 2×Misp − 1×Exp − 1×Frag</span>
-              <span className="text-[10px] text-muted-foreground/50 ml-auto">Click any row → Investment Thesis</span>
+
+            {/* Table footer */}
+            <div className="px-4 py-2.5 border-t border-border/40 bg-muted/10 flex items-center gap-3 flex-wrap">
+              <span className="text-[10px] text-muted-foreground/50 font-mono">Net = (2×Q + 1×O + 2×M − 1×E − 1×F + 200) ÷ 700 × 100</span>
+              <span className="text-[10px] text-muted-foreground/40 ml-auto">Click ticker → Intelligence Thesis · Click ▼ → Inline analysis</span>
             </div>
           </div>
         )}
 
       </div>
 
-      <CompanyDrawer ticker={drawerTicker} open={drawerOpen} onOpenChange={setDrawerOpen} />
+      {/* ── Intelligence Thesis Drawer ─────────────────── */}
+      <IntelligenceDrawer
+        snapshot={drawerSnapshot}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </Layout>
   );
 }
