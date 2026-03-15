@@ -45,6 +45,8 @@ async function needsFmpFetch(ticker: string): Promise<boolean> {
 
 let pipelineRunning = false;
 let lastRunDate: string | null = null;
+let lastRunUpdated = 0;
+let lastRunFailed = 0;
 let tickersProcessed = 0;
 let currentTicker: string | null = null;
 let totalTickers = 0;
@@ -70,6 +72,8 @@ export function getPipelineStatus() {
   return {
     running: pipelineRunning,
     lastRun: lastRunDate,
+    lastRunUpdated,
+    lastRunFailed,
     tickersProcessed,
     currentTicker,
     currentStep,
@@ -243,6 +247,8 @@ export async function runPipeline(tickers?: string[]) {
     currentTicker = null;
     currentStep = null;
     lastRunDate = new Date().toISOString();
+    lastRunUpdated = processed;
+    lastRunFailed = failed;
   }
 
   return { status: "completed", processed, failed, results: pipelineResults };

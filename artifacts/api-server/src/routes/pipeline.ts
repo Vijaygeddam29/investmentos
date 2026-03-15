@@ -18,6 +18,8 @@ router.get("/pipeline/status", (_req, res) => {
   res.json({
     running: status.running,
     lastRun: status.lastRun ?? undefined,
+    lastRunUpdated: status.lastRunUpdated,
+    lastRunFailed: status.lastRunFailed,
     tickersProcessed: status.tickersProcessed ?? undefined,
     currentTicker: status.currentTicker ?? undefined,
     currentStep: status.currentStep ?? undefined,
