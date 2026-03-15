@@ -558,6 +558,14 @@ function fragilityNarr(v: number): string {
 
 // ─── Narrative Panel ───────────────────────────────────────────────────────────
 
+interface ScoreBreakdownData {
+  quality: string;
+  opportunity: string;
+  mispricing: string;
+  expectation: string;
+  fragility: string;
+}
+
 interface NarrativeData {
   thesis_type: string;
   verdict: string;
@@ -572,6 +580,7 @@ interface NarrativeData {
   trim_trigger: string;
   exit_trigger: string;
   positioning_logic: string;
+  score_breakdown?: ScoreBreakdownData;
 }
 
 interface NarrativeResponse {
@@ -585,7 +594,15 @@ interface NarrativeResponse {
   narrative: NarrativeData;
 }
 
-function NarrativePanel({ ticker }: { ticker: string }) {
+interface NarrativeScores {
+  Q: number | null;
+  O: number | null;
+  M: number | null;
+  E: number | null;
+  F: number | null;
+}
+
+function NarrativePanel({ ticker, scores }: { ticker: string; scores?: NarrativeScores }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery<NarrativeResponse>({
@@ -706,6 +723,44 @@ function NarrativePanel({ ticker }: { ticker: string }) {
         </div>
         <p className="text-sm text-foreground leading-relaxed">{n.one_line_verdict}</p>
       </div>
+
+      {/* ── Score Breakdown ── */}
+      {n.score_breakdown && (
+        <div className="rounded-xl border border-violet-500/15 bg-violet-950/5 p-4 space-y-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <BarChart3 className="w-3 h-3 text-violet-400" />
+            <span className="text-[9px] font-mono text-violet-400 uppercase tracking-wider">Score Breakdown — Formula Analysis</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground/50 font-mono mb-2">
+            Net = (2×Quality + 1×Opportunity + 2×Mispricing − 1×Expectation − 1×Fragility + 200) ÷ 700 × 100
+          </div>
+          <div className="space-y-3">
+            {([
+              { key: "quality"     as const, label: "Quality",     weight: "×2", score: scores?.Q, color: "text-emerald-400", bar: "bg-emerald-500", bg: "border-emerald-500/20" },
+              { key: "opportunity" as const, label: "Opportunity", weight: "×1", score: scores?.O, color: "text-blue-400",    bar: "bg-blue-500",    bg: "border-blue-500/20"    },
+              { key: "mispricing"  as const, label: "Mispricing",  weight: "×2", score: scores?.M, color: "text-amber-400",   bar: "bg-amber-500",   bg: "border-amber-500/20"   },
+              { key: "expectation" as const, label: "Expectation", weight: "−1", score: scores?.E, color: "text-orange-400",  bar: "bg-orange-500",  bg: "border-orange-500/20"  },
+              { key: "fragility"   as const, label: "Fragility",   weight: "−1", score: scores?.F, color: "text-red-400",     bar: "bg-red-500",     bg: "border-red-500/20"     },
+            ]).map(({ key, label, weight, score, color, bar, bg }) => (
+              <div key={key} className={`rounded-lg border ${bg} bg-secondary/10 p-3 space-y-1.5`}>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-bold ${color}`}>{label}</span>
+                  <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color} bg-secondary/40`}>{weight}</span>
+                  {score != null && (
+                    <>
+                      <div className="flex-1 h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${bar}`} style={{ width: `${score}%` }} />
+                      </div>
+                      <span className={`font-mono text-xs font-bold ${color}`}>{score}</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{n.score_breakdown![key]}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── What is True / What is Priced In ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -926,7 +981,7 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
 
         {/* ── Narrative tab ── */}
         {activeTab === "narrative" && ticker && (
-          <NarrativePanel ticker={ticker} />
+          <NarrativePanel ticker={ticker} scores={{ Q, O, M, E, F }} />
         )}
 
         {/* ── Analysis tab ── */}

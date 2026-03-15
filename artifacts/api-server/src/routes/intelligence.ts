@@ -84,18 +84,40 @@ const REQUIRED_NARRATIVE_KEYS = [
 
 type NarrativeKey = typeof REQUIRED_NARRATIVE_KEYS[number];
 
+interface ScoreBreakdown {
+  quality: string;
+  opportunity: string;
+  mispricing: string;
+  expectation: string;
+  fragility: string;
+}
+
 interface NarrativeShape extends Record<NarrativeKey, string> {
+  score_breakdown?: ScoreBreakdown;
   _factorsAvailable?: number;
   _factorsTotal?: number;
   _confidenceLabel?: string;
 }
 
+const SCORE_BREAKDOWN_KEYS = ["quality", "opportunity", "mispricing", "expectation", "fragility"] as const;
+
+function isValidScoreBreakdown(obj: unknown): obj is ScoreBreakdown {
+  if (typeof obj !== "object" || obj === null) return false;
+  const r = obj as Record<string, unknown>;
+  return SCORE_BREAKDOWN_KEYS.every(k => typeof r[k] === "string" && (r[k] as string).length > 0);
+}
+
 function isValidNarrative(obj: unknown): obj is NarrativeShape {
   if (typeof obj !== "object" || obj === null) return false;
   const record = obj as Record<string, unknown>;
-  return REQUIRED_NARRATIVE_KEYS.every(
+  const baseValid = REQUIRED_NARRATIVE_KEYS.every(
     k => typeof record[k] === "string" && (record[k] as string).length > 0
   );
+  if (!baseValid) return false;
+  if ("score_breakdown" in record && record.score_breakdown != null) {
+    if (!isValidScoreBreakdown(record.score_breakdown)) return false;
+  }
+  return true;
 }
 
 // ─── Claude prompt ─────────────────────────────────────────────────────────────
@@ -195,7 +217,14 @@ Produce EXACTLY this JSON structure (no other text):
   "upgrade_trigger": "ONE sentence: what would upgrade the verdict to the next higher conviction level",
   "trim_trigger": "ONE sentence: what would cause trimming the position",
   "exit_trigger": "ONE sentence: what would cause full exit regardless of price",
-  "positioning_logic": "2–3 sentences explaining WHY this specific position band — reference quality/opportunity tradeoff and what is confirmed vs unconfirmed in the thesis"
+  "positioning_logic": "2–3 sentences explaining WHY this specific position band — reference quality/opportunity tradeoff and what is confirmed vs unconfirmed in the thesis",
+  "score_breakdown": {
+    "quality": "ONE sentence analysing the Quality score (×2 weight) — reference specific ROIC, margins, growth, or capital allocation metrics that justify this score and explain how the double-weight amplifies its impact on the Net Score",
+    "opportunity": "ONE sentence analysing the Opportunity score (×1 weight) — reference valuation multiples, FCF yield, or entry timing that justify this score",
+    "mispricing": "ONE sentence analysing the Mispricing score (×2 weight) — explain what the market is getting wrong or right and how the double-weight amplifies this edge (or lack thereof)",
+    "expectation": "ONE sentence analysing the Expectation score (−1× penalty) — explain how much success is priced in and the penalty this applies to the Net Score",
+    "fragility": "ONE sentence analysing the Fragility score (−1× penalty) — explain thesis risks (leverage, concentration, regulatory) and how the penalty drags on the Net Score"
+  }
 }`;
 }
 
