@@ -5,6 +5,7 @@ import {
   priceHistoryTable,
   companiesTable,
   financialMetricsTable,
+  type FactorSnapshot,
 } from "@workspace/db/schema";
 import { eq, desc, inArray, gte, and, isNotNull, ilike, or, sql } from "drizzle-orm";
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
@@ -373,7 +374,7 @@ router.get("/portfolio/builder", async (req, res) => {
         rationale = parts.join("; ");
       }
 
-      const pns = (s as any).portfolioNetScore as number | null ?? null;
+      const pns = s.portfolioNetScore ?? null;
       const positionBand = pns != null
         ? pns >= 0.75 ? { band: "core",      label: "Core",      minPct: 6,   maxPct: 10  }
         : pns >= 0.60 ? { band: "standard",  label: "Standard",  minPct: 3,   maxPct: 5   }
@@ -400,11 +401,11 @@ router.get("/portfolio/builder", async (req, res) => {
         innovationTier,
         rationale,
         portfolioNetScore:     pns,
-        expectationScore:      (s as any).expectationScore     ?? null,
-        mispricingScore:       (s as any).mispricingScore      ?? null,
-        fragilityScore:        (s as any).fragilityScore       ?? null,
-        companyQualityScore:   (s as any).companyQualityScore  ?? null,
-        stockOpportunityScore: (s as any).stockOpportunityScore ?? null,
+        expectationScore:      s.expectationScore      ?? null,
+        mispricingScore:       s.mispricingScore       ?? null,
+        fragilityScore:        s.fragilityScore        ?? null,
+        companyQualityScore:   s.companyQualityScore   ?? null,
+        stockOpportunityScore: s.stockOpportunityScore ?? null,
         positionBand,
       };
     });
@@ -488,7 +489,7 @@ router.get("/portfolio/builder/search", async (req, res) => {
       .orderBy(desc(factorSnapshotsTable.date))
       .limit(1);
 
-    let snapMap: Record<string, any> = {};
+    let snapMap: Record<string, FactorSnapshot> = {};
     if (latestRow) {
       const snaps = await db
         .select()
@@ -503,7 +504,7 @@ router.get("/portfolio/builder/search", async (req, res) => {
     }
 
     const results = matches.map((c) => {
-      const s = snapMap[c.ticker];
+      const s: FactorSnapshot | undefined = snapMap[c.ticker];
       return {
         ticker: c.ticker,
         name: c.name ?? c.ticker,
@@ -513,12 +514,12 @@ router.get("/portfolio/builder/search", async (req, res) => {
         fortressScore: s?.fortressScore ?? null,
         rocketScore: s?.rocketScore ?? null,
         waveScore: s?.waveScore ?? null,
-        portfolioNetScore: (s as any)?.portfolioNetScore ?? null,
-        companyQualityScore: (s as any)?.companyQualityScore ?? null,
-        stockOpportunityScore: (s as any)?.stockOpportunityScore ?? null,
-        expectationScore: (s as any)?.expectationScore ?? null,
-        mispricingScore: (s as any)?.mispricingScore ?? null,
-        fragilityScore: (s as any)?.fragilityScore ?? null,
+        portfolioNetScore: s?.portfolioNetScore ?? null,
+        companyQualityScore: s?.companyQualityScore ?? null,
+        stockOpportunityScore: s?.stockOpportunityScore ?? null,
+        expectationScore: s?.expectationScore ?? null,
+        mispricingScore: s?.mispricingScore ?? null,
+        fragilityScore: s?.fragilityScore ?? null,
       };
     });
 
