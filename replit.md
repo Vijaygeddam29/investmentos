@@ -17,7 +17,7 @@ Investment Operating System (Investment OS) — a hedge-fund-grade stock researc
 - **Build**: esbuild (CJS bundle)
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui + React Query
 - **Data source**: Financial Modeling Prep (FMP) API (`/stable/` endpoints)
-- **AI**: OpenAI via Replit AI Integrations (gpt-5-mini for memos)
+- **AI**: Claude claude-sonnet-4-6 via Replit AI Integrations (Anthropic) for narrative generation; memos also via Anthropic
 
 ## Structure
 

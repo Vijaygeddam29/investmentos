@@ -14,12 +14,15 @@
  * Powered by GET /api/intelligence/:ticker
  */
 
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Brain, Loader2, AlertTriangle, CheckCircle2, Target, BarChart3,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus,
+  RefreshCw, Sparkles, ArrowRight, Zap, ShieldAlert,
+  BookOpen,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -525,9 +528,254 @@ function fragilityNarr(v: number): string {
   return "Fortress-grade resilience — clean balance sheet, diversified revenue and low regulatory or technology disruption exposure.";
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
+// ─── Narrative Panel ───────────────────────────────────────────────────────────
 
-import React from "react";
+interface NarrativeData {
+  thesis_type: string;
+  verdict: string;
+  core_tension: string;
+  one_line_verdict: string;
+  what_is_true: string;
+  what_is_priced_in: string;
+  why_could_work: string;
+  why_may_not_work: string;
+  buy_trigger: string;
+  upgrade_trigger: string;
+  trim_trigger: string;
+  exit_trigger: string;
+  positioning_logic: string;
+}
+
+interface NarrativeResponse {
+  ticker: string;
+  cached: boolean;
+  generatedAt: string;
+  dataConfidence: number;
+  factorsAvailable?: number;
+  factorsTotal?: number;
+  confidenceLabel?: string;
+  narrative: NarrativeData;
+}
+
+function NarrativePanel({ ticker }: { ticker: string }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data, isLoading, error, refetch } = useQuery<NarrativeResponse>({
+    queryKey: ["intelligence-narrative", ticker],
+    queryFn: () => customFetch(`/api/intelligence/${ticker}/narrative`),
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await customFetch(`/api/intelligence/${ticker}/narrative?refresh=true`);
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const thesisColors: Record<string, string> = {
+    "Compounder":                   "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    "Quality at Reasonable Price":  "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    "Turnaround":                   "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    "Expectation Reset":            "bg-orange-500/15 text-orange-400 border-orange-500/30",
+    "Mispriced Optionality":        "bg-violet-500/15 text-violet-400 border-violet-500/30",
+    "Cyclical Recovery":            "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    "Tactical Rebound":             "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    "Overhyped Quality":            "bg-red-500/15 text-red-400 border-red-500/30",
+    "Value Trap Risk":              "bg-red-500/15 text-red-400 border-red-500/30",
+  };
+
+  const verdictColors: Record<string, string> = {
+    "Build":    "text-emerald-400",
+    "Add":      "text-blue-400",
+    "Starter":  "text-amber-400",
+    "Hold":     "text-muted-foreground",
+    "Watch":    "text-orange-400",
+    "Trim":     "text-orange-400",
+    "Avoid":    "text-red-400",
+  };
+
+  const confidenceColor = (label?: string) =>
+    label === "High" ? "text-emerald-400" : label === "Medium" ? "text-amber-400" : "text-red-400";
+
+  if (isLoading || refreshing) {
+    return (
+      <div className="px-5 py-12 flex flex-col items-center gap-5">
+        <div className="relative">
+          <div className="w-12 h-12 rounded-full border-2 border-violet-500/30 border-t-violet-400 animate-spin" />
+          <Sparkles className="absolute inset-0 m-auto w-5 h-5 text-violet-400" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm text-foreground font-medium">Generating investment narrative</p>
+          <p className="text-xs text-muted-foreground mt-1">Claude is analysing {ticker}'s fundamentals…</p>
+          <p className="text-[10px] text-muted-foreground/50 mt-2">This takes 10–20 seconds on first run, instant after caching</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="px-5 py-10 flex flex-col items-center gap-4">
+        <AlertTriangle className="w-8 h-8 text-orange-400" />
+        <div className="text-center">
+          <p className="text-sm text-foreground font-medium">Narrative unavailable</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {(error as any)?.message ?? "Could not generate narrative. Ensure the company has Intelligence data."}
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1.5 mt-1"
+        >
+          <RefreshCw className="w-3 h-3" /> Try again
+        </button>
+      </div>
+    );
+  }
+
+  const n = data.narrative;
+  const thesisBadge = thesisColors[n.thesis_type] ?? "bg-secondary text-muted-foreground border-border/50";
+  const verdictColor = verdictColors[n.verdict] ?? "text-muted-foreground";
+  const confPct = data.dataConfidence != null ? Math.round(data.dataConfidence * 100) : null;
+
+  return (
+    <div className="px-5 py-5 space-y-5">
+
+      {/* ── Thesis header ── */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border ${thesisBadge}`}>
+            {n.thesis_type}
+          </span>
+          <div className="flex items-baseline gap-2">
+            <span className={`text-2xl font-bold font-mono ${verdictColor}`}>{n.verdict}</span>
+            <span className="text-sm text-muted-foreground">Position</span>
+          </div>
+          <p className="text-sm text-muted-foreground/80 italic leading-relaxed max-w-md">
+            "{n.core_tension}"
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="shrink-0 p-1.5 rounded-lg text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary/50 transition-colors"
+          title="Regenerate narrative"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* ── One-line verdict ── */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-950/8 p-4">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Brain className="w-3 h-3 text-violet-400" />
+          <span className="text-[9px] font-mono text-violet-400 uppercase tracking-wider">Verdict</span>
+        </div>
+        <p className="text-sm text-foreground leading-relaxed">{n.one_line_verdict}</p>
+      </div>
+
+      {/* ── What is True / What is Priced In ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-emerald-500/15 bg-emerald-950/5 p-4 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-wider">What is True</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{n.what_is_true}</p>
+        </div>
+        <div className="rounded-xl border border-amber-500/15 bg-amber-950/5 p-4 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Target className="w-3 h-3 text-amber-400" />
+            <span className="text-[9px] font-mono text-amber-400 uppercase tracking-wider">What is Priced In</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{n.what_is_priced_in}</p>
+        </div>
+      </div>
+
+      {/* ── Why Could / Why May Not ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-blue-500/15 bg-blue-950/5 p-4 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="w-3 h-3 text-blue-400" />
+            <span className="text-[9px] font-mono text-blue-400 uppercase tracking-wider">Why This Could Work</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{n.why_could_work}</p>
+        </div>
+        <div className="rounded-xl border border-red-500/15 bg-red-950/5 p-4 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <TrendingDown className="w-3 h-3 text-red-400" />
+            <span className="text-[9px] font-mono text-red-400 uppercase tracking-wider">Why This May Not Work</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{n.why_may_not_work}</p>
+        </div>
+      </div>
+
+      {/* ── Trigger Framework ── */}
+      <div className="rounded-xl border border-border/50 bg-secondary/20 p-4 space-y-3">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Zap className="w-3 h-3 text-yellow-400" />
+          <span className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">Decision Triggers</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "Buy Trigger",     text: n.buy_trigger,     icon: TrendingUp, color: "text-emerald-400" },
+            { label: "Upgrade Trigger", text: n.upgrade_trigger, icon: ArrowRight,  color: "text-blue-400"   },
+            { label: "Trim Trigger",    text: n.trim_trigger,    icon: TrendingDown, color: "text-orange-400" },
+            { label: "Exit Trigger",    text: n.exit_trigger,    icon: ShieldAlert, color: "text-red-400"    },
+          ].map(({ label, text, icon: Icon, color }) => (
+            <div key={label} className="space-y-1">
+              <div className="flex items-center gap-1">
+                <Icon className={`w-2.5 h-2.5 ${color}`} />
+                <span className={`text-[9px] font-semibold uppercase tracking-wider ${color}`}>{label}</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-snug">{text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Positioning Logic ── */}
+      <div className="rounded-xl border border-border/40 p-4 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <BookOpen className="w-3 h-3 text-muted-foreground/60" />
+          <span className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">Positioning Logic</span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">{n.positioning_logic}</p>
+      </div>
+
+      {/* ── Footer: confidence + cache ── */}
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground/40 pt-1 border-t border-border/20">
+        <div className="flex items-center gap-3">
+          {data.factorsAvailable != null && (
+            <span className={`font-medium ${confidenceColor(data.confidenceLabel)}`}>
+              {data.confidenceLabel} confidence
+            </span>
+          )}
+          {data.factorsAvailable != null && (
+            <span>{data.factorsAvailable}/{data.factorsTotal} factors present</span>
+          )}
+          {confPct != null && (
+            <span>{confPct}% data coverage</span>
+          )}
+        </div>
+        <div>
+          {data.cached ? (
+            <span>Cached · {new Date(data.generatedAt).toLocaleDateString()}</span>
+          ) : (
+            <span className="flex items-center gap-1"><Sparkles className="w-2.5 h-2.5" /> Just generated</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 const FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "United Kingdom": "🇬🇧", "India": "🇮🇳",
@@ -545,6 +793,7 @@ interface Props {
 
 export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
   const ticker = snapshot?.ticker;
+  const [activeTab, setActiveTab] = useState<"analysis" | "narrative">("analysis");
 
   const { data, isLoading } = useQuery<IntelligenceDetail>({
     queryKey: ["intelligence-detail", ticker],
@@ -624,16 +873,43 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
               ) : <span className="text-muted-foreground/30">—</span>}
             </div>
           </div>
+
+          {/* ── Tab switcher ── */}
+          <div className="flex gap-1 mt-4 border-b border-border/40 -mx-5 px-5">
+            {([
+              { id: "analysis",  label: "Analysis",  icon: BarChart3 },
+              { id: "narrative", label: "Narrative",  icon: Sparkles  },
+            ] as const).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
+                  activeTab === id
+                    ? "border-violet-400 text-violet-400"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {isLoading && !data && (
+        {/* ── Narrative tab ── */}
+        {activeTab === "narrative" && ticker && (
+          <NarrativePanel ticker={ticker} />
+        )}
+
+        {/* ── Analysis tab ── */}
+        {activeTab === "analysis" && isLoading && !data && (
           <div className="flex flex-col items-center justify-center h-64 gap-3">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
             <p className="text-xs text-muted-foreground">Loading detailed factor data…</p>
           </div>
         )}
 
-        <div className="px-5 py-5 space-y-4">
+        {activeTab === "analysis" && (<div className="px-5 py-5 space-y-4">
 
           {/* ── Formula Derivation ────────────────────── */}
           <div className="rounded-xl border border-violet-500/20 bg-violet-950/8 p-4">
@@ -1002,6 +1278,7 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
           )}
 
         </div>
+        )}
       </SheetContent>
     </Sheet>
   );
