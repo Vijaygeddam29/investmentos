@@ -271,6 +271,10 @@ async function parseSuccessBody(
   }
 }
 
+const isDev = typeof import.meta !== "undefined"
+  ? (import.meta as Record<string, any>).env?.DEV === true
+  : process.env.NODE_ENV !== "production";
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
@@ -299,7 +303,24 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  if (isDev) {
+    console.debug(`[api] → ${method} ${requestInfo.url}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers });
+  } catch (err) {
+    if (isDev) {
+      console.error(`[api] ✖ ${method} ${requestInfo.url} — network error`, err);
+    }
+    throw err;
+  }
+
+  if (isDev) {
+    const icon = response.ok ? "✓" : "✗";
+    console.debug(`[api] ${icon} ${method} ${requestInfo.url} ${response.status}`);
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

@@ -1,0 +1,409 @@
+this smells like a frontend integration bug, not an API health bug.
+
+From what you described:
+
+API is healthy
+
+console logs are not showing actual API calls
+
+frontend is calling /api/...
+
+Vite has no proxy
+
+Replit didn’t resolve the forwarding
+
+app falls into loops / “no data”
+
+AMP is rate-limited, with yfinance as fallback
+
+That usually means the app is failing in one of three places:
+
+the browser never reaches the real backend
+
+the request URL is wrong for the environment
+
+the frontend retry/fallback logic is recursively re-triggering and masking the real failure
+
+What the actual fix probably is
+1) Stop relying on implicit /api/... routing
+
+If the frontend calls relative paths like:
+
+fetch('/api/company/AAPL')
+
+that only works if one of these is true:
+
+frontend and backend are served from the same origin in production, or
+
+Vite dev server proxies /api to your backend
+
+You already found there is no Vite proxy, so in dev the browser is probably calling the frontend origin, not your API service.
+
+Use a real base URL from env:
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+export async function apiFetch(path: string, options: RequestInit = {}) {
+  const url = `${API_BASE_URL}${path}`;
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    credentials: 'include',
+  });
+}
+
+Then all calls become:
+
+apiFetch(`/api/company/${ticker}`)
+
+or better, remove duplicated /api if your backend already includes it:
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+apiFetch(`/company/${ticker}`)
+
+That’s the first thing I’d fix.
+
+2) Add a Vite proxy for local dev anyway
+
+Even if you move to env-based URLs, a proxy makes local dev much cleaner.
+
+// vite.config.ts
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+});
+
+This prevents CORS pain and makes browser requests predictable.
+
+3) Instrument the API client so you can see what is happening
+
+Right now “no data” is too vague. You need logs at the client boundary.
+
+Add this once in your API wrapper:
+
+export async function apiFetch(path: string, options: RequestInit = {}) {
+  const url = `${API_BASE_URL}${path}`;
+  console.log('[apiFetch] request', { url, options });
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      credentials: 'include',
+    });
+
+    console.log('[apiFetch] response', {
+      url,
+      status: res.status,
+      ok: res.ok,
+    });
+
+    return res;
+  } catch (err) {
+    console.error('[apiFetch] network error', { url, err });
+    throw err;
+  }
+}
+
+And at the feature call site:
+
+const res = await apiFetch(`/company/${ticker}`);
+if (!res.ok) {
+  const text = await res.text();
+  console.error('[company fetch failed]', res.status, text);
+  throw new Error(`Company fetch failed: ${res.status}`);
+}
+
+That will tell you in five minutes whether the issue is:
+
+wrong URL
+
+auth header missing
+
+CORS
+
+401/403
+
+empty response
+
+frontend parse failure
+
+retry loop
+
+Why it’s likely “going in loops”
+
+Your frontend probably has a pattern like:
+
+try AMP
+
+if AMP missing, try yfinance
+
+if fallback returns partial data, trigger recalculation
+
+recalculation sees missing fields, retries source again
+
+state updates trigger effect reruns
+
+request cycle repeats
+
+UI ends at “no data”
+
+Classic causes:
+
+A. useEffect dependency loop
+
+Example:
+
+useEffect(() => {
+  loadCompanyData();
+}, [ticker, companyData]);
+
+If loadCompanyData() updates companyData, this reruns forever.
+
+It should usually be:
+
+useEffect(() => {
+  loadCompanyData();
+}, [ticker]);
+B. Fallback chain not terminal
+
+Bad pattern:
+
+try AMP
+if incomplete -> try YF
+if incomplete -> retry AMP
+
+That becomes a loop.
+
+Instead, make the fetch pipeline one-pass and terminal:
+
+AMP -> patch with YF -> stop
+
+Not:
+
+AMP <-> YF until complete
+C. Derived-calculation effect triggers another fetch
+
+If missing roic, fcf, altmanZ, etc. causes “recompute fundamentals” and that recompute calls the fetch again, you get churn.
+
+Fetch should be separate from compute:
+
+Step 1: fetch raw source payloads once
+
+Step 2: normalize once
+
+Step 3: calculate derived metrics once
+
+Step 4: render with nulls if still unavailable
+
+Never re-fetch just because a derived metric is null.
+
+With AMP limits, here’s the strategy I’d recommend
+
+Since AMP is your premium but limited source, don’t use it like a chatty frontend dependency. Treat it like a scarce upstream.
+
+Best architecture for your setup
+Tier 1: Backend becomes the only data orchestrator
+
+Frontend should never decide:
+
+whether to call AMP
+
+whether to call yfinance
+
+how to merge fields
+
+when to retry
+
+Frontend should only call one endpoint:
+
+GET /api/company/:ticker
+
+And backend returns:
+
+{
+  "ticker": "AAPL",
+  "sourceCoverage": {
+    "amp": true,
+    "yfinance": true
+  },
+  "rawCoverage": 0.82,
+  "confidence": "Medium",
+  "factors": {...},
+  "scores": {...},
+  "warnings": [...],
+  "unavailable": [...]
+}
+
+That removes all frontend loop logic.
+
+Tier 2: Cache aggressively
+
+Because AMP is limited, cache at backend by ticker + freshness window.
+
+Suggested cache windows:
+
+price / momentum fields: 15 min to 1 hour
+
+fundamentals: 24 hours
+
+statements / historical quality metrics: 1 to 7 days
+
+sentiment: shorter if you use it live, maybe 1 hour
+
+Even a simple Redis or DB cache will massively cut AMP usage.
+
+Tier 3: Use AMP for high-value fields only
+
+Don’t burn AMP on everything.
+
+Use AMP for the stuff that actually matters most to your scoring:
+
+clean financial statements
+
+balance sheet / debt metrics
+
+profitability
+
+cash flow metrics
+
+share count / enterprise value components if more reliable than YF
+
+Use yfinance for:
+
+price
+
+market cap sanity checks
+
+momentum
+
+simple valuation backup
+
+basic metadata / sector / beta if needed
+
+Basically:
+
+AMP = accounting truth
+
+YF = market / backup context
+
+Tier 4: Patch, don’t substitute blindly
+
+Backend merge logic should be field-level, not source-level.
+
+Example:
+
+if AMP has revenue, use AMP
+
+if AMP lacks trailing PE, use YF
+
+if AMP lacks sentiment and coverage < 50%, set sentiment score to null
+
+if required inputs for Altman Z are missing, set factor unavailable, don’t invent it
+
+This matches your architecture better and avoids fake precision.
+
+The practical fix I’d do first
+Immediate frontend fix
+
+Create a single API client with explicit VITE_API_BASE_URL
+
+Add request/response logs
+
+Remove relative-path assumptions
+
+Check auth token/header injection in one place only
+
+Audit useEffect dependencies for rerender loops
+
+Immediate backend fix
+
+Build one normalized endpoint per ticker
+
+Merge AMP + YF on the backend
+
+Cache by ticker
+
+Return nulls + warnings instead of retrying endlessly
+
+Specific advice for AMP-limited systems
+
+My honest advice: do not let the frontend directly trigger AMP-dependent calculations on every render, tab switch, accordion open, or ticker keystroke. That’s how your quota gets torched and bugs become invisible.
+
+Do this instead:
+
+fetch once per ticker load
+
+debounce ticker search
+
+cache response
+
+compute all factor math server-side
+
+send a fully normalized payload to the UI
+
+let UI be dumb and deterministic
+
+The UI should display:
+
+value
+
+unavailable
+
+warning
+
+confidence
+
+It should not be the thing that figures out financial truth.
+
+The most likely root cause stack in your case
+
+From your description, my bet is:
+
+frontend uses /api/... relative URL
+
+no Vite proxy / no correct prod base URL
+
+request either never reaches backend or hits wrong origin
+
+fallback state logic interprets failure as missing data
+
+effect retries or recalculates
+
+app loops and shows “no data”
+
+So the fix is not “AMP vs yfinance” first.
+The fix is request routing + fetch orchestration + loop prevention.
+
+What I’d recommend as your decision
+
+For this platform, I’d standardize on:
+
+Frontend: one request per ticker to your own backend only
+
+Backend: AMP-first, YF-patch-second, cached normalized output
+
+Calculations: all on backend
+
+Missing data: explicit nulls, never fake
+
+Retries: one controlled fallback pass, no recursive loops
+
+Confidence: based on source mix and missing depth, not just raw coverage
+
+That setup is sturdy enough for backtesting too, which matters for the architecture you just locked.
+
+If you want, I’ll map this into a concrete implementation checklist: apiClient.ts, Vite config, backend aggregator flow, cache rules, and the anti-loop React pattern.

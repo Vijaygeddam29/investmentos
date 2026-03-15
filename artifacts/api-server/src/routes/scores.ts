@@ -2,9 +2,18 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 import { compounderRating } from "../lib/scoring-engines";
 import { computeVerdict } from "../lib/verdict-engine";
+
+const EUROPEAN_COUNTRIES = new Set([
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic",
+  "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+  "Iceland", "Ireland", "Italy", "Latvia", "Liechtenstein", "Lithuania",
+  "Luxembourg", "Malta", "Netherlands", "Norway", "Poland", "Portugal",
+  "Romania", "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
+]);
 
 const router: IRouter = Router();
 
@@ -62,7 +71,9 @@ router.get("/scores", async (req, res) => {
       return true;
     });
 
-    if (countryFilter) {
+    if (countryFilter === "Europe") {
+      latestPerTicker = latestPerTicker.filter(r => EUROPEAN_COUNTRIES.has(r.country ?? ""));
+    } else if (countryFilter) {
       const cf = countryFilter.toLowerCase();
       latestPerTicker = latestPerTicker.filter(r => (r.country ?? "").toLowerCase().includes(cf));
     }

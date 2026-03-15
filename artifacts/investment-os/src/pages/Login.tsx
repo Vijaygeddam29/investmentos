@@ -18,8 +18,9 @@ interface PendingAuth {
 const MARKETS: { value: Market; label: string; flag: string; description: string }[] = [
   { value: "United States", flag: "🇺🇸", label: "United States", description: "109 companies · NYSE & NASDAQ" },
   { value: "United Kingdom", flag: "🇬🇧", label: "United Kingdom", description: "25 companies · LSE" },
+  { value: "Europe",        flag: "🇪🇺", label: "Europe",         description: "10 companies · Multi-exchange" },
   { value: "India",          flag: "🇮🇳", label: "India",          description: "18 companies · NSE & BSE" },
-  { value: "All",            flag: "🌍", label: "All Markets",   description: "175 companies globally" },
+  { value: "All",            flag: "🌍", label: "All Markets",   description: "185 companies globally" },
 ];
 
 export default function Login() {

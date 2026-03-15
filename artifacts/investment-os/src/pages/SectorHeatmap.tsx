@@ -128,8 +128,8 @@ function ScoreRow({ label, value, barColor }: { label: string; value: number | n
 type ViewMode = "sector" | "country";
 
 export default function SectorHeatmap() {
-  const [viewMode, setViewMode] = useState<ViewMode>("sector");
   const { market } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>(market === "Europe" ? "country" : "sector");
   const countryParam = market !== "All" ? market : undefined;
 
   const { data, isLoading } = useListFactorSnapshots(

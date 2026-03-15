@@ -10,7 +10,7 @@ export interface AuthUser {
   verified: boolean;
 }
 
-export type Market = "United States" | "United Kingdom" | "India" | "All";
+export type Market = "United States" | "United Kingdom" | "Europe" | "India" | "All";
 
 interface AuthCtx {
   user: AuthUser | null;

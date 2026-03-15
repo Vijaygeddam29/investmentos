@@ -23,6 +23,7 @@ import { useAuth, type Market } from "@/contexts/AuthContext";
 const MARKET_OPTIONS: { value: Market; flag: string; label: string }[] = [
   { value: "United States", flag: "🇺🇸", label: "United States" },
   { value: "United Kingdom", flag: "🇬🇧", label: "United Kingdom" },
+  { value: "Europe",        flag: "🇪🇺", label: "Europe" },
   { value: "India",          flag: "🇮🇳", label: "India" },
   { value: "All",            flag: "🌍",  label: "All Markets" },
 ];

@@ -27,6 +27,14 @@ const COUNTRY_ABBREVIATION_MAP: Record<string, string> = {
   US: "United States", UK: "United Kingdom", IL: "Israel",
 };
 
+const EUROPEAN_COUNTRIES = new Set([
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic",
+  "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+  "Iceland", "Ireland", "Italy", "Latvia", "Liechtenstein", "Lithuania",
+  "Luxembourg", "Malta", "Netherlands", "Norway", "Poland", "Portugal",
+  "Romania", "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
+]);
+
 function normalizeCountry(raw: string | null | undefined): string {
   if (!raw) return "Unknown";
   return COUNTRY_ABBREVIATION_MAP[raw] ?? raw;
@@ -240,7 +248,11 @@ router.get("/portfolio/builder", async (req, res) => {
     const filtered = snapshots.filter((s) => {
       const co = companyMap[s.ticker];
       const coCountry = normalizeCountry(co?.country);
-      if (countryFilter && coCountry !== countryFilter) return false;
+      if (countryFilter === "Europe") {
+        if (!EUROPEAN_COUNTRIES.has(coCountry)) return false;
+      } else if (countryFilter && coCountry !== countryFilter) {
+        return false;
+      }
       if (s.marketCap == null) return mktCapKey === "all";
       if (s.marketCap < mktMin) return false;
       if (mktMax !== Infinity && s.marketCap > mktMax) return false;

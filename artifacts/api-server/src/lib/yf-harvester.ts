@@ -374,7 +374,7 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
     const opCfToRev  = opCF != null && revenue != null && revenue > 0 ? opCF / revenue : null;
     const fcfToNI    = fcf != null && netIncome != null && netIncome !== 0 ? fcf / netIncome : null;
 
-    // Build comprehensive patch record
+    // Build comprehensive patch record — only keys that exist in financialMetricsTable schema
     const patch: Record<string, number | null> = {
       // Margins — most reliable from Yahoo Finance
       grossMargin:            n(fd.grossMargins),
@@ -397,12 +397,11 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
       roe:                    n(fd.returnOnEquity),
       roa:                    n(fd.returnOnAssets),
 
-      // Valuation
+      // Valuation — priceToSales omitted (no column in schema); earningsYield omitted (no column)
       peRatio:                n(sd.trailingPE),
       forwardPe:              n(sd.forwardPE),
       priceToBook:            n(ks.priceToBook),
       pegRatio:               n(ks.pegRatio),
-      priceToSales:           n(sd.priceToSalesTrailing12Months),
       evToEbitda:             n(ks.enterpriseToEbitda),
       evToSales:              n(ks.enterpriseToRevenue),
       fcfYield:               fcfYield,
@@ -410,7 +409,6 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
       // Income / cash flow
       revenue:                revenue,
       freeCashFlow:           fcf,
-      earningsYield:          n(sd.trailingPE) ? 1 / n(sd.trailingPE)! : null,
 
       // Dividend
       dividendYield:          n(sd.dividendYield) ?? n(sd.trailingAnnualDividendYield),
@@ -418,9 +416,6 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
 
       // Analyst signals
       analystUpside:          analystUpside,
-
-      // Market cap
-      marketCap:              mktCap != null ? mktCap / 1e9 : null, // store in billions
     };
 
     // ── Patch financial_metrics row (most recent, not just today) ────────────
@@ -448,19 +443,20 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
       }
     }
 
-    // ── Also patch company country/sector if null ────────────────────────────
+    // ── Also patch company country/sector/marketCap if null ─────────────────
     const companyRows = await db
-      .select({ country: companiesTable.country, sector: companiesTable.sector })
+      .select({ country: companiesTable.country, sector: companiesTable.sector, marketCap: companiesTable.marketCap })
       .from(companiesTable)
       .where(eq(companiesTable.ticker, ticker))
       .limit(1);
 
     if (companyRows.length > 0) {
       const co = companyRows[0];
-      const companyUpdates: Record<string, string | null> = {};
+      const companyUpdates: Record<string, string | number | null> = {};
 
       const yfCountry = normaliseCountryName((ap as any).country as string | undefined);
       const yfSector  = (ap as any).sector as string | undefined;
+      const yfMktCap  = mktCap != null ? mktCap / 1e9 : null; // billions
 
       if (yfCountry && !co.country) companyUpdates.country = yfCountry;
       // Normalise existing country values even if non-null (fixes US/GB/IL etc.)
@@ -469,6 +465,7 @@ export async function yfPatchNullFields(ticker: string): Promise<void> {
         if (normalised && normalised !== co.country) companyUpdates.country = normalised;
       }
       if (yfSector && !co.sector) companyUpdates.sector = yfSector;
+      if (yfMktCap != null && co.marketCap == null) companyUpdates.marketCap = yfMktCap;
 
       if (Object.keys(companyUpdates).length > 0) {
         await db.update(companiesTable).set(companyUpdates).where(eq(companiesTable.ticker, ticker));

@@ -8,7 +8,15 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { factorSnapshotsTable, companiesTable } from "@workspace/db/schema";
-import { eq, desc, ilike, and } from "drizzle-orm";
+import { eq, desc, ilike, and, inArray, SQL } from "drizzle-orm";
+
+const EUROPEAN_COUNTRIES = [
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic",
+  "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+  "Iceland", "Ireland", "Italy", "Latvia", "Liechtenstein", "Lithuania",
+  "Luxembourg", "Malta", "Netherlands", "Norway", "Poland", "Portugal",
+  "Romania", "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
+];
 
 const router: IRouter = Router();
 
@@ -36,10 +44,14 @@ router.get("/factor-snapshots", async (req, res) => {
     const limit         = Math.min(Number(req.query.limit ?? 100), 500);
     const dateFilter    = req.query.date as string | undefined;
 
-    const companyConditions: ReturnType<typeof ilike>[] = [];
+    const companyConditions: SQL<unknown>[] = [];
     if (sectorFilter)   companyConditions.push(ilike(companiesTable.sector,   `%${sectorFilter}%`));
     if (industryFilter) companyConditions.push(ilike(companiesTable.industry, `%${industryFilter}%`));
-    if (countryFilter)  companyConditions.push(ilike(companiesTable.country,  `%${countryFilter}%`));
+    if (countryFilter === "Europe") {
+      companyConditions.push(inArray(companiesTable.country, EUROPEAN_COUNTRIES));
+    } else if (countryFilter) {
+      companyConditions.push(ilike(companiesTable.country, `%${countryFilter}%`));
+    }
 
     const rows = await db
       .select({
