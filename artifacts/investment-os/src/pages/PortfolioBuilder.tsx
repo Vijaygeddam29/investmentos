@@ -131,6 +131,20 @@ function normalizeWeightsTo100(weights: Record<string, number>, locked: Set<stri
   const lockedTotal = Object.entries(result)
     .filter(([t]) => locked.has(t))
     .reduce((s, [, w]) => s + w, 0);
+
+  if (lockedTotal >= 100) {
+    const lockedTickers = Object.keys(result).filter((t) => locked.has(t));
+    const scale = 100 / lockedTotal;
+    for (const t of lockedTickers) result[t] = parseFloat(((result[t] ?? 0) * scale).toFixed(1));
+    for (const t of unlockedTickers) result[t] = 0;
+    const finalTotal = Object.values(result).reduce((s, w) => s + w, 0);
+    const residual = parseFloat((100 - finalTotal).toFixed(1));
+    if (Math.abs(residual) >= 0.05 && lockedTickers.length > 0) {
+      result[lockedTickers[0]] = parseFloat(((result[lockedTickers[0]] ?? 0) + residual).toFixed(1));
+    }
+    return result;
+  }
+
   const unlockedTotal = unlockedTickers.reduce((s, t) => s + (result[t] ?? 0), 0);
   const target = 100 - lockedTotal;
 
@@ -140,14 +154,14 @@ function normalizeWeightsTo100(weights: Record<string, number>, locked: Set<stri
   } else {
     const scale = target / unlockedTotal;
     for (const t of unlockedTickers) {
-      result[t] = parseFloat(((result[t] ?? 0) * scale).toFixed(1));
+      result[t] = Math.max(0, parseFloat(((result[t] ?? 0) * scale).toFixed(1)));
     }
   }
 
   const finalTotal = Object.values(result).reduce((s, w) => s + w, 0);
   const residual = parseFloat((100 - finalTotal).toFixed(1));
   if (Math.abs(residual) >= 0.05) {
-    result[unlockedTickers[0]] = parseFloat(((result[unlockedTickers[0]] ?? 0) + residual).toFixed(1));
+    result[unlockedTickers[0]] = Math.max(0, parseFloat(((result[unlockedTickers[0]] ?? 0) + residual).toFixed(1)));
   }
 
   return result;

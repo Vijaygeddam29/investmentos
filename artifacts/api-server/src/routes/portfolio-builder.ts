@@ -252,9 +252,16 @@ router.get("/portfolio/builder", async (req, res) => {
     let regime = await detectMarketRegime();
     const regimeWeights = regime.weights;
 
-    let sortedForSelection = filtered;
-    if (isPowerLaw) {
-      sortedForSelection = [...filtered].sort((a, b) => {
+    const getStrategyScore = (s: typeof filtered[0]) =>
+      strategy === "fortress" ? (s.fortressScore ?? 0) :
+      strategy === "rocket"   ? (s.rocketScore   ?? 0) :
+                                 (s.waveScore     ?? 0);
+
+    // All modes: sort by portfolioNetScore first (signals-consistent), then strategy score
+    const sortedForSelection = [...filtered].sort((a, b) => {
+      const pnsA = a.portfolioNetScore ?? 0;
+      const pnsB = b.portfolioNetScore ?? 0;
+      if (isPowerLaw) {
         const compA = computeCompositeScore(
           a.fortressScore ?? 0, a.rocketScore ?? 0, a.waveScore ?? 0, regimeWeights
         );
@@ -262,13 +269,11 @@ router.get("/portfolio/builder", async (req, res) => {
           b.fortressScore ?? 0, b.rocketScore ?? 0, b.waveScore ?? 0, regimeWeights
         );
         if (Math.abs(compB - compA) > 0.001) return compB - compA;
-        const getS = (s: typeof a) =>
-          strategy === "fortress" ? (s.fortressScore ?? 0) :
-          strategy === "rocket"  ? (s.rocketScore ?? 0) :
-                                    (s.waveScore ?? 0);
-        return getS(b) - getS(a);
-      });
-    }
+        return getStrategyScore(b) - getStrategyScore(a);
+      }
+      if (Math.abs(pnsB - pnsA) > 0.001) return pnsB - pnsA;
+      return getStrategyScore(b) - getStrategyScore(a);
+    });
 
     const sectorCount: Record<string, number> = {};
     const selected: typeof filtered = [];

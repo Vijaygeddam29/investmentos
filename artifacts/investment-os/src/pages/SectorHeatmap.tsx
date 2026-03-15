@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, LayoutGrid, TrendingUp, TrendingDown, Minus, Globe, BarChart2 } from "lucide-react";
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -128,9 +129,11 @@ type ViewMode = "sector" | "country";
 
 export default function SectorHeatmap() {
   const [viewMode, setViewMode] = useState<ViewMode>("sector");
+  const { market } = useAuth();
+  const countryParam = market !== "All" ? market : undefined;
 
   const { data, isLoading } = useListFactorSnapshots(
-    { limit: 500 },
+    { limit: 500, country: countryParam },
     { query: { refetchOnWindowFocus: false } }
   );
 

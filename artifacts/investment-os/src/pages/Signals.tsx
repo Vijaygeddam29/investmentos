@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -406,10 +406,10 @@ export default function Signals() {
                   {tableHeader}
                   <tbody>
                     {byCountry.map(({ country, rows, avgNet }) => (
-                      <>
-                        <CountrySeparator key={`sep-${country}`} country={country} count={rows.length} avgNet={avgNet} />
+                      <Fragment key={country}>
+                        <CountrySeparator country={country} count={rows.length} avgNet={avgNet} />
                         {rows.map((s, i) => renderRow(s, i + 1))}
-                      </>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -439,7 +439,6 @@ export default function Signals() {
         ticker={drawerTicker}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        showIntelligence={true}
       />
     </Layout>
   );

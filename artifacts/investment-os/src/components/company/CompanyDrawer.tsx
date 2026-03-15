@@ -4,12 +4,12 @@ import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, AlertCircle, ShieldAlert, BarChart2, Award, Link2, Brain, FileText, Activity, Layers, TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
 import { ValueChainTab } from "./ValueChainTab";
-import { SixLayerPanel } from "./SixLayerPanel";
 
 const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
   NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
@@ -33,10 +33,9 @@ interface CompanyDrawerProps {
   ticker: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  showIntelligence?: boolean;
 }
 
-export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = false }: CompanyDrawerProps) {
+export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps) {
   const { data, isLoading } = useGetCompany(ticker || "", {
     query: { enabled: !!ticker }
   });
@@ -206,15 +205,12 @@ export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = f
 
             <ScrollArea className="flex-1">
               <div className="p-6">
-                <Tabs defaultValue={showIntelligence ? "intelligence" : "charts"} className="w-full">
+                <Tabs defaultValue="charts" className="w-full">
                   {/* Scrollable single-row tab list */}
                   <div className="overflow-x-auto mb-6 -mx-1 px-1">
                     <TabsList className="flex w-max min-w-full bg-secondary/50 h-8 gap-0.5 p-0.5">
                       <TabsTrigger value="charts" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
                         <BarChart2 className="w-3 h-3" />Charts
-                      </TabsTrigger>
-                      <TabsTrigger value="intelligence" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
-                        <Brain className="w-3 h-3 text-violet-400" />Intelligence
                       </TabsTrigger>
                       <TabsTrigger value="ai-report" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
                         <FileText className="w-3 h-3 text-blue-400" />AI Report
@@ -257,16 +253,6 @@ export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = f
                         marginOfSafety={data?.valuation?.marginOfSafety}
                       />
                     </div>
-                  </TabsContent>
-
-                  {/* ── Intelligence (6-Layer) — all pages ── */}
-                  <TabsContent value="intelligence" className="animate-in fade-in duration-300">
-                    <SixLayerPanel
-                      company={company}
-                      scores={scores}
-                      latestMetrics={latestMetrics}
-                      countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
-                    />
                   </TabsContent>
 
                   {/* ── AI Report ── */}
