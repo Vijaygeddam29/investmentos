@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
-import { CompanyDrawer } from "@/components/company/CompanyDrawer";
+import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
@@ -529,7 +529,7 @@ export default function PortfolioBuilder() {
   const [hasBuilt, setHasBuilt]           = useState(false);
   const [buildParams, setBuildParams]     = useState<Record<string, unknown> | null>(null);
 
-  const [selectedTicker, setSelectedTicker]   = useState<string | null>(null);
+  const [drawerSnapshot, setDrawerSnapshot]   = useState<IntelligenceSnapshot | null>(null);
   const [drawerOpen, setDrawerOpen]           = useState(false);
   const [expandedTicker, setExpandedTicker]   = useState<string | null>(null);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
@@ -1175,7 +1175,34 @@ export default function PortfolioBuilder() {
                             <button onClick={() => setExpandedTicker(isExp ? null : h.ticker)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View Intelligence analysis">
                               {isExp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                             </button>
-                            <button onClick={() => { setSelectedTicker(h.ticker); setDrawerOpen(true); }} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View full thesis">
+                            <button onClick={() => {
+                              setDrawerSnapshot({
+                                ticker: h.ticker,
+                                name: h.name,
+                                sector: h.sector,
+                                country: h.country,
+                                marketCap: (h as any).marketCap,
+                                companyQualityScore: h.companyQualityScore,
+                                stockOpportunityScore: h.stockOpportunityScore,
+                                mispricingScore: h.mispricingScore,
+                                expectationScore: h.expectationScore,
+                                fragilityScore: h.fragilityScore,
+                                portfolioNetScore: h.portfolioNetScore,
+                                profitabilityScore: (h as any).profitabilityScore,
+                                growthScore: (h as any).growthScore,
+                                capitalEfficiencyScore: (h as any).capitalEfficiencyScore,
+                                financialStrengthScore: (h as any).financialStrengthScore,
+                                cashFlowQualityScore: (h as any).cashFlowQualityScore,
+                                valuationScore: (h as any).valuationScore,
+                                momentumScore: (h as any).momentumScore,
+                                sentimentScore: (h as any).sentimentScore,
+                                entryScore: (h as any).entryScore,
+                                marginOfSafety: (h as any).marginOfSafety,
+                                rsi: (h as any).rsi,
+                                ret3m: (h as any).ret3m,
+                              });
+                              setDrawerOpen(true);
+                            }} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="View Intelligence analysis">
                               <ExternalLink className="w-3 h-3" />
                             </button>
                             <button onClick={() => removeHolding(h.ticker)} className="text-muted-foreground hover:text-red-400 transition-colors p-1">
@@ -1306,7 +1333,7 @@ export default function PortfolioBuilder() {
         </div>
       </div>
 
-      <CompanyDrawer ticker={selectedTicker} open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <IntelligenceDrawer snapshot={drawerSnapshot} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </Layout>
   );
 }
