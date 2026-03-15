@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
 import { ValueChainTab } from "./ValueChainTab";
-import { InvestmentThesisTab } from "./InvestmentThesisTab";
+import { SixLayerPanel } from "./SixLayerPanel";
 
 const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
   NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
@@ -225,7 +225,7 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
 
                   {/* ── Intelligence (6-Layer) ── */}
                   <TabsContent value="intelligence" className="animate-in fade-in duration-300">
-                    <InvestmentThesisTab
+                    <SixLayerPanel
                       company={company}
                       scores={scores}
                       latestMetrics={latestMetrics}
