@@ -1228,7 +1228,7 @@ export default function PortfolioBuilder() {
                               <EyeOff className="w-3.5 h-3.5 text-red-400" />
                               <span className="text-xs font-bold uppercase tracking-wide text-red-400">Watch / Avoid</span>
                               <span className="text-[10px] text-muted-foreground">{(bandGroups["watchlist"] ?? []).length} stock{(bandGroups["watchlist"] ?? []).length !== 1 ? "s" : ""}</span>
-                              <span className="text-[10px] text-muted-foreground">· No position recommended</span>
+                              <span className="text-[10px] text-muted-foreground">· No position recommended — monitor only</span>
                               <span className="ml-auto">
                                 {watchlistOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
                               </span>
