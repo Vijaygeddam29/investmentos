@@ -130,9 +130,37 @@ interface RawMetrics {
   employee_productivity?: number | null;
 }
 
+interface SnapshotDetail {
+  ticker?: string | null;
+  name?: string | null;
+  sector?: string | null;
+  country?: string | null;
+  market_cap?: number | null;
+  effective_market_cap?: number | null;
+  company_quality_score?: number | null;
+  stock_opportunity_score?: number | null;
+  mispricing_score?: number | null;
+  expectation_score?: number | null;
+  fragility_score?: number | null;
+  portfolio_net_score?: number | null;
+  rsi?: number | null;
+  ret3m?: number | null;
+  margin_of_safety?: number | null;
+  macd_histogram?: number | null;
+  profitability_score?: number | null;
+  growth_score?: number | null;
+  capital_efficiency_score?: number | null;
+  financial_strength_score?: number | null;
+  cash_flow_quality_score?: number | null;
+  valuation_score?: number | null;
+  momentum_score?: number | null;
+  sentiment_score?: number | null;
+  entry_score?: number | null;
+}
+
 interface IntelligenceDetail {
   ticker: string;
-  snapshot: Record<string, any>;
+  snapshot: SnapshotDetail;
   metrics: RawMetrics | null;
 }
 
@@ -625,7 +653,7 @@ function NarrativePanel({ ticker }: { ticker: string }) {
         <div className="text-center">
           <p className="text-sm text-foreground font-medium">Narrative unavailable</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {(error as any)?.message ?? "Could not generate narrative. Ensure the company has Intelligence data."}
+            {error instanceof Error ? error.message : "Could not generate narrative. Ensure the company has Intelligence data."}
           </p>
         </div>
         <button
@@ -804,8 +832,8 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
 
   if (!snapshot) return null;
 
-  // Use fetched data if available, fall back to passed snapshot
-  const snap = data?.snapshot ?? snapshot as any;
+  // Use fetched data if available, fall back to an empty snapshot
+  const snap: SnapshotDetail = data?.snapshot ?? {};
   const m: RawMetrics = data?.metrics ?? {};
 
   const Q  = snap.company_quality_score   != null ? Math.round(snap.company_quality_score   * 100) : null;
