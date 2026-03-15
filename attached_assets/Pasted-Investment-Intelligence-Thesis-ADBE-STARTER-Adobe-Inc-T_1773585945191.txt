@@ -1,0 +1,298 @@
+Investment Intelligence Thesis
+🇺🇸
+ADBE
+STARTER
+Adobe Inc.
+Technology
+United States
+$102.3B
+55
+Net Score / 100
+Add
+Score Derivation
+Net = (2×Quality + 1×Opportunity + 2×Mispricing − 1×Expectation − 1×Fragility + 200) ÷ 700 × 100
+2 × 65 (Quality)
+=
++130
+double weight — business foundation
+1 × 45 (Opportunity)
+=
++45
+single weight — stock setup
+2 × 52 (Mispricing)
+=
++104
+double weight — market edge
+1 × 50 (Expectation)
+=
+−50
+penalised — priced-in optimism
+1 × 43 (Fragility)
+=
+−43
+penalised — thesis risk
+Raw weighted sum
+=
+186
+(scale: −200 to +500)
+Normalised
+=
+(186 + 200) ÷ 700 × 100
+=
+55
+
++2× weight
+Company Quality
+65/100
+Above-average fundamentals — consistent profitability, solid capital returns and a healthy balance sheet. Demonstrates competitive strength.
+
+Factor	Wt	Raw Value · Score · Assessment
+Returns on Capital
+ROIC — return on invested capital. Target >15% to indicate genuine economic moat.
+15%	
+58.8%
+Excellent
+Gross Margin Stability
+Stable or improving gross margin = durable pricing power and supply-chain leverage.
+10%	
+89.4%
+Excellent
+Operating Margin
+Operating margin reflects scalability and cost structure durability.
+10%	
+37.8%
+Excellent
+FCF Margin
+FCF margin = cash actually generated per revenue dollar. Better than GAAP earnings.
+10%	
+38.0%
+Excellent
+Balance Sheet Strength
+Altman Z >3 = safe zone. Current ratio >1.5 = adequate liquidity runway.
+10%	
+Current ratio: 0.9
+Weak
+Revenue Growth (3Y)
+3-year compounded revenue growth — structural demand trajectory.
+10%	
+— /yr
+No data
+EPS Growth (3Y)
+Earnings growth translating revenue to shareholder value. Ideally ahead of revenue growth.
+10%	
+— /yr
+No data
+Customer Stickiness
+Proxy: FCF stability / operating cash conversion — reflects recurring revenue and pricing power.
+10%	
+43.0%
+Excellent
+Capital Allocation
+Capital allocation discipline: ROIC on reinvested capital, buyback vs dilution, M&A track record.
+7.5%	
+Score: 0.5
+Average
+Pricing Power
+Gross margin level is the best objective proxy for real pricing power vs suppliers and customers.
+7.5%	
+89.4%
+Excellent
+
++1× weight
+Stock Opportunity
+45/100
+Mixed setup — reasonably priced but lacking a clear directional catalyst. Risk/reward is balanced.
+
+Factor	Wt	Raw Value · Score · Assessment
+Valuation vs History
+Forward PE vs trailing PE gap signals whether earnings expectations are rising or falling.
+20%	
+Fwd PE 9.5× vs PE 14.9×
+Excellent
+Valuation vs Peers
+EV/EBITDA is the best cross-sector valuation comparator. Below sector median = opportunity.
+15%	
+EV/EBITDA: 10.8×
+Excellent
+FCF Yield
+FCF yield >5% = value territory. >3% = reasonable. Price-to-FCF = 1 / FCF yield.
+15%	
+9.1%
+Excellent
+Earnings Revision Trend
+Consistent positive earnings surprises signal upward revision momentum — the most powerful re-rating catalyst.
+10%	
+—
+No data
+Re-rating Risk
+Recent large price appreciation means multiple expansion already occurred — less re-rating left.
+10%	
+—
+No data
+Technical Damage
+Low RSI = technically oversold = better entry. RSI <35 signals maximum technical damage (opportunity).
+5%	
+RSI: 55
+Average
+Moat Duration
+Proxy: R&D intensity and gross margin level. High R&D + high margins = long moat runway.
+10%	
+Gross margin: 89.4%
+Excellent
+Duration Underappreciated
+Margin of safety vs estimated intrinsic value. >20% = meaningful discount. <10% = fully priced.
+15%	
+1.1% margin of safety
+Weak
+
++2× weight
+Mispricing
+52/100
+Plausible mispricing — temporary factors may be suppressing true economics. Thesis is building but lacks full confirmation.
+
+Factor	Wt	Raw Value · Score · Assessment
+Temporary Issue Present?
+Negative operating margin trend suggests temporary suppression — a signal that underlying quality may be understated right now.
+15%	
+—
+No data
+No Structural Impairment
+Absence of structural impairment is required for a valid mispricing thesis. If balance sheet is broken, it may be fundamentally impaired.
+15%	
+—
+No data
+EPS Revisions Turning
+Consistent positive surprises = EPS revisions inflecting upward. This is the most direct evidence of a mispricing thesis playing out.
+10%	
+—
+No data
+Margin Normalisation
+Improving margin trends = normalisation is underway. This is the core driver of earnings estimate upgrades.
+15%	
+—
+No data
+Optionality Underappreciated
+High R&D investment + deferred revenue growth = unrecognised value creation. Market often ignores long-duration optionality.
+15%	
+—
+No data
+Accounting Distortion?
+Low accrual ratio + high FCF/Net Income = earnings are real. Accounting distortion can cause mispricing when cash quality is high but GAAP looks weak.
+10%	
+FCF/NI: 1.29×
+Excellent
+Mgmt Capital Allocation
+Management buying their own stock + high capital discipline = alignment. Reduces risk of value-destroying M&A or dilution.
+10%	
+Alloc score: 0.50
+Average
+Clear Catalyst (6–24M)
+Proxy: consistent earnings beats combined with margin of safety. A clear upcoming catalyst makes the mispricing time-bounded rather than indefinite.
+10%	
+1.1% MoS
+No data
+
+−1× penalised
+Expectation
+50/100
+Balanced expectation bar — consensus is achievable. Neither dangerously optimistic nor excessively pessimistic.
+
+Factor	Wt	Raw Value · Score · Assessment
+PE vs History
+Forward PE above 30× typically implies perfection. The higher vs its own history, the more expectation is baked in.
+20%	
+Fwd PE: 9.5×
+Excellent
+EV/EBIT vs History
+EV/EBITDA >25× implies high long-duration growth expectations. Any rate shock or growth miss is amplified at high multiples.
+15%	
+EV/EBITDA: 10.8×
+Excellent
+PE vs Peers
+PE relative to sector peers. A premium multiple requires premium execution — there is no margin for error.
+10%	
+PE: 14.9×
+Excellent
+PEG vs Peers
+PEG >2.5 = expensive growth. PEG <1 = growth at a reasonable price. Relative to peers shows whether premium is justified.
+10%	
+—
+No data
+Reverse DCF: Implied Revenue CAGR
+What revenue growth rate must the company sustain to justify its current multiple? Higher required CAGR = higher expectation baked in.
+15%	
+Rev/Growth ratio: 0.3×
+Good
+Reverse DCF: Implied Margin
+Current operating margin as proxy for the margin the market is implying in its valuation. High current margin = high margin already priced in.
+10%	
+37.8%
+Poor
+Multiple Expansion Already Happened
+Large recent price gain that outpaced earnings = multiple expansion already happened. Less upside left from further re-rating.
+10%	
+-27.6% 3M return
+Excellent
+Ownership / Crowding
+>80% institutional ownership = crowded long. Crowded positions have more forced sellers and less incremental buyers to drive further appreciation.
+10%	
+—
+No data
+
+−1× penalised
+Fragility
+43/100
+Resilient business — limited vulnerabilities, diversified revenue and strong interest coverage make the thesis durable.
+
+Factor	Wt	Raw Value · Score · Assessment
+Revenue Concentration
+High customer / product / geography concentration = single-point-of-failure risk. Assessed qualitatively — no single financial ratio captures this.
+15%	
+Qualitative assessment
+No data
+Margin Volatility
+High cash flow volatility = cyclical or commodity-exposed business. Increases earnings uncertainty and makes valuation harder to anchor.
+15%	
+—
+No data
+Net Debt / EBITDA
+Net Debt/EBITDA: <1× = safe, 1–2× = manageable, >3× = fragile. Net cash position (negative) = fortress-grade resilience.
+15%	
+D/E: 58.2×
+No data
+Interest Coverage
+EBIT / interest expense. Below 2× = dangerous. Below 1× = cannot service debt from operations. Target >5× for robust thesis.
+10%	
+Current ratio: 0.9×
+No data
+Estimate Dispersion
+High earnings surprise magnitude (positive or negative) = wide analyst dispersion. Uncertainty makes position sizing harder and pricing more fragile.
+10%	
+—
+No data
+Guidance Reliability
+Proxy via accrual ratio: low accruals = guidance based on real cash, not accounting judgements. High accruals = earnings are fragile.
+10%	
+FCF/NI: 1.29×
+No data
+Regulatory / Event Risk
+Regulatory, reimbursement and litigation risk. Particularly important for healthcare, financials, energy and tech. Assessed qualitatively.
+10%	
+Sector-dependent
+No data
+Technology Disruption Risk
+High R&D spend is a partial offset to disruption risk — companies investing in their own obsolescence are less likely to be caught off-guard.
+10%	
+—
+No data
+Beta / Drawdown Risk
+High RSI + high cash flow volatility = elevated beta. High-beta names amplify both gains and drawdowns, making sizing more difficult.
+5%	
+RSI: 55
+Average
+Final Recommendation
+Add
+Position band: STARTER
+Recommended size: 1–2.5% of portfolio
+55
+Net Score / 100
