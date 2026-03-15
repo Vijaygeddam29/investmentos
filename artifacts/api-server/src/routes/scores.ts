@@ -27,6 +27,12 @@ router.get("/market/regime", async (_req, res) => {
   }
 });
 
+// Cap tier boundaries (USD)
+const CAP_LARGE_MIN = 10_000_000_000;
+const CAP_MID_MIN   =  2_000_000_000;
+
+type CapTier = "all" | "large" | "mid" | "small" | "top50";
+
 // ─── GET /api/scores ─────────────────────────────────────────────────────────
 router.get("/scores", async (req, res) => {
   try {
@@ -35,6 +41,7 @@ router.get("/scores", async (req, res) => {
     const limit         = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
     const offset        = Math.max(parseInt(req.query.offset as string) || 0, 0);
     const countryFilter = req.query.country as string | undefined;
+    const capTier       = (req.query.cap_tier as CapTier) ?? "all";
 
     const allRows = await db
       .select({
@@ -42,6 +49,7 @@ router.get("/scores", async (req, res) => {
         name:                   companiesTable.name,
         sector:                 companiesTable.sector,
         country:                companiesTable.country,
+        marketCap:              companiesTable.marketCap,
         date:                   scoresTable.date,
         fortressScore:          scoresTable.fortressScore,
         rocketScore:            scoresTable.rocketScore,
@@ -76,6 +84,18 @@ router.get("/scores", async (req, res) => {
     } else if (countryFilter) {
       const cf = countryFilter.toLowerCase();
       latestPerTicker = latestPerTicker.filter(r => (r.country ?? "").toLowerCase().includes(cf));
+    }
+
+    // Cap tier filtering
+    if (capTier === "large") {
+      latestPerTicker = latestPerTicker.filter(r => (r.marketCap ?? 0) >= CAP_LARGE_MIN);
+    } else if (capTier === "mid") {
+      latestPerTicker = latestPerTicker.filter(r => {
+        const mc = r.marketCap ?? 0;
+        return mc >= CAP_MID_MIN && mc < CAP_LARGE_MIN;
+      });
+    } else if (capTier === "small") {
+      latestPerTicker = latestPerTicker.filter(r => (r.marketCap ?? 0) < CAP_MID_MIN && (r.marketCap ?? 0) > 0);
     }
 
     const scoreField = (engine === "rocket" ? "rocketScore"
