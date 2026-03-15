@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, real } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 
 export const aiVerdictsTable = pgTable("ai_verdicts", {
@@ -8,6 +8,8 @@ export const aiVerdictsTable = pgTable("ai_verdicts", {
   verdict: text("verdict").notNull(),
   classification: text("classification"),
   memo: text("memo").notNull(),
+  narrativeJson: text("narrative_json"),
+  dataConfidence: real("data_confidence"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
