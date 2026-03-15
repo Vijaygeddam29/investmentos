@@ -363,10 +363,23 @@ export default function PortfolioBuilder() {
 
     setManualMode(true);
     setManualWeights((prev) => {
+      const oldVal = prev[ticker] ?? 0;
+      const delta = parsed - oldVal;
       const next = { ...prev, [ticker]: parsed };
+
+      const otherTickers = Object.keys(next).filter((t) => t !== ticker && !lockedWeights.has(t));
+      if (otherTickers.length > 0 && Math.abs(delta) > 0.01) {
+        const otherTotal = otherTickers.reduce((s, t) => s + (next[t] ?? 0), 0);
+        if (otherTotal > 0) {
+          for (const t of otherTickers) {
+            const share = (next[t] ?? 0) / otherTotal;
+            next[t] = Math.max(0, parseFloat(((next[t] ?? 0) - delta * share).toFixed(1)));
+          }
+        }
+      }
       return next;
     });
-  }, []);
+  }, [lockedWeights]);
 
   const redistributeWeights = useCallback(() => {
     setManualWeights((prev) => {
@@ -384,6 +397,20 @@ export default function PortfolioBuilder() {
     });
   }, [lockedWeights]);
 
+  const resetToAiWeights = useCallback(() => {
+    if (data?.holdings?.length) {
+      const wMap: Record<string, number> = {};
+      for (const h of data.holdings) {
+        wMap[h.ticker] = parseFloat((h.weight * 100).toFixed(1));
+      }
+      const apiHoldings: ManualHolding[] = data.holdings.map((h) => ({ ...h, isManual: false }));
+      setManualHoldings(apiHoldings);
+      setManualWeights(wMap);
+      setLockedWeights(new Set());
+      setManualMode(false);
+    }
+  }, [data?.holdings]);
+
   const toggleLock = useCallback((ticker: string) => {
     setLockedWeights((prev) => {
       const next = new Set(prev);
@@ -397,8 +424,18 @@ export default function PortfolioBuilder() {
     setManualMode(true);
     setManualHoldings((prev) => prev.filter((h) => h.ticker !== ticker));
     setManualWeights((prev) => {
+      const freedWeight = prev[ticker] ?? 0;
       const next = { ...prev };
       delete next[ticker];
+
+      const remaining = Object.keys(next).filter((t) => !lockedWeights.has(t));
+      if (remaining.length > 0 && freedWeight > 0) {
+        const remainingTotal = remaining.reduce((s, t) => s + (next[t] ?? 0), 0);
+        for (const t of remaining) {
+          const share = remainingTotal > 0 ? (next[t] ?? 0) / remainingTotal : 1 / remaining.length;
+          next[t] = parseFloat(((next[t] ?? 0) + freedWeight * share).toFixed(1));
+        }
+      }
       return next;
     });
     setLockedWeights((prev) => {
@@ -406,7 +443,7 @@ export default function PortfolioBuilder() {
       next.delete(ticker);
       return next;
     });
-  }, []);
+  }, [lockedWeights]);
 
   const handleAddStock = useCallback((result: SearchResult) => {
     setManualMode(true);
@@ -436,9 +473,21 @@ export default function PortfolioBuilder() {
       positionBand: null,
       isManual: true,
     };
+    const defaultWeight = 2;
     setManualHoldings((prev) => [...prev, newHolding]);
-    setManualWeights((prev) => ({ ...prev, [result.ticker]: 0 }));
-  }, [manualHoldings]);
+    setManualWeights((prev) => {
+      const next = { ...prev, [result.ticker]: defaultWeight };
+      const otherTickers = Object.keys(prev).filter((t) => !lockedWeights.has(t));
+      const otherTotal = otherTickers.reduce((s, t) => s + (prev[t] ?? 0), 0);
+      if (otherTickers.length > 0 && otherTotal > 0) {
+        for (const t of otherTickers) {
+          const share = (prev[t] ?? 0) / otherTotal;
+          next[t] = Math.max(0, parseFloat(((prev[t] ?? 0) - defaultWeight * share).toFixed(1)));
+        }
+      }
+      return next;
+    });
+  }, [manualHoldings, lockedWeights]);
 
   const holdings = manualHoldings;
   const score    = data?.portfolioScore;
@@ -764,13 +813,22 @@ export default function PortfolioBuilder() {
                 </div>
                 <div className="flex items-center gap-2">
                   {manualMode && (
-                    <button
-                      onClick={redistributeWeights}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-colors"
-                    >
-                      <Target className="w-3 h-3" />
-                      Even out unlocked
-                    </button>
+                    <>
+                      <button
+                        onClick={resetToAiWeights}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md border border-primary/30 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Wand2 className="w-3 h-3" />
+                        Rebalance
+                      </button>
+                      <button
+                        onClick={redistributeWeights}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-[10px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-colors"
+                      >
+                        <Target className="w-3 h-3" />
+                        Even out unlocked
+                      </button>
+                    </>
                   )}
                   <AddStockPanel onAdd={handleAddStock} existingTickers={existingTickers} />
                 </div>
@@ -841,12 +899,21 @@ export default function PortfolioBuilder() {
                           const curWeight = manualWeights[h.ticker] ?? 0;
                           const isLocked = lockedWeights.has(h.ticker);
 
+                          const bandBorderColor =
+                            pb?.band === "core"      ? "border-l-emerald-500/60" :
+                            pb?.band === "standard"  ? "border-l-blue-500/60" :
+                            pb?.band === "starter"   ? "border-l-amber-500/60" :
+                            pb?.band === "tactical"  ? "border-l-orange-500/60" :
+                            pb?.band === "watchlist" ? "border-l-red-500/60" :
+                            h.isManual               ? "border-l-primary/40" :
+                                                       "border-l-transparent";
+
                           rows.push(
                             <tr
                               key={h.ticker}
-                              className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${
+                              className={`border-b border-border/50 hover:bg-muted/20 transition-colors border-l-2 ${bandBorderColor} ${
                                 i % 2 === 0 ? "" : "bg-muted/5"
-                              } ${h.isManual ? "border-l-2 border-l-primary/40" : ""}`}
+                              }`}
                             >
                               <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono">{i + 1}</td>
                               <td
