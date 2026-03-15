@@ -33,9 +33,10 @@ interface CompanyDrawerProps {
   ticker: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  showIntelligence?: boolean;
 }
 
-export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps) {
+export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = false }: CompanyDrawerProps) {
   const { data, isLoading } = useGetCompany(ticker || "", {
     query: { enabled: !!ticker }
   });
@@ -204,11 +205,13 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
 
             <ScrollArea className="flex-1">
               <div className="p-6">
-                <Tabs defaultValue="intelligence" className="w-full">
-                  <TabsList className="w-full grid grid-cols-4 mb-6 bg-secondary/50 text-[11px]">
-                    <TabsTrigger value="intelligence" className="text-[11px] flex items-center gap-1">
-                      <Brain className="w-3 h-3 text-violet-400" />Intelligence
-                    </TabsTrigger>
+                <Tabs defaultValue={showIntelligence ? "intelligence" : "charts"} className="w-full">
+                  <TabsList className={`w-full grid mb-6 bg-secondary/50 text-[11px] ${showIntelligence ? "grid-cols-4" : "grid-cols-3"}`}>
+                    {showIntelligence && (
+                      <TabsTrigger value="intelligence" className="text-[11px] flex items-center gap-1">
+                        <Brain className="w-3 h-3 text-violet-400" />Intelligence
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger value="charts" className="text-[11px] flex items-center gap-1">
                       <BarChart2 className="w-3 h-3" />Charts
                     </TabsTrigger>
@@ -223,15 +226,17 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* ── Intelligence (6-Layer) ── */}
-                  <TabsContent value="intelligence" className="animate-in fade-in duration-300">
-                    <SixLayerPanel
-                      company={company}
-                      scores={scores}
-                      latestMetrics={latestMetrics}
-                      countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
-                    />
-                  </TabsContent>
+                  {/* ── Intelligence (6-Layer) — Signals page only ── */}
+                  {showIntelligence && (
+                    <TabsContent value="intelligence" className="animate-in fade-in duration-300">
+                      <SixLayerPanel
+                        company={company}
+                        scores={scores}
+                        latestMetrics={latestMetrics}
+                        countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
+                      />
+                    </TabsContent>
+                  )}
 
                   {/* ── Charts ── */}
                   <TabsContent value="charts" className="animate-in fade-in duration-300 space-y-6">

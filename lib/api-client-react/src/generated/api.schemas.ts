@@ -475,6 +475,7 @@ export type ListScoresParams = {
   minScore?: number;
   limit?: number;
   offset?: number;
+  country?: string;
 };
 
 export type ListScoresEngine =
@@ -518,6 +519,7 @@ export type ListTopMoversParams = {
   engine?: ListTopMoversEngine;
   limit?: number;
   min_delta?: number;
+  country?: string;
 };
 
 export type ListTopMoversEngine =

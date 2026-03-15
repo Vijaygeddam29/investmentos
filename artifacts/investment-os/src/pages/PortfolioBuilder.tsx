@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
+import { useAuth } from "@/contexts/AuthContext";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
@@ -331,11 +332,13 @@ function AddStockPanel({
 }
 
 export default function PortfolioBuilder() {
+  const { market } = useAuth();
+
   const [strategy, setStrategy]         = useState<Strategy>("rocket");
   const [size, setSize]                 = useState(10);
   const [weightMethod, setWeightMethod] = useState<WeightMethod>("score");
   const [sectorCap, setSectorCap]       = useState(2);
-  const [country, setCountry]           = useState("all");
+  const [country, setCountry]           = useState(market !== "All" ? market : "all");
   const [marketCap, setMarketCap]       = useState<MarketCapTier>("all");
   const [hasBuilt, setHasBuilt]         = useState(false);
   const [buildParams, setBuildParams]   = useState<Record<string, unknown> | null>(null);

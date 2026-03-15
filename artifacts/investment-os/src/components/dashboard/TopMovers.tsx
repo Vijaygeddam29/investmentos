@@ -12,13 +12,14 @@ const ENGINES: { value: ListTopMoversEngine; label: string; icon: typeof Shield;
 
 interface Props {
   onTickerClick?: (ticker: string) => void;
+  country?: string;
 }
 
-export function TopMovers({ onTickerClick }: Props) {
+export function TopMovers({ onTickerClick, country }: Props) {
   const [engine, setEngine] = useState<ListTopMoversEngine>(ListTopMoversEngine.fortress);
 
   const { data, isLoading } = useListTopMovers(
-    { engine, limit: 8, min_delta: 0.005 },
+    { engine, limit: 8, min_delta: 0.005, country },
     { query: { refetchOnWindowFocus: false } }
   );
 

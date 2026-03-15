@@ -10,10 +10,14 @@ export interface AuthUser {
   verified: boolean;
 }
 
+export type Market = "United States" | "United Kingdom" | "India" | "All";
+
 interface AuthCtx {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  market: Market;
+  setMarket: (m: Market) => void;
   login: (token: string, user: AuthUser) => void;
   logout: () => void;
 }
@@ -22,16 +26,22 @@ const AuthContext = createContext<AuthCtx>({
   user: null,
   token: null,
   loading: true,
+  market: "All",
+  setMarket: () => {},
   login: () => {},
   logout: () => {},
 });
 
-const TOKEN_KEY = "ios_jwt";
+const TOKEN_KEY  = "ios_jwt";
+const MARKET_KEY = "ios_market";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user,    setUser]    = useState<AuthUser | null>(null);
+  const [token,   setToken]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [market,  setMarketState] = useState<Market>(
+    () => (localStorage.getItem(MARKET_KEY) as Market | null) ?? "All"
+  );
 
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_KEY);
@@ -55,6 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  const setMarket = useCallback((m: Market) => {
+    localStorage.setItem(MARKET_KEY, m);
+    setMarketState(m);
+  }, []);
+
   const login = useCallback((tok: string, u: AuthUser) => {
     localStorage.setItem(TOKEN_KEY, tok);
     setToken(tok);
@@ -68,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, market, setMarket, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

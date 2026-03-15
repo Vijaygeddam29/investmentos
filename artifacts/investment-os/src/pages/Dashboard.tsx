@@ -5,6 +5,7 @@ import { CompanyTable } from "@/components/dashboard/CompanyTable";
 import { TopMovers } from "@/components/dashboard/TopMovers";
 import { useListScores, useGetMarketRegime, useListAlerts, ListScoresEngine } from "@workspace/api-client-react";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
+import { useAuth } from "@/contexts/AuthContext";
 import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -26,9 +27,12 @@ export default function Dashboard() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6 });
-  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6 });
-  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5 });
+  const { market } = useAuth();
+  const countryParam = market !== "All" ? market : undefined;
+
+  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, country: countryParam });
+  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, country: countryParam });
+  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, country: countryParam });
   const { data: regimeData } = useGetMarketRegime();
   const { data: alertsData } = useListAlerts({ days: 7, limit: 10 });
 
@@ -124,7 +128,7 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
 
-        <TopMovers onTickerClick={handleTickerClick} />
+        <TopMovers onTickerClick={handleTickerClick} country={countryParam} />
 
         {/* ── Score Alerts Panel ── */}
         {alerts.length > 0 && (

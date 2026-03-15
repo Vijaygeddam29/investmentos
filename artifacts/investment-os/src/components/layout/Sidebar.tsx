@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -11,12 +11,21 @@ import {
   Settings,
   X,
   LogOut,
-  User
+  User,
+  ChevronDown,
+  Check
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { useSidebarCtx } from "./Layout";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, type Market } from "@/contexts/AuthContext";
+
+const MARKET_OPTIONS: { value: Market; flag: string; label: string }[] = [
+  { value: "United States", flag: "🇺🇸", label: "United States" },
+  { value: "United Kingdom", flag: "🇬🇧", label: "United Kingdom" },
+  { value: "India",          flag: "🇮🇳", label: "India" },
+  { value: "All",            flag: "🌍",  label: "All Markets" },
+];
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -45,11 +54,14 @@ const navGroups = [
 export function Sidebar() {
   const [location] = useLocation();
   const { open, isMobile, close } = useSidebarCtx();
-  const { user, logout } = useAuth();
+  const { user, logout, market, setMarket } = useAuth();
 
   const displayName = user?.name ?? user?.email ?? user?.phone ?? "Account";
   const displaySub  = user?.email ?? user?.phone ?? "";
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [marketOpen, setMarketOpen] = useState(false);
+
+  const currentMarket = MARKET_OPTIONS.find((m) => m.value === market) ?? MARKET_OPTIONS[3];
 
   useEffect(() => {
     if (!open || !isMobile) return;
@@ -115,6 +127,38 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Market switcher */}
+      <div className="px-4 py-3 border-t border-border">
+        <div className="text-[10px] font-mono text-muted-foreground mb-1.5 px-1 uppercase tracking-wider">Market</div>
+        <div className="relative">
+          <button
+            onClick={() => setMarketOpen((v) => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/40 hover:bg-sidebar-accent transition-all text-sm font-medium text-white"
+          >
+            <span className="text-base leading-none">{currentMarket.flag}</span>
+            <span className="flex-1 text-left text-sm">{currentMarket.label}</span>
+            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", marketOpen && "rotate-180")} />
+          </button>
+          {marketOpen && (
+            <div className="absolute bottom-full left-0 right-0 mb-1.5 bg-[#1a1d2e] border border-border rounded-xl shadow-2xl overflow-hidden z-50">
+              {MARKET_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setMarket(opt.value); setMarketOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-sidebar-accent transition-colors text-sm"
+                >
+                  <span className="text-base leading-none">{opt.flag}</span>
+                  <span className={cn("flex-1 text-left", opt.value === market ? "text-white font-medium" : "text-slate-300")}>
+                    {opt.label}
+                  </span>
+                  {opt.value === market && <Check className="w-3.5 h-3.5 text-primary" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="p-4 border-t border-border space-y-1">
         <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150">

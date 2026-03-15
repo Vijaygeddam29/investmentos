@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots, useSeedUniverse } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Loader2, Filter, RefreshCw, Sprout, Search, X } from "lucide-react";
@@ -29,9 +30,12 @@ export default function Screener() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const { market } = useAuth();
+  const defaultCountry = market !== "All" ? market : "";
+
   const [sector, setSector]         = useState("");
   const [industry, setIndustry]     = useState("");
-  const [country, setCountry]       = useState("");
+  const [country, setCountry]       = useState(defaultCountry);
   const [minFortress, setMinFortress] = useState("");
   const [minRocket, setMinRocket]   = useState("");
   const [minWave, setMinWave]       = useState("");

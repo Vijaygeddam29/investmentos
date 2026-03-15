@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { PipelineTimestampBar } from "@/components/pipeline/PipelineTimestampBar";
 import {
@@ -146,8 +147,11 @@ export default function Signals() {
   const [drawerTicker, setDrawerTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const { market } = useAuth();
+  const countryParam = market !== "All" ? market : undefined;
+
   const { data, isLoading } = useListFactorSnapshots(
-    { limit: 500 },
+    { limit: 500, country: countryParam },
     { query: { refetchOnWindowFocus: false } }
   );
 
@@ -435,6 +439,7 @@ export default function Signals() {
         ticker={drawerTicker}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        showIntelligence={true}
       />
     </Layout>
   );

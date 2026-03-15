@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListUniverse, useAddToUniverse, useRemoveFromUniverse } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,10 +25,13 @@ export default function Universe() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const { market } = useAuth();
+  const defaultMarketCountry = market !== "All" ? market : undefined;
+
   const [sectorFilter, setSectorFilter]   = useState("");
-  const [countryFilter, setCountryFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState(market !== "All" ? market : "");
   const [appliedSector, setAppliedSector] = useState<string | undefined>(undefined);
-  const [appliedCountry, setAppliedCountry] = useState<string | undefined>(undefined);
+  const [appliedCountry, setAppliedCountry] = useState<string | undefined>(defaultMarketCountry);
 
   const { data, isLoading } = useListUniverse({ sector: appliedSector, country: appliedCountry });
   const { data: allData }   = useListUniverse({});

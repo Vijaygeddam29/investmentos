@@ -138,9 +138,10 @@ router.get("/factor-snapshots", async (req, res) => {
  */
 router.get("/top-movers", async (req, res) => {
   try {
-    const engine   = (req.query.engine as string) ?? "fortress";
-    const limit    = Math.min(Number(req.query.limit ?? 10), 50);
-    const minDelta = Number(req.query.min_delta ?? 0.01);
+    const engine        = (req.query.engine as string) ?? "fortress";
+    const limit         = Math.min(Number(req.query.limit ?? 10), 50);
+    const minDelta      = Number(req.query.min_delta ?? 0.01);
+    const countryFilter = req.query.country as string | undefined;
 
     const rows = await db
       .select({
@@ -168,11 +169,16 @@ router.get("/top-movers", async (req, res) => {
       .limit(5000);
 
     const seen = new Set<string>();
-    const latest = rows.filter(row => {
+    let latest = rows.filter(row => {
       if (seen.has(row.ticker)) return false;
       seen.add(row.ticker);
       return true;
     });
+
+    if (countryFilter) {
+      const cf = countryFilter.toLowerCase();
+      latest = latest.filter(r => (r.country ?? "").toLowerCase().includes(cf));
+    }
 
     const deltaField = (r: typeof latest[0]) => {
       switch (engine) {

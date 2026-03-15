@@ -21,16 +21,18 @@ router.get("/market/regime", async (_req, res) => {
 // ─── GET /api/scores ─────────────────────────────────────────────────────────
 router.get("/scores", async (req, res) => {
   try {
-    const engine   = (req.query.engine as string) ?? "fortress";
-    const minScore = req.query.minScore ? parseFloat(req.query.minScore as string) : undefined;
-    const limit    = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
-    const offset   = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const engine        = (req.query.engine as string) ?? "fortress";
+    const minScore      = req.query.minScore ? parseFloat(req.query.minScore as string) : undefined;
+    const limit         = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
+    const offset        = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const countryFilter = req.query.country as string | undefined;
 
     const allRows = await db
       .select({
         ticker:                 scoresTable.ticker,
         name:                   companiesTable.name,
         sector:                 companiesTable.sector,
+        country:                companiesTable.country,
         date:                   scoresTable.date,
         fortressScore:          scoresTable.fortressScore,
         rocketScore:            scoresTable.rocketScore,
@@ -54,11 +56,16 @@ router.get("/scores", async (req, res) => {
       .orderBy(desc(scoresTable.date));
 
     const seen = new Set<string>();
-    const latestPerTicker = allRows.filter(row => {
+    let latestPerTicker = allRows.filter(row => {
       if (seen.has(row.ticker)) return false;
       seen.add(row.ticker);
       return true;
     });
+
+    if (countryFilter) {
+      const cf = countryFilter.toLowerCase();
+      latestPerTicker = latestPerTicker.filter(r => (r.country ?? "").toLowerCase().includes(cf));
+    }
 
     const scoreField = (engine === "rocket" ? "rocketScore"
       : engine === "wave" ? "waveScore"

@@ -1,25 +1,39 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, Market } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, BarChart3, Mail, MessageCircle, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Loader2, BarChart3, Mail, MessageCircle, ArrowLeft, ShieldCheck, Globe, CheckCircle2 } from "lucide-react";
 
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type Method  = "email" | "whatsapp";
-type Step    = "choose" | "contact" | "otp";
+type Method = "email" | "whatsapp";
+type Step   = "choose" | "contact" | "otp" | "market";
+
+interface PendingAuth {
+  token: string;
+  user: ReturnType<typeof useAuth>["user"];
+}
+
+const MARKETS: { value: Market; label: string; flag: string; description: string }[] = [
+  { value: "United States", flag: "🇺🇸", label: "United States", description: "109 companies · NYSE & NASDAQ" },
+  { value: "United Kingdom", flag: "🇬🇧", label: "United Kingdom", description: "25 companies · LSE" },
+  { value: "India",          flag: "🇮🇳", label: "India",          description: "18 companies · NSE & BSE" },
+  { value: "All",            flag: "🌍", label: "All Markets",   description: "175 companies globally" },
+];
 
 export default function Login() {
-  const { login }    = useAuth();
-  const { toast }    = useToast();
+  const { login, setMarket } = useAuth();
+  const { toast }            = useToast();
 
-  const [step,    setStep]    = useState<Step>("choose");
-  const [method,  setMethod]  = useState<Method>("email");
-  const [contact, setContact] = useState("");
-  const [code,    setCode]    = useState("");
-  const [busy,    setBusy]    = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
+  const [step,        setStep]        = useState<Step>("choose");
+  const [method,      setMethod]      = useState<Method>("email");
+  const [contact,     setContact]     = useState("");
+  const [code,        setCode]        = useState("");
+  const [busy,        setBusy]        = useState(false);
+  const [devCode,     setDevCode]     = useState<string | null>(null);
+  const [pendingAuth, setPendingAuth] = useState<PendingAuth | null>(null);
+  const [selected,    setSelected]    = useState<Market | null>(null);
 
   async function handleSendOtp() {
     if (!contact.trim()) return;
@@ -36,8 +50,8 @@ export default function Login() {
       if (data.devCode) setDevCode(data.devCode);
       toast({ title: "Code sent!", description: data.message });
       setStep("otp");
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -54,12 +68,19 @@ export default function Login() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Verification failed");
-      login(data.token, data.user);
-    } catch (e: any) {
-      toast({ title: "Wrong code", description: e.message, variant: "destructive" });
+      setPendingAuth({ token: data.token, user: data.user });
+      setStep("market");
+    } catch (e: unknown) {
+      toast({ title: "Wrong code", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleMarketConfirm() {
+    if (!pendingAuth || !selected) return;
+    setMarket(selected);
+    login(pendingAuth.token, pendingAuth.user!);
   }
 
   return (
@@ -77,6 +98,7 @@ export default function Login() {
         </div>
 
         <div className="bg-[#1a1d2e] border border-slate-800 rounded-2xl p-7 shadow-2xl">
+
           {/* ── Step 1: choose method ── */}
           {step === "choose" && (
             <>
@@ -142,7 +164,9 @@ export default function Login() {
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-indigo-600/20 mx-auto mb-5">
                 <ShieldCheck className="w-6 h-6 text-indigo-400" />
               </div>
-              <h2 className="text-lg font-semibold text-white text-center mb-1">Check your {method === "email" ? "inbox" : "WhatsApp"}</h2>
+              <h2 className="text-lg font-semibold text-white text-center mb-1">
+                Check your {method === "email" ? "inbox" : "WhatsApp"}
+              </h2>
               <p className="text-sm text-slate-400 text-center mb-4">
                 Enter the 6-digit code sent to <span className="text-white font-medium">{contact}</span>
               </p>
@@ -153,6 +177,7 @@ export default function Login() {
                   <p className="text-2xl font-bold tracking-[0.3em] text-white font-mono">{devCode}</p>
                 </div>
               )}
+
               <Input
                 type="text"
                 inputMode="numeric"
@@ -180,6 +205,57 @@ export default function Login() {
               </button>
             </>
           )}
+
+          {/* ── Step 4: choose market ── */}
+          {step === "market" && (
+            <>
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600/20 mx-auto mb-5">
+                <Globe className="w-6 h-6 text-emerald-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-white text-center mb-1">Choose your market</h2>
+              <p className="text-sm text-slate-400 text-center mb-5">
+                We'll focus your signals, screener, and portfolio on this market.
+                You can change it anytime from the sidebar.
+              </p>
+
+              <div className="space-y-2.5 mb-5">
+                {MARKETS.map((m) => {
+                  const isActive = selected === m.value;
+                  return (
+                    <button
+                      key={m.value}
+                      onClick={() => setSelected(m.value)}
+                      className={`w-full flex items-center gap-3.5 p-3.5 rounded-xl border transition-all text-left ${
+                        isActive
+                          ? "border-indigo-500 bg-indigo-600/15"
+                          : "border-slate-700 hover:border-slate-600 hover:bg-slate-800/40"
+                      }`}
+                    >
+                      <span className="text-2xl leading-none">{m.flag}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium leading-tight ${isActive ? "text-white" : "text-slate-300"}`}>
+                          {m.label}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{m.description}</p>
+                      </div>
+                      {isActive && (
+                        <CheckCircle2 className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <Button
+                onClick={handleMarketConfirm}
+                disabled={!selected}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+              >
+                Enter Investment OS
+              </Button>
+            </>
+          )}
+
         </div>
 
         <p className="text-xs text-slate-600 text-center mt-6">
