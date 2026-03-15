@@ -99,6 +99,15 @@ const LAYER_DEFS: readonly { key: LayerKey; label: string; short: string; color:
   { key: "portfolioNetScore",     label: "Net Score",    short: "N",  color: "bg-emerald-500", textColor: "text-emerald-400" },
 ];
 
+function derivePositionBand(netScore: number | null): BuilderHolding["positionBand"] {
+  if (netScore == null) return null;
+  if (netScore >= 0.75) return { band: "core",      label: "Core",      minPct: 6,   maxPct: 10  };
+  if (netScore >= 0.60) return { band: "standard",  label: "Standard",  minPct: 3,   maxPct: 5   };
+  if (netScore >= 0.45) return { band: "starter",   label: "Starter",   minPct: 1,   maxPct: 2.5 };
+  if (netScore >= 0.30) return { band: "tactical",  label: "Tactical",  minPct: 0.5, maxPct: 1   };
+  return                       { band: "watchlist", label: "Watchlist", minPct: 0,   maxPct: 0   };
+}
+
 function normalizeWeightsTo100(weights: Record<string, number>, locked: Set<string>): Record<string, number> {
   const result = { ...weights };
   const total = Object.values(result).reduce((s, w) => s + w, 0);
@@ -192,7 +201,7 @@ function IntelligenceSummaryCard({ holdings, weights }: { holdings: ManualHoldin
     let weightedSum = 0;
     let totalW = 0;
     for (const h of holdings) {
-      const val = (h as any)[layer.key] as number | null;
+      const val: number | null = h[layer.key];
       const w = weights[h.ticker] ?? 0;
       if (val != null && w > 0) {
         weightedSum += val * w;
@@ -415,7 +424,7 @@ export default function PortfolioBuilder() {
           }
         }
       }
-      return next;
+      return normalizeWeightsTo100(next, lockedWeights);
     });
   }, [lockedWeights]);
 
@@ -474,7 +483,7 @@ export default function PortfolioBuilder() {
           next[t] = parseFloat(((next[t] ?? 0) + freedWeight * share).toFixed(1));
         }
       }
-      return next;
+      return normalizeWeightsTo100(next, lockedWeights);
     });
     setLockedWeights((prev) => {
       const next = new Set(prev);
@@ -508,7 +517,7 @@ export default function PortfolioBuilder() {
       fragilityScore: result.fragilityScore,
       companyQualityScore: result.companyQualityScore,
       stockOpportunityScore: result.stockOpportunityScore,
-      positionBand: null,
+      positionBand: derivePositionBand(result.portfolioNetScore),
       isManual: true,
     };
     const defaultWeight = 2;
@@ -523,7 +532,7 @@ export default function PortfolioBuilder() {
           next[t] = Math.max(0, parseFloat(((prev[t] ?? 0) - defaultWeight * share).toFixed(1)));
         }
       }
-      return next;
+      return normalizeWeightsTo100(next, lockedWeights);
     });
   }, [manualHoldings, lockedWeights]);
 
@@ -983,7 +992,7 @@ export default function PortfolioBuilder() {
                               </td>
                               {LAYER_DEFS.map((l) => (
                                 <td key={l.key} className="px-1 py-2.5">
-                                  <LayerBar value={(h as any)[l.key]} color={l.color} />
+                                  <LayerBar value={h[l.key]} color={l.color} />
                                 </td>
                               ))}
                               <td className="px-3 py-2.5">
