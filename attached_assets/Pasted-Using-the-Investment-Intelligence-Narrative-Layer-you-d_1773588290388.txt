@@ -1,0 +1,118 @@
+Using the Investment Intelligence Narrative Layer you described, we can build a portfolio construction rationale that translates your per-stock narratives into a coherent allocation and decision framework. Here’s how it would work:
+
+1. Portfolio Philosophy
+
+Objective: Grow capital efficiently while controlling risk, leveraging the narrative-driven insights rather than raw scores alone.
+
+Core principle: Allocate more capital to high-confidence, high-quality compounders or mispriced optionalities with clearly defined upside triggers.
+
+Risk control: Limit exposure to overhyped quality, expectation traps, and fragile positions.
+
+Diversification: Balance sectors, geographies, and thesis types; avoid over-concentration in any one factor despite high scores.
+
+Time horizon alignment: Longer-term compounders vs tactical rebound or cyclical trades. Different bands for core vs satellite holdings.
+
+2. Position Sizing Rules
+
+Use the narrative attributes for sizing:
+
+Narrative Attribute	Action / Sizing Logic
+Thesis Type: Compounder	Core allocation: 5–10% of portfolio
+Thesis Type: Quality at Reasonable Price	Core allocation: 3–7%
+Mispriced Optionality	Opportunistic allocation: 1–5%
+Turnaround / Cyclical Recovery	Satellite allocation: 0.5–3%
+Overhyped Quality / Value Trap Risk	Avoid / minimal allocation <0.5%
+
+Modifiers:
+
+Score Confidence: Increase allocation if confidence is high (e.g., 15/18 metrics present → tilt higher)
+
+Core Tension: If “Excellent business but partial valuation support,” take starter / scaled position
+
+Triggers: Only scale up allocation if buy/upgrade triggers are met
+
+3. Portfolio Bands
+
+Core / Satellite framework:
+
+Core (50–70% of portfolio):
+
+Stable compounders or high-quality businesses at reasonable price
+
+Reliable cash flow, strong moat, low fragility
+
+Narrative confidence: Medium–High
+
+Opportunistic / Satellite (20–30%):
+
+Mispriced optionalities, tactical rebounds, expectation resets
+
+Higher potential upside, higher risk
+
+Narrative confidence: Medium, closely monitored triggers
+
+Watch / Avoid (0–10%):
+
+Overhyped quality, fragile cheap stocks, unconvincing mispricings
+
+Only used for learning or small speculative positions
+
+4. Allocation Decision Flow
+
+Filter universe by narrative → remove Overhyped / Value Trap Risk
+
+Score by Thesis + Confidence → higher confidence = larger initial starter allocation
+
+Apply triggers → Buy / Upgrade / Trim / Exit rules guide scaling
+
+Check sector / country / currency diversification → avoid clustering in single risk bucket
+
+Final size assignment → combine position band + confidence + risk modifiers
+
+5. Rebalancing Logic
+
+Quarterly check: Evaluate narratives for all positions, especially triggers and new data points
+
+Trim / Exit: Triggered if narrative fails key conditions (fragility rises, expected growth fails, valuation disconnect increases)
+
+Upgrade: Triggered if catalysts, margin-of-safety improvements, or positive revisions occur
+
+Keep narrative freshness: Re-run AI narrative if data confidence or key metrics materially change
+
+6. Example Allocation (Illustrative)
+Position	Thesis Type	Confidence	Suggested Band	Size
+ADBE	Compounder	High	Core	7%
+MSFT	Quality at Reasonable Price	High	Core	6%
+Smaller mispriced tech stock	Mispriced Optionality	Medium	Satellite	2%
+Cyclical energy stock	Cyclical Recovery	Medium	Satellite	1.5%
+Overhyped growth stock	Overhyped Quality	Low	Avoid	0%
+
+Portfolio rationale:
+
+Core 60% → compounders & high-quality positions with long-term upside
+
+Satellite 25% → opportunistic mispriced or tactical positions
+
+Watch / Avoid 15% → learning, low exposure, avoid negative drag
+
+7. Multi-Year Growth & Leverage
+
+Compound core positions, reinvest dividends and free cash
+
+Satellite positions for alpha opportunities, potentially hedged
+
+Leverage applied selectively (e.g., against high-quality, low-volatility core)
+
+Narrative triggers guide when to add, trim, or exit leveraged positions, reducing tail risk
+
+✅ Key Benefit
+
+This approach combines your scoring system with human-readable AI narratives:
+
+Moves beyond “55/100” numbers → actionable decisions
+
+Defines why each position exists, what the triggers are, and how much to allocate
+
+Integrates risk control and diversification naturally
+
+Works across sectors, countries, and currencies by adding context-specific narratives

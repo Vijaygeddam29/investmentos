@@ -292,7 +292,16 @@ router.get("/intelligence/:ticker/narrative", async (req, res) => {
 
       if (cached.length > 0 && cached[0].narrativeJson) {
         const row = cached[0];
-        const narrativeParsed = JSON.parse(row.narrativeJson!) as NarrativeShape;
+        let narrativeParsed: NarrativeShape | null = null;
+        try {
+          const parsed = JSON.parse(row.narrativeJson!);
+          if (isValidNarrative(parsed)) narrativeParsed = parsed;
+        } catch {
+          // Malformed cache row — fall through to regenerate
+        }
+        if (!narrativeParsed) {
+          // Corrupt cache; fall through to regenerate below
+        } else {
 
         // Prefer embedded confidence (new format); fall back to derivation from stored fraction (legacy)
         const storedFraction   = row.dataConfidence ?? 0;
@@ -311,8 +320,9 @@ router.get("/intelligence/:ticker/narrative", async (req, res) => {
           confidenceLabel,
           narrative: narrativeParsed,
         });
-      }
-    }
+        } // close else
+      } // close if (cached.length > 0...)
+    } // close if (!refresh)
 
     // 2. Fetch intelligence data
     const snapshotRows = await db.execute(sql`
