@@ -1,0 +1,36 @@
+To build a robust scoring platform for the S&P 1500 (the 500, 400, and 600 combined), you should exclude sectors that do not fit standard "Quality" or "Compounding" formulas like ROIC. Both Yahoo Finance and Financial Modeling Prep (FMP) provide the necessary data, but you must filter your universe to ensure your scores are apples-to-apples comparisons.
+1. Companies and Sectors to Exclude
+You should generally exclude companies where debt is a product or assets are strictly real estate, as their financial structures break standard valuation ratios. 
+Morgan Stanley
+Morgan Stanley
+ +1
+Financials (Banks & Insurance):
+Reason: Standard metrics like "Debt-to-Equity" or "Return on Invested Capital (ROIC)" are meaningless for banks because their "inventory" is cash and their "debt" is often customer deposits.
+Alternative: If you want to include them, you must use specific metrics like Return on Assets (ROA), Net Interest Margin, and Common Equity Tier 1 (CET1) ratio.
+Real Estate Investment Trusts (REITs):
+Reason: REITs are required by law to pay out 90% of taxable income as dividends, so they cannot "compound" by reinvesting earnings like a software company. They also have massive depreciation expenses that make "Net Income" look artificially low.
+Alternative: Use Funds From Operations (FFO) or Adjusted Funds From Operations (AFFO) instead of Net Income.
+Highly Cyclical "Commodity" Stocks:
+Reason: Mining and Energy companies (e.g., in the S&P 600) depend on external commodity prices rather than internal innovation. Their ROIC may look amazing one year and terrible the next solely due to oil or gold prices. 
+S&P Global
+S&P Global
+ +5
+2. Data Availability on yfinance and FMP
+Both platforms offer extensive coverage for the S&P 1500, but they differ in how they deliver "raw" vs "processed" data.
+Financial Modeling Prep (FMP):
+S&P 1500 Support: Excellent. FMP provides dedicated endpoints for S&P 500, MidCap 400, and SmallCap 600 constituents.
+Key Advantage: It offers pre-calculated Financial Ratios and Enterprise Value data, which saves you from manual calculation errors when building your scoring engine.
+yfinance (Yahoo Finance):
+S&P 1500 Support: Full coverage of all tickers in these indices.
+Key Advantage: It is free and highly reliable for basic statements (Income, Balance Sheet, Cash Flow).
+Limitation: It is a "scraper" library; it does not have official "Index Constituent" endpoints. You would need to maintain your own list of S&P 1500 tickers or find a CSV source to feed into yfinance. 
+Financial Modeling Prep - FinancialModelingPrep | FMP
+Financial Modeling Prep - FinancialModelingPrep | FMP
+ +4
+Summary Checklist for Your Platform
+Feature	Recommendation
+Primary Exclusions	GICS Sector: Financials, Real Estate
+Secondary Exclusions	Negative Equity companies or those with < 3 years of data
+Data Source (Pro)	FMP API (for ratios and index lists)
+Data Source (Free)	yfinance (for raw statement data)
+Would you like a Python snippet to pull the S&P 500 list from FMP and filter out the Financials sector automatically?
