@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
 import { ValueChainTab } from "./ValueChainTab";
+import { FactorAccordion } from "./FactorAccordion";
 
 const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
   NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
