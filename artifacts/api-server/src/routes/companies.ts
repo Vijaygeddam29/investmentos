@@ -227,6 +227,11 @@ router.get("/companies/:ticker", async (req, res) => {
           : undefined,
         companyQualityScore: (s as any).companyQualityScore ?? undefined,
         stockOpportunityScore: (s as any).stockOpportunityScore ?? undefined,
+        expectationScore: (s as any).expectationScore ?? undefined,
+        mispricingScore: (s as any).mispricingScore ?? undefined,
+        fragilityScore: (s as any).fragilityScore ?? undefined,
+        portfolioNetScore: (s as any).portfolioNetScore ?? undefined,
+        countryContext: (s as any).countryContext ?? undefined,
       } : undefined,
       latestVerdict: v ? {
         ticker: v.ticker,

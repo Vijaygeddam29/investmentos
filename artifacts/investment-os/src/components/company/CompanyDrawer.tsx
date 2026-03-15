@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetCompany, useGetCompanyMetrics, useGetCompanyScoreHistory } from "@workspace/api-client-react";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, TrendingUp, AlertCircle, ShieldAlert, BarChart2, Award, Link2, AlertTriangle, CheckCircle2, TrendingDown, Brain } from "lucide-react";
+import { Loader2, AlertCircle, ShieldAlert, BarChart2, Award, Link2, Brain, FileText, Activity, Layers, TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, Info } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { PriceScoreChart } from "./PriceScoreChart";
@@ -67,9 +67,10 @@ export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = f
     entryTimingScore >= 0.55 ? { label: "Moderate", color: "bg-warning/20 text-warning border-warning/30" } :
     { label: "Poor Timing", color: "bg-destructive/20 text-destructive border-destructive/30" };
 
-  const compounderScore  = (scores as any)?.compounderScore as number | null | undefined;
-  const compounderRating = (scores as any)?.compounderRating as string | null | undefined;
-  const leadershipInfo   = ticker ? LEADERSHIP_LOOKUP[ticker] : undefined;
+  const compounderScore     = (scores as any)?.compounderScore as number | null | undefined;
+  const compounderRating    = (scores as any)?.compounderRating as string | null | undefined;
+  const leadershipInfo      = ticker ? LEADERSHIP_LOOKUP[ticker] : undefined;
+  const momentumIndicators  = (data as any)?.momentumIndicators as Record<string, number | boolean | null> | undefined;
 
   const compounderColor =
     compounderRating === "HIGH"   ? "text-emerald-400" :
@@ -206,37 +207,35 @@ export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = f
             <ScrollArea className="flex-1">
               <div className="p-6">
                 <Tabs defaultValue={showIntelligence ? "intelligence" : "charts"} className="w-full">
-                  <TabsList className={`w-full grid mb-6 bg-secondary/50 text-[11px] ${showIntelligence ? "grid-cols-4" : "grid-cols-3"}`}>
-                    {showIntelligence && (
-                      <TabsTrigger value="intelligence" className="text-[11px] flex items-center gap-1">
+                  {/* Scrollable single-row tab list */}
+                  <div className="overflow-x-auto mb-6 -mx-1 px-1">
+                    <TabsList className="flex w-max min-w-full bg-secondary/50 h-8 gap-0.5 p-0.5">
+                      <TabsTrigger value="charts" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <BarChart2 className="w-3 h-3" />Charts
+                      </TabsTrigger>
+                      <TabsTrigger value="intelligence" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
                         <Brain className="w-3 h-3 text-violet-400" />Intelligence
                       </TabsTrigger>
-                    )}
-                    <TabsTrigger value="charts" className="text-[11px] flex items-center gap-1">
-                      <BarChart2 className="w-3 h-3" />Charts
-                    </TabsTrigger>
-                    <TabsTrigger value="signals" className="text-[11px]">
-                      Signals
-                      {driftSignals.length > 0 && (
-                        <span className="ml-1.5 w-2 h-2 rounded-full bg-destructive animate-pulse inline-block" />
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger value="value-chain" className="text-[11px] flex items-center gap-1">
-                      <Link2 className="w-3 h-3" />Chain
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* ── Intelligence (6-Layer) — Signals page only ── */}
-                  {showIntelligence && (
-                    <TabsContent value="intelligence" className="animate-in fade-in duration-300">
-                      <SixLayerPanel
-                        company={company}
-                        scores={scores}
-                        latestMetrics={latestMetrics}
-                        countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
-                      />
-                    </TabsContent>
-                  )}
+                      <TabsTrigger value="ai-report" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <FileText className="w-3 h-3 text-blue-400" />AI Report
+                      </TabsTrigger>
+                      <TabsTrigger value="entry-exit" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <Activity className="w-3 h-3 text-emerald-400" />Entry/Exit
+                      </TabsTrigger>
+                      <TabsTrigger value="factors" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <Layers className="w-3 h-3 text-amber-400" />120 Factors
+                      </TabsTrigger>
+                      <TabsTrigger value="signals" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <ShieldAlert className="w-3 h-3" />Signals
+                        {driftSignals.length > 0 && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse inline-block" />
+                        )}
+                      </TabsTrigger>
+                      <TabsTrigger value="value-chain" className="text-[10px] px-2.5 h-7 flex items-center gap-1 shrink-0">
+                        <Link2 className="w-3 h-3" />Chain
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
 
                   {/* ── Charts ── */}
                   <TabsContent value="charts" className="animate-in fade-in duration-300 space-y-6">
@@ -258,6 +257,273 @@ export function CompanyDrawer({ ticker, open, onOpenChange, showIntelligence = f
                         marginOfSafety={data?.valuation?.marginOfSafety}
                       />
                     </div>
+                  </TabsContent>
+
+                  {/* ── Intelligence (6-Layer) — all pages ── */}
+                  <TabsContent value="intelligence" className="animate-in fade-in duration-300">
+                    <SixLayerPanel
+                      company={company}
+                      scores={scores}
+                      latestMetrics={latestMetrics}
+                      countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
+                    />
+                  </TabsContent>
+
+                  {/* ── AI Report ── */}
+                  <TabsContent value="ai-report" className="animate-in fade-in duration-300 space-y-4">
+                    {/* Verdict banner */}
+                    {verdictData ? (
+                      <>
+                        <div className={`rounded-xl border p-4 flex items-start gap-3 ${
+                          verdictData.verdict === "STRONG BUY" ? "border-emerald-500/30 bg-emerald-500/5" :
+                          verdictData.verdict === "BUY"        ? "border-blue-500/30 bg-blue-500/5" :
+                          verdictData.verdict === "HOLD"       ? "border-amber-500/30 bg-amber-500/5" :
+                          verdictData.verdict === "REDUCE"     ? "border-orange-500/30 bg-orange-500/5" :
+                                                                 "border-red-500/30 bg-red-500/5"
+                        }`}>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-sm font-bold ${
+                                verdictData.verdict === "STRONG BUY" || verdictData.verdict === "BUY" ? "text-emerald-400" :
+                                verdictData.verdict === "HOLD" ? "text-amber-400" : "text-red-400"
+                              }`}>{verdictData.verdict}</span>
+                              <span className="text-xs text-muted-foreground font-mono">base {(verdictData.base * 100).toFixed(0)}</span>
+                            </div>
+                            <p className="text-sm text-foreground/90 leading-relaxed">{verdictData.rationale?.sentence}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                            <div className="text-[9px] uppercase tracking-wider text-emerald-400 font-semibold mb-1.5">Top Strength</div>
+                            <p className="text-xs text-foreground/80 leading-relaxed">{verdictData.rationale?.topStrength || "—"}</p>
+                          </div>
+                          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                            <div className="text-[9px] uppercase tracking-wider text-red-400 font-semibold mb-1.5">Top Risk</div>
+                            <p className="text-xs text-foreground/80 leading-relaxed">{verdictData.rationale?.topDrag || "—"}</p>
+                          </div>
+                        </div>
+
+                        {verdictData.riskFlags?.length > 0 && (
+                          <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-3 space-y-1.5">
+                            <div className="text-[9px] uppercase tracking-wider text-orange-400 font-semibold mb-2 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />Risk Flags
+                            </div>
+                            {verdictData.riskFlags.map((flag: string, i: number) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-orange-400 mt-1.5 shrink-0" />
+                                <span className="text-xs text-muted-foreground">{flag}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-5 text-center">
+                        <Info className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-sm font-medium text-muted-foreground">Verdict not available</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Quality or opportunity scores are needed to generate a verdict. Run the pipeline to populate scores.</p>
+                      </div>
+                    )}
+
+                    {/* AI Memo */}
+                    <div className="rounded-xl border border-border bg-secondary/10 p-4">
+                      <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-violet-400" />AI Investment Memo
+                        {verdict?.date && <span className="text-muted-foreground/50 font-normal normal-case">— {verdict.date}</span>}
+                      </h4>
+                      {verdict?.memo ? (
+                        <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{verdict.memo}</p>
+                      ) : (
+                        <div className="text-center py-4">
+                          <p className="text-xs text-muted-foreground/60">No AI memo generated yet for {company?.name}.</p>
+                          <p className="text-[10px] text-muted-foreground/40 mt-1">Memos are generated automatically during each pipeline run when sufficient financial data is available.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {verdictData?.softWarnings?.length > 0 && (
+                      <div className="rounded-xl border border-border/50 p-3 space-y-1">
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Data Caveats</div>
+                        {verdictData.softWarnings.map((w: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <Info className="w-3 h-3 text-muted-foreground/40 mt-0.5 shrink-0" />
+                            <span className="text-[10px] text-muted-foreground/70">{w}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* ── Entry / Exit ── */}
+                  <TabsContent value="entry-exit" className="animate-in fade-in duration-300 space-y-4">
+                    {/* Entry timing score card */}
+                    <div className={`rounded-xl border p-4 flex items-center gap-4 ${
+                      entryTimingScore == null     ? "border-border bg-secondary/20" :
+                      entryTimingScore >= 0.70     ? "border-emerald-500/30 bg-emerald-500/5" :
+                      entryTimingScore >= 0.55     ? "border-amber-500/30 bg-amber-500/5" :
+                                                     "border-red-500/30 bg-red-500/5"
+                    }`}>
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry Timing Score</div>
+                        {entryTimingScore != null ? (
+                          <>
+                            <div className="text-2xl font-mono font-bold text-foreground">{(entryTimingScore * 100).toFixed(0)}<span className="text-sm font-normal text-muted-foreground">/100</span></div>
+                            {entryLabel && <span className={`mt-1 text-[10px] px-2 py-0.5 rounded font-semibold border inline-block ${entryLabel.color}`}>{entryLabel.label}</span>}
+                          </>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Score not available — pipeline data required</span>
+                        )}
+                      </div>
+                      <div className="flex-1 text-xs text-muted-foreground/70 leading-relaxed border-l border-border pl-4 ml-2">
+                        Combines RSI, MACD, price vs moving averages, and valuation timing to assess whether right now is a favourable moment to initiate or add to a position.
+                      </div>
+                    </div>
+
+                    {/* Technical indicators */}
+                    {momentumIndicators ? (
+                      <>
+                        <div>
+                          <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">Technical Setup</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { label: "RSI (14)", value: momentumIndicators.rsi14 != null ? `${(momentumIndicators.rsi14 as number).toFixed(1)}` : null, note: momentumIndicators.rsi14 != null ? ((momentumIndicators.rsi14 as number) > 70 ? "Overbought" : (momentumIndicators.rsi14 as number) < 30 ? "Oversold" : "Neutral") : null },
+                              { label: "MACD Signal", value: momentumIndicators.macdHistogram != null ? `${(momentumIndicators.macdHistogram as number) > 0 ? "+" : ""}${(momentumIndicators.macdHistogram as number).toFixed(3)}` : null, note: momentumIndicators.macdBullish != null ? (momentumIndicators.macdBullish ? "Bullish" : "Bearish") : null },
+                              { label: "MA50", value: momentumIndicators.ma50 != null ? `$${(momentumIndicators.ma50 as number).toFixed(2)}` : null, note: momentumIndicators.priceAboveMa50 != null ? (momentumIndicators.priceAboveMa50 ? "Price above" : "Price below") : null },
+                              { label: "MA200", value: momentumIndicators.ma200 != null ? `$${(momentumIndicators.ma200 as number).toFixed(2)}` : null, note: momentumIndicators.goldenCross != null ? (momentumIndicators.goldenCross ? "Golden Cross ✓" : "Death Cross") : null },
+                              { label: "52w Range", value: momentumIndicators.rangePosition != null ? `${((momentumIndicators.rangePosition as number) * 100).toFixed(0)}%` : null, note: "position in range" },
+                              { label: "vs 52w High", value: momentumIndicators.pctFrom52wHigh != null ? `${((momentumIndicators.pctFrom52wHigh as number) * 100).toFixed(1)}%` : null, note: "from peak" },
+                            ].map(({ label, value, note }) => (
+                              <div key={label} className="rounded-lg border border-border bg-secondary/20 p-3">
+                                <div className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</div>
+                                <div className="text-sm font-mono font-semibold mt-0.5 text-foreground">{value ?? <span className="text-muted-foreground/50 text-xs font-normal">Not available</span>}</div>
+                                {note && <div className="text-[9px] text-muted-foreground/60 mt-0.5">{note}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">Price Returns</h4>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { label: "1 Month", value: momentumIndicators.ret1m as number | null },
+                              { label: "3 Months", value: momentumIndicators.ret3m as number | null },
+                              { label: "6 Months", value: momentumIndicators.ret6m as number | null },
+                              { label: "1 Year", value: momentumIndicators.ret1y as number | null },
+                            ].map(({ label, value }) => (
+                              <div key={label} className={`rounded-lg border p-3 text-center ${value == null ? "border-border bg-secondary/20" : value >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+                                <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+                                {value != null ? (
+                                  <div className={`text-sm font-mono font-bold flex items-center justify-center gap-0.5 ${value >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {value >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                    {value >= 0 ? "+" : ""}{(value * 100).toFixed(1)}%
+                                  </div>
+                                ) : (
+                                  <Minus className="w-4 h-4 text-muted-foreground/30 mx-auto" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Entry guidance */}
+                        <div className="rounded-xl border border-border/50 bg-secondary/10 p-4">
+                          <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />Entry Guidance
+                          </h4>
+                          <p className="text-xs text-muted-foreground/80 leading-relaxed">
+                            {entryTimingScore == null
+                              ? "Entry timing score not available. Run the pipeline to generate technical and fundamental timing signals."
+                              : entryTimingScore >= 0.70
+                              ? `Strong entry conditions — RSI and momentum signals are aligned. Consider initiating or adding to position. Combine with your position band from the Intelligence layer before sizing.`
+                              : entryTimingScore >= 0.55
+                              ? `Moderate entry conditions. The setup is acceptable but not ideal — consider scaling in gradually rather than a full position immediately.`
+                              : `Entry timing is unfavourable. Technicals or valuation suggest waiting for a better setup before adding capital. Monitor for improvement.`}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-5 text-center">
+                        <Info className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-sm font-medium text-muted-foreground">Technical data not available</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Price history is required to compute momentum indicators. This is populated automatically during pipeline runs.</p>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* ── 120 Factors ── */}
+                  <TabsContent value="factors" className="animate-in fade-in duration-300 space-y-3">
+                    {scores ? (
+                      <>
+                        <div className="rounded-xl border border-border/50 bg-secondary/10 p-3 mb-1">
+                          <p className="text-[10px] text-muted-foreground/70 leading-relaxed flex items-start gap-1.5">
+                            <Info className="w-3 h-3 shrink-0 mt-0.5 text-muted-foreground/40" />
+                            Factor scores are computed from up to 120 individual metrics grouped into 9 families. Each family score drives one or more of the three strategy engines (Fortress, Rocket, Wave). Missing metrics are flagged — they indicate data gaps, not poor performance.
+                          </p>
+                        </div>
+                        {[
+                          { key: "profitabilityScore",     label: "Profitability",      desc: "ROE, ROIC, gross margin, operating margin, net margin, FCF margin",           weight: "Fortress 30%" },
+                          { key: "growthScore",            label: "Growth",             desc: "Revenue growth 1/3/5yr, EPS growth, FCF growth, operating income growth",     weight: "Rocket 35%" },
+                          { key: "capitalEfficiencyScore", label: "Capital Efficiency", desc: "Asset turnover, CAPEX efficiency, shareholder yield, incremental margins",     weight: "Fortress 20% / Rocket 20%" },
+                          { key: "financialStrengthScore", label: "Financial Strength", desc: "Debt/equity, net debt/EBITDA, interest coverage, current ratio, Altman Z",     weight: "Fortress 20% / Rocket 15%" },
+                          { key: "cashFlowQualityScore",   label: "Cash Flow Quality",  desc: "FCF/net income, accrual ratio, cash conversion, earnings surprises, SBC%",     weight: "Fortress 15%" },
+                          { key: "innovationScore",        label: "Innovation",         desc: "R&D/revenue, R&D productivity, R&D expense trend",                             weight: "Rocket 20%" },
+                          { key: "momentumScore",          label: "Price Momentum",     desc: "RSI, MA50, MA200, 52-week range position, MACD",                              weight: "Wave 30% / Rocket 20%" },
+                          { key: "valuationScore",         label: "Valuation",          desc: "P/E, forward P/E, PEG, EV/EBITDA, EV/Sales, FCF yield, Rule of 40",           weight: "Fortress 15% / Wave 20%" },
+                          { key: "sentimentScore",         label: "Sentiment",          desc: "Insider buying, institutional ownership, analyst upside, P/E vs peers",         weight: "Wave 25% / Rocket 15%" },
+                        ].map(({ key, label, desc, weight }) => {
+                          const raw = (scores as any)?.[key] as number | null | undefined;
+                          const pct = raw != null ? Math.round(raw * 100) : null;
+                          const color = pct == null ? "bg-muted/30" : pct >= 65 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct >= 35 ? "bg-amber-500" : "bg-red-500";
+                          const textColor = pct == null ? "text-muted-foreground/50" : pct >= 65 ? "text-emerald-400" : pct >= 50 ? "text-blue-400" : pct >= 35 ? "text-amber-400" : "text-red-400";
+                          return (
+                            <div key={key} className="rounded-xl border border-border/50 bg-card p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <span className="text-xs font-semibold text-foreground">{label}</span>
+                                  <span className="ml-2 text-[9px] text-muted-foreground/50">{weight}</span>
+                                </div>
+                                <span className={`text-sm font-mono font-bold ${textColor}`}>
+                                  {pct != null ? pct : <span className="text-[10px] font-normal">No data</span>}
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-muted/20 rounded-full overflow-hidden mb-2">
+                                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: pct != null ? `${pct}%` : "0%" }} />
+                              </div>
+                              <p className="text-[9px] text-muted-foreground/60 leading-relaxed">{desc}</p>
+                              {pct == null && (
+                                <div className="mt-1.5 flex items-center gap-1 text-[9px] text-amber-400/70">
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  Score not available — insufficient financial metrics in pipeline
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {familyCoverage && (
+                          <div className="rounded-xl border border-border/30 p-3 mt-2">
+                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground/50 mb-2 font-semibold">Data Coverage</div>
+                            <div className="grid grid-cols-3 gap-2">
+                              {Object.entries(familyCoverage).map(([family, { available, total, pct }]) => (
+                                <div key={family} className="text-center">
+                                  <div className="text-xs font-mono font-bold text-foreground">{pct}%</div>
+                                  <div className="text-[8px] text-muted-foreground/50 capitalize">{family.replace(/([A-Z])/g, " $1").trim()}</div>
+                                  <div className="text-[8px] text-muted-foreground/40">{available}/{total} metrics</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-5 text-center">
+                        <Info className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-sm font-medium text-muted-foreground">Factor scores not available</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Run the pipeline to compute all 120 factor scores across 9 families for this company.</p>
+                      </div>
+                    )}
                   </TabsContent>
 
                   {/* ── Drift Signals ── */}
