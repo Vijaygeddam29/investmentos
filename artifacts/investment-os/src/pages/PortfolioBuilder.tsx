@@ -87,14 +87,49 @@ const COUNTRY_FLAGS: Record<string, string> = {
   Uruguay: "🇺🇾",
 };
 
-const LAYER_DEFS = [
+type LayerKey = "companyQualityScore" | "stockOpportunityScore" | "expectationScore" | "mispricingScore" | "fragilityScore" | "portfolioNetScore";
+
+const LAYER_DEFS: readonly { key: LayerKey; label: string; short: string; color: string; textColor: string }[] = [
   { key: "companyQualityScore",   label: "Quality",     short: "Q",  color: "bg-violet-500",  textColor: "text-violet-400" },
   { key: "stockOpportunityScore", label: "Opportunity",  short: "O",  color: "bg-blue-500",    textColor: "text-blue-400" },
   { key: "expectationScore",      label: "Expectation",  short: "E",  color: "bg-cyan-500",    textColor: "text-cyan-400" },
   { key: "mispricingScore",       label: "Mispricing",   short: "M",  color: "bg-amber-500",   textColor: "text-amber-400" },
   { key: "fragilityScore",        label: "Fragility",    short: "F",  color: "bg-red-500",     textColor: "text-red-400" },
   { key: "portfolioNetScore",     label: "Net Score",    short: "N",  color: "bg-emerald-500", textColor: "text-emerald-400" },
-] as const;
+];
+
+function normalizeWeightsTo100(weights: Record<string, number>, locked: Set<string>): Record<string, number> {
+  const result = { ...weights };
+  const total = Object.values(result).reduce((s, w) => s + w, 0);
+  if (Math.abs(total - 100) < 0.05) return result;
+
+  const unlockedTickers = Object.keys(result).filter((t) => !locked.has(t));
+  if (unlockedTickers.length === 0) return result;
+
+  const lockedTotal = Object.entries(result)
+    .filter(([t]) => locked.has(t))
+    .reduce((s, [, w]) => s + w, 0);
+  const unlockedTotal = unlockedTickers.reduce((s, t) => s + (result[t] ?? 0), 0);
+  const target = 100 - lockedTotal;
+
+  if (unlockedTotal <= 0) {
+    const each = parseFloat((target / unlockedTickers.length).toFixed(1));
+    for (const t of unlockedTickers) result[t] = each;
+  } else {
+    const scale = target / unlockedTotal;
+    for (const t of unlockedTickers) {
+      result[t] = parseFloat(((result[t] ?? 0) * scale).toFixed(1));
+    }
+  }
+
+  const finalTotal = Object.values(result).reduce((s, w) => s + w, 0);
+  const residual = parseFloat((100 - finalTotal).toFixed(1));
+  if (Math.abs(residual) >= 0.05 && unlockedTickers.length > 0) {
+    result[unlockedTickers[0]] = parseFloat(((result[unlockedTickers[0]] ?? 0) + residual).toFixed(1));
+  }
+
+  return result;
+}
 
 function formatMktCap(v?: number | null) {
   if (v == null) return "—";
