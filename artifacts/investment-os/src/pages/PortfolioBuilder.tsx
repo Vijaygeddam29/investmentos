@@ -10,6 +10,7 @@ import {
   Zap, AlertTriangle, Crown, Star, Target,
   Plus, Search, X, Lock, Unlock, Brain, Layers,
   ChevronUp, ExternalLink, BarChart3, TrendingDown,
+  Banknote, LayoutGrid, MapPin, EyeOff,
 } from "lucide-react";
 
 type Strategy     = "fortress" | "rocket" | "wave";
@@ -532,6 +533,8 @@ export default function PortfolioBuilder() {
   const [drawerOpen, setDrawerOpen]           = useState(false);
   const [expandedTicker, setExpandedTicker]   = useState<string | null>(null);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [viewMode, setViewMode]              = useState<"band" | "country">("band");
+  const [watchlistOpen, setWatchlistOpen]     = useState(false);
 
   const [manualWeights, setManualWeights]   = useState<Record<string, number>>({});
   const [lockedWeights, setLockedWeights]   = useState<Set<string>>(new Set());
@@ -724,6 +727,34 @@ export default function PortfolioBuilder() {
     }
     return wTot > 0 ? Math.round((wSum / wTot) * 100) : null;
   }, [holdings, manualWeights]);
+
+  const BAND_ORDER = ["core", "standard", "starter", "tactical", "watchlist"] as const;
+  const BAND_META: Record<string, { label: string; color: string; barColor: string; borderColor: string; suggestLabel: string }> = {
+    core:      { label: "Core",      color: "text-emerald-400", barColor: "bg-emerald-500", borderColor: "border-emerald-500/30", suggestLabel: "6–10% each"   },
+    standard:  { label: "Standard",  color: "text-blue-400",    barColor: "bg-blue-500",    borderColor: "border-blue-500/30",    suggestLabel: "3–5% each"    },
+    starter:   { label: "Starter",   color: "text-amber-400",   barColor: "bg-amber-500",   borderColor: "border-amber-500/30",   suggestLabel: "1–2.5% each"  },
+    tactical:  { label: "Tactical",  color: "text-orange-400",  barColor: "bg-orange-500",  borderColor: "border-orange-500/30",  suggestLabel: "0.5–1% each"  },
+    watchlist: { label: "Watchlist",  color: "text-red-400",     barColor: "bg-red-500",     borderColor: "border-red-500/30",     suggestLabel: "No position"  },
+  };
+
+  const bandGroups = useMemo(() => {
+    const groups: Record<string, ManualHolding[]> = {};
+    for (const b of BAND_ORDER) groups[b] = [];
+    for (const h of holdings) {
+      const b = h.positionBand?.band ?? "watchlist";
+      if (!groups[b]) groups[b] = [];
+      groups[b].push(h);
+    }
+    return groups;
+  }, [holdings]);
+
+  const bandWeights = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const b of BAND_ORDER) {
+      result[b] = (bandGroups[b] ?? []).reduce((s, h) => s + (manualWeights[h.ticker] ?? 0), 0);
+    }
+    return result;
+  }, [bandGroups, manualWeights]);
 
   return (
     <Layout>
