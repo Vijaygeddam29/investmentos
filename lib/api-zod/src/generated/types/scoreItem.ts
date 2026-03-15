@@ -13,6 +13,8 @@ export interface ScoreItem {
   ticker: string;
   name?: string;
   sector?: string;
+  country?: string;
+  marketCap?: number;
   date?: string;
   fortressScore: number;
   rocketScore: number;

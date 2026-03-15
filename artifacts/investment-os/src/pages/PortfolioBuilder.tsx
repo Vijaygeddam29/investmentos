@@ -4,19 +4,18 @@ import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
 import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   Wand2, Loader2, Info, Shield, Rocket, Waves,
   TrendingUp, Globe, ChevronDown, ChevronRight, AlertCircle,
   Zap, AlertTriangle, Crown, Star, Target,
   Plus, Search, X, Lock, Unlock, Brain, Layers,
   ChevronUp, ExternalLink, BarChart3, TrendingDown,
-  Banknote, LayoutGrid, MapPin, EyeOff,
+  Banknote, LayoutGrid, EyeOff,
 } from "lucide-react";
 
 type Strategy     = "fortress" | "rocket" | "wave";
 type WeightMethod = "equal" | "score" | "risk" | "power";
-type MarketCapTier = "all" | "large" | "mid" | "small";
+type MarketCapTier = "all" | "top50" | "large" | "mid" | "small";
 
 interface BuilderHolding {
   rank:                  number;
@@ -53,7 +52,6 @@ interface BuilderResponse {
   params:         Record<string, unknown>;
 }
 
-interface CountryOption { name: string; slug: string; count: number }
 interface SearchResult {
   ticker: string; name: string; sector: string; country: string;
   marketCap: number | null;
@@ -519,13 +517,10 @@ function AddStockPanel({ onAdd, existingTickers }: { onAdd: (r: SearchResult) =>
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PortfolioBuilder() {
-  const { market } = useAuth();
-
   const [strategy, setStrategy]           = useState<Strategy>("rocket");
   const [size, setSize]                   = useState(10);
   const [weightMethod, setWeightMethod]   = useState<WeightMethod>("score");
   const [sectorCap, setSectorCap]         = useState(2);
-  const [country, setCountry]             = useState(market !== "All" ? market : "all");
   const [marketCap, setMarketCap]         = useState<MarketCapTier>("all");
   const [hasBuilt, setHasBuilt]           = useState(false);
   const [buildParams, setBuildParams]     = useState<Record<string, unknown> | null>(null);
@@ -534,19 +529,12 @@ export default function PortfolioBuilder() {
   const [drawerOpen, setDrawerOpen]           = useState(false);
   const [expandedTicker, setExpandedTicker]   = useState<string | null>(null);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
-  const [viewMode, setViewMode]              = useState<"band" | "country">("band");
   const [watchlistOpen, setWatchlistOpen]     = useState(false);
 
   const [manualWeights, setManualWeights]   = useState<Record<string, number>>({});
   const [lockedWeights, setLockedWeights]   = useState<Set<string>>(new Set());
   const [manualMode, setManualMode]         = useState(false);
   const [manualHoldings, setManualHoldings] = useState<ManualHolding[]>([]);
-
-  const { data: countriesData } = useQuery<{ countries: CountryOption[] }>({
-    queryKey: ["portfolio-builder-countries"],
-    queryFn: () => customFetch("/api/portfolio/builder/countries"),
-    staleTime: 30 * 60 * 1000,
-  });
 
   const { data, isLoading, error } = useQuery<BuilderResponse>({
     queryKey: ["portfolio-builder", buildParams],
@@ -557,7 +545,6 @@ export default function PortfolioBuilder() {
         size:         String(buildParams.size),
         weightMethod: buildParams.weightMethod as string,
         sectorCap:    String(buildParams.sectorCap),
-        country:      buildParams.country as string,
         marketCap:    buildParams.marketCap as string,
       });
       return customFetch(`/api/portfolio/builder?${q}`);
@@ -580,7 +567,7 @@ export default function PortfolioBuilder() {
   function handleBuild() {
     setManualMode(false);
     setExpandedTicker(null);
-    setBuildParams({ strategy, size, weightMethod, sectorCap, country, marketCap });
+    setBuildParams({ strategy, size, weightMethod, sectorCap, marketCap });
     setHasBuilt(true);
   }
 
@@ -712,7 +699,6 @@ export default function PortfolioBuilder() {
   for (const h of holdings) sectorCounts[h.sector] = (sectorCounts[h.sector] ?? 0) + 1;
 
   const existingTickers = useMemo(() => new Set(holdings.map(h => h.ticker)), [holdings]);
-  const countryOptions  = countriesData?.countries ?? [];
 
   // Aggregate Intelligence scores for portfolio
   const portfolioIntelAvg = useMemo(() => {
@@ -862,30 +848,16 @@ export default function PortfolioBuilder() {
               </div>
 
               <div>
-                <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Country</label>
-                <div className="relative">
-                  <select value={country} onChange={e => setCountry(e.target.value)}
-                    className="w-full appearance-none bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="all">🌐 All Countries</option>
-                    {countryOptions.map(c => (
-                      <option key={c.slug} value={c.slug}>{FLAGS[c.name] ?? "🌐"} {c.name} ({c.count})</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Market Cap</label>
+                <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Cap Size</label>
                 <div className="relative">
                   <select value={marketCap} onChange={e => setMarketCap(e.target.value as MarketCapTier)}
                     className="w-full appearance-none bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="all">All ($500M+)</option>
+                    <option value="all">All</option>
+                    <option value="top50">Top 50</option>
                     <option value="large">Large Cap ($10B+)</option>
                     <option value="mid">Mid Cap ($2B–$10B)</option>
-                    <option value="small">Small Cap ($500M–$2B)</option>
+                    <option value="small">Small Cap (&lt;$2B)</option>
                   </select>
                   <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
                 </div>
@@ -1084,22 +1056,6 @@ export default function PortfolioBuilder() {
                   </div>
                 </div>
 
-                {/* ── View toggle ─────────────────────────────── */}
-                <div className="flex items-center justify-end gap-1 px-1">
-                  <span className="text-[10px] text-muted-foreground mr-1">View:</span>
-                  <button
-                    onClick={() => setViewMode("band")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${viewMode === "band" ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"}`}
-                  >
-                    <LayoutGrid className="w-3 h-3" />Band
-                  </button>
-                  <button
-                    onClick={() => setViewMode("country")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${viewMode === "country" ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"}`}
-                  >
-                    <MapPin className="w-3 h-3" />Country
-                  </button>
-                </div>
 
                 {/* ── Shared holding row renderer ─────────────── */}
                 {(() => {
@@ -1230,7 +1186,7 @@ export default function PortfolioBuilder() {
                   }
 
                   /* ── Band view ─────────────────────────────── */
-                  if (viewMode === "band") {
+                  {
                     let globalRank = 0;
                     return (
                       <>
@@ -1283,42 +1239,6 @@ export default function PortfolioBuilder() {
                     );
                   }
 
-                  /* ── Country view ──────────────────────────── */
-                  const byCountry = new Map<string, ManualHolding[]>();
-                  for (const h of holdings) {
-                    const c = h.country || "Unknown";
-                    if (!byCountry.has(c)) byCountry.set(c, []);
-                    byCountry.get(c)!.push(h);
-                  }
-                  let countryRank = 0;
-                  return Array.from(byCountry.entries()).map(([countryName, countryHoldings]) => {
-                    const totalW = countryHoldings.reduce((s, h) => s + (manualWeights[h.ticker] ?? 0), 0);
-                    const avgNetArr = countryHoldings.map(h => h.portfolioNetScore).filter((v): v is number => v != null);
-                    const avgNet   = avgNetArr.length ? avgNetArr.reduce((s, v) => s + v, 0) / avgNetArr.length : null;
-                    return (
-                      <div key={countryName}>
-                        <div className="flex items-center gap-2 px-1 py-1.5">
-                          <span className="text-base leading-none">{flag(countryName)}</span>
-                          <span className="text-xs font-semibold text-foreground">{countryName}</span>
-                          <span className="text-[10px] text-muted-foreground">{countryHoldings.length} stocks</span>
-                          <span className="text-[10px] text-muted-foreground">·</span>
-                          <span className="text-[10px] text-muted-foreground">
-                            <strong className="text-foreground font-mono">{totalW.toFixed(1)}%</strong> allocated
-                          </span>
-                          {avgNet != null && (
-                            <>
-                              <span className="text-[10px] text-muted-foreground">·</span>
-                              <span className="text-[10px] text-muted-foreground">avg net <strong className="text-foreground font-mono">{Math.round(avgNet * 100)}</strong></span>
-                            </>
-                          )}
-                        </div>
-                        {countryHoldings.map(h => {
-                          countryRank++;
-                          return <HoldingRow key={h.ticker} h={h} rank={countryRank} showBandBadge={true} />;
-                        })}
-                      </div>
-                    );
-                  });
                 })()}
 
                 {/* Total weight bar */}

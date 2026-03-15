@@ -107,7 +107,9 @@ router.get("/scores", async (req, res) => {
 
     afterFilter.sort((a, b) => ((b[scoreField] as number | null) ?? 0) - ((a[scoreField] as number | null) ?? 0));
 
-    const paginated = afterFilter.slice(offset, offset + limit);
+    // "top50" means return top 50 by score (no cap filter, just a hard limit)
+    const effectiveLimit = capTier === "top50" ? 50 : limit;
+    const paginated = afterFilter.slice(offset, offset + effectiveLimit);
 
     const regimeResult = await detectMarketRegime();
     const { regime, weights: regimeWeights } = regimeResult;
@@ -169,6 +171,8 @@ router.get("/scores", async (req, res) => {
         ticker:                 s.ticker,
         name:                   s.name ?? undefined,
         sector:                 s.sector ?? undefined,
+        country:                s.country ?? undefined,
+        marketCap:              s.marketCap ?? undefined,
         date:                   s.date ?? undefined,
         fortressScore:          s.fortressScore ?? 0,
         rocketScore:            s.rocketScore ?? 0,

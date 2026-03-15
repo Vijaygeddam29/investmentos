@@ -1,13 +1,12 @@
 import { useState, useMemo, Fragment } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { PipelineTimestampBar } from "@/components/pipeline/PipelineTimestampBar";
 import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Crown, ChevronDown, ChevronUp, ChevronsUpDown, Filter,
-  Loader2, Info, Brain, ChevronRight, Globe, ArrowUpDown,
+  Loader2, Info, Brain, ChevronRight,
 } from "lucide-react";
 
 // ─── Country flags ─────────────────────────────────────────────────────────────
@@ -304,17 +303,21 @@ export default function Signals() {
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [bandFilter, setBandFilter]   = useState<BandFilter>("all");
-  const [groupBy, setGroupBy]         = useState<"ranked" | "country">("ranked");
+  const [capTier, setCapTier]         = useState<"all" | "top50" | "large" | "mid" | "small">("all");
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [drawerSnapshot, setDrawerSnapshot] = useState<IntelligenceSnapshot | null>(null);
   const [drawerOpen, setDrawerOpen]   = useState(false);
   const [defsOpen, setDefsOpen]       = useState(false);
 
-  const { market } = useAuth();
-  const countryParam = market !== "All" ? market : undefined;
+  const capParams = (() => {
+    if (capTier === "large") return { market_cap_min: 10_000_000_000 };
+    if (capTier === "mid")   return { market_cap_min: 2_000_000_000, market_cap_max: 10_000_000_000 };
+    if (capTier === "small") return { market_cap_max: 2_000_000_000 };
+    return {};
+  })();
 
   const { data, isLoading } = useListFactorSnapshots(
-    { limit: 500, country: countryParam },
+    { limit: 500, ...capParams },
     { query: { refetchOnWindowFocus: false } }
   );
 
@@ -343,28 +346,13 @@ export default function Signals() {
   }, [snapshots, sectorFilter, bandFilter]);
 
   const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
+    const base = [...filtered].sort((a, b) => {
       const av = (a as any)[sortKey] ?? -1;
       const bv = (b as any)[sortKey] ?? -1;
       return sortDir === "desc" ? bv - av : av - bv;
     });
-  }, [filtered, sortKey, sortDir]);
-
-  const byCountry = useMemo(() => {
-    const map = new Map<string, typeof sorted>();
-    for (const s of sorted) {
-      const c = s.country ?? "Unknown";
-      if (!map.has(c)) map.set(c, []);
-      map.get(c)!.push(s);
-    }
-    return Array.from(map.entries())
-      .map(([country, rows]) => {
-        const nets = rows.map(r => (r as any).portfolioNetScore).filter((v): v is number => v != null);
-        const avgNet = nets.length ? Math.round(nets.reduce((a, b) => a + b, 0) / nets.length * 100) : null;
-        return { country, rows, avgNet };
-      })
-      .sort((a, b) => (b.avgNet ?? -1) - (a.avgNet ?? -1));
-  }, [sorted]);
+    return capTier === "top50" ? base.slice(0, 50) : base;
+  }, [filtered, sortKey, sortDir, capTier]);
 
   function handleSort(col: SortKey) {
     if (col === sortKey) setSortDir(d => d === "desc" ? "asc" : "desc");
@@ -576,18 +564,18 @@ export default function Signals() {
 
         {/* ── Filter bar ──────────────────────────────────── */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Group by */}
-          <div className="flex items-center rounded-lg border border-border overflow-hidden">
-            <button onClick={() => setGroupBy("ranked")}
-              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${groupBy === "ranked" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+          {/* Cap size filter */}
+          <div className="relative">
+            <select value={capTier} onChange={e => setCapTier(e.target.value as typeof capTier)}
+              className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <ArrowUpDown className="w-3 h-3" />Ranked
-            </button>
-            <button onClick={() => setGroupBy("country")}
-              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${groupBy === "country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Globe className="w-3 h-3" />By Country
-            </button>
+              <option value="all">All Caps</option>
+              <option value="top50">Top 50</option>
+              <option value="large">Large Cap ($10B+)</option>
+              <option value="mid">Mid Cap ($2B–$10B)</option>
+              <option value="small">Small Cap (&lt;$2B)</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           </div>
 
           {/* Sector filter */}
@@ -674,15 +662,7 @@ export default function Signals() {
                 </thead>
 
                 <tbody>
-                  {groupBy === "ranked"
-                    ? sorted.map((s, i) => renderRow(s, i + 1))
-                    : byCountry.map(({ country, rows, avgNet }) => (
-                        <Fragment key={country}>
-                          <CountrySep country={country} count={rows.length} avgNet={avgNet} />
-                          {rows.map((s, i) => renderRow(s, i + 1))}
-                        </Fragment>
-                      ))
-                  }
+                  {sorted.map((s, i) => renderRow(s, i + 1))}
                 </tbody>
               </table>
             </div>

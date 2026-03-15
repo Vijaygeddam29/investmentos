@@ -3,11 +3,18 @@ import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompanyTable } from "@/components/dashboard/CompanyTable";
 import { TopMovers } from "@/components/dashboard/TopMovers";
-import { useListScores, useGetMarketRegime, useListAlerts, ListScoresEngine } from "@workspace/api-client-react";
+import { useListScores, useGetMarketRegime, useListAlerts, ListScoresEngine, ListScoresCapTier } from "@workspace/api-client-react";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
-import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell } from "lucide-react";
+import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+const CAP_OPTIONS: { value: ListScoresCapTier | "all"; label: string }[] = [
+  { value: "all",   label: "All Caps" },
+  { value: "top50", label: "Top 50" },
+  { value: "large", label: "Large Cap  ($10B+)" },
+  { value: "mid",   label: "Mid Cap  ($2B–$10B)" },
+  { value: "small", label: "Small Cap  (<$2B)" },
+];
 
 const REGIME_CONFIG = {
   BULL:     { label: "Bull Market",     color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10", icon: TrendingUp,   desc: "Rocket favoured — momentum stocks lead in risk-on environments." },
@@ -26,13 +33,13 @@ const ALERT_ICON: Record<string, string> = {
 export default function Dashboard() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [capTier, setCapTier] = useState<ListScoresCapTier | "all">("all");
 
-  const { market } = useAuth();
-  const countryParam = market !== "All" ? market : undefined;
+  const capParam = capTier === "all" ? undefined : capTier as ListScoresCapTier;
 
-  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, country: countryParam });
-  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, country: countryParam });
-  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, country: countryParam });
+  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, cap_tier: capParam });
+  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, cap_tier: capParam });
+  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, cap_tier: capParam });
   const { data: regimeData } = useGetMarketRegime();
   const { data: alertsData } = useListAlerts({ days: 7, limit: 10 });
 
@@ -49,9 +56,22 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight mb-2">Strategy Engines</h1>
-          <p className="text-muted-foreground">AI-scored investment candidates across three core strategies.</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight mb-2">Strategy Engines</h1>
+            <p className="text-muted-foreground">AI-scored investment candidates across three core strategies.</p>
+          </div>
+          {/* Cap-size filter */}
+          <div className="relative shrink-0">
+            <select
+              value={capTier}
+              onChange={e => setCapTier(e.target.value as ListScoresCapTier | "all")}
+              className="appearance-none bg-card border border-border rounded-lg px-3 py-2 pr-8 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {CAP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
+          </div>
         </div>
 
         {/* ── Market Regime Banner ── */}
@@ -128,7 +148,7 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
 
-        <TopMovers onTickerClick={handleTickerClick} country={countryParam} />
+        <TopMovers onTickerClick={handleTickerClick} />
 
         {/* ── Score Alerts Panel ── */}
         {alerts.length > 0 && (

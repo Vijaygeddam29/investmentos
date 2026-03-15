@@ -86,6 +86,15 @@ paths:
           in: query
           schema:
             type: number
+        - name: cap_tier
+          in: query
+          schema:
+            type: string
+            enum: [all, large, mid, small, top50]
+        - name: country
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Scores list
@@ -805,6 +814,10 @@ components:
           type: string
         sector:
           type: string
+        country:
+          type: string
+        marketCap:
+          type: number
         date:
           type: string
         fortressScore:

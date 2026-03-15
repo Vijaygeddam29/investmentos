@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, LayoutGrid, TrendingUp, TrendingDown, Minus, Globe, BarChart2 } from "lucide-react";
+import { Loader2, LayoutGrid, TrendingUp, TrendingDown, Minus, Globe, BarChart2, Filter } from "lucide-react";
 
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "United Kingdom": "🇬🇧", "India": "🇮🇳",
@@ -128,20 +127,42 @@ function ScoreRow({ label, value, barColor }: { label: string; value: number | n
 type ViewMode = "sector" | "country";
 
 export default function SectorHeatmap() {
-  const { market } = useAuth();
-  const [viewMode, setViewMode] = useState<ViewMode>(market === "Europe" ? "country" : "sector");
-  const countryParam = market !== "All" ? market : undefined;
+  const [viewMode, setViewMode]         = useState<ViewMode>("sector");
+  const [countryFilter, setCountryFilter] = useState("all");
+  const [sectorFilter, setSectorFilter]   = useState("all");
 
   const { data, isLoading } = useListFactorSnapshots(
-    { limit: 500, country: countryParam },
+    { limit: 500 },
     { query: { refetchOnWindowFocus: false } }
   );
 
-  const sectors = useMemo(() => {
-    if (!data?.snapshots) return [];
+  const allSnapshots = data?.snapshots ?? [];
 
-    const map = new Map<string, typeof data.snapshots>();
-    for (const s of data.snapshots) {
+  const availableCountries = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allSnapshots) if (s.country && s.country !== "Unknown") set.add(s.country);
+    return Array.from(set).sort();
+  }, [allSnapshots]);
+
+  const availableSectors = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allSnapshots) if (s.sector && s.sector !== "Unknown") set.add(s.sector);
+    return Array.from(set).sort();
+  }, [allSnapshots]);
+
+  const filteredForSector = useMemo(() =>
+    countryFilter === "all" ? allSnapshots : allSnapshots.filter(s => s.country === countryFilter),
+  [allSnapshots, countryFilter]);
+
+  const filteredForCountry = useMemo(() =>
+    sectorFilter === "all" ? allSnapshots : allSnapshots.filter(s => s.sector === sectorFilter),
+  [allSnapshots, sectorFilter]);
+
+  const sectors = useMemo(() => {
+    if (!filteredForSector.length) return [];
+
+    const map = new Map<string, typeof filteredForSector>();
+    for (const s of filteredForSector) {
       const key = s.sector ?? "Unknown";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(s);
@@ -174,13 +195,13 @@ export default function SectorHeatmap() {
         };
       })
       .sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
-  }, [data]);
+  }, [filteredForSector]);
 
   const countries = useMemo(() => {
-    if (!data?.snapshots) return [];
+    if (!filteredForCountry.length) return [];
 
-    const map = new Map<string, typeof data.snapshots>();
-    for (const s of data.snapshots) {
+    const map = new Map<string, typeof filteredForCountry>();
+    for (const s of filteredForCountry) {
       const key = s.country ?? "Unknown";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(s);
@@ -218,7 +239,7 @@ export default function SectorHeatmap() {
         };
       })
       .sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
-  }, [data]);
+  }, [filteredForCountry]);
 
   const topSector    = sectors[0];
   const bottomSector = sectors[sectors.length - 1];
@@ -232,20 +253,48 @@ export default function SectorHeatmap() {
             <h1 className="text-3xl font-display font-bold tracking-tight mb-1">Sector Heatmap</h1>
             <p className="text-muted-foreground text-sm">Composite engine scores across all sectors and geographies.</p>
           </div>
-          {/* View mode toggle */}
-          <div className="flex items-center rounded-lg border border-border overflow-hidden">
-            <button
-              onClick={() => setViewMode("sector")}
-              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "sector" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <BarChart2 className="w-3 h-3" />By Sector
-            </button>
-            <button
-              onClick={() => setViewMode("country")}
-              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Globe className="w-3 h-3" />By Country
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Country filter */}
+            <div className="relative">
+              <select value={countryFilter} onChange={e => setCountryFilter(e.target.value)}
+                className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="all">All Countries</option>
+                {availableCountries.map(c => (
+                  <option key={c} value={c}>{COUNTRY_FLAGS[c] ?? "🌐"} {c}</option>
+                ))}
+              </select>
+              <Globe className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+
+            {/* Sector filter */}
+            <div className="relative">
+              <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
+                className="text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 pr-7 text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="all">All Sectors</option>
+                {availableSectors.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <Filter className="absolute right-2 top-1.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setViewMode("sector")}
+                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "sector" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <BarChart2 className="w-3 h-3" />By Sector
+              </button>
+              <button
+                onClick={() => setViewMode("country")}
+                className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Globe className="w-3 h-3" />By Country
+              </button>
+            </div>
           </div>
         </div>
 

@@ -5,6 +5,7 @@
  * Investment OS API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListScoresCapTier } from "./listScoresCapTier";
 import type { ListScoresEngine } from "./listScoresEngine";
 
 export type ListScoresParams = {
@@ -12,4 +13,6 @@ export type ListScoresParams = {
   minScore?: number;
   limit?: number;
   offset?: number;
+  cap_tier?: ListScoresCapTier;
+  country?: string;
 };

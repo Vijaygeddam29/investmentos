@@ -14,9 +14,9 @@ const router: IRouter = Router();
 
 type Strategy     = "fortress" | "rocket" | "wave";
 type WeightMethod = "equal" | "score" | "risk" | "power";
-type MarketCapTier = "all" | "large" | "mid" | "small";
+type MarketCapTier = "all" | "large" | "mid" | "small" | "top50";
 
-const MARKET_CAP_RANGES: Record<MarketCapTier, [number, number]> = {
+const MARKET_CAP_RANGES: Record<Exclude<MarketCapTier, "top50">, [number, number]> = {
   all:   [0.5,    Infinity],
   large: [10,     Infinity],
   mid:   [2,      10],
@@ -206,7 +206,8 @@ router.get("/portfolio/builder", async (req, res) => {
     const countryKey  = (req.query.country     as string)        ?? "all";
     const mktCapKey   = (req.query.marketCap   as MarketCapTier) ?? "all";
 
-    const [mktMin, mktMax] = MARKET_CAP_RANGES[mktCapKey] ?? MARKET_CAP_RANGES.all;
+    const capRangeKey = (mktCapKey === "top50" ? "all" : mktCapKey) as Exclude<MarketCapTier, "top50">;
+    const [mktMin, mktMax] = MARKET_CAP_RANGES[capRangeKey] ?? MARKET_CAP_RANGES.all;
     const countryFilter    = countryKey === "all" ? null : slugToCountryName(countryKey);
 
     const [latestRow] = await db
@@ -245,7 +246,7 @@ router.get("/portfolio/builder", async (req, res) => {
     const companyMap: Record<string, typeof companies[0]> = {};
     for (const c of companies) companyMap[c.ticker] = c;
 
-    const filtered = snapshots.filter((s) => {
+    const preFiltered = snapshots.filter((s) => {
       const co = companyMap[s.ticker];
       const coCountry = normalizeCountry(co?.country);
       if (countryFilter === "Europe") {
@@ -253,11 +254,14 @@ router.get("/portfolio/builder", async (req, res) => {
       } else if (countryFilter && coCountry !== countryFilter) {
         return false;
       }
+      if (mktCapKey === "top50") return true;
       if (s.marketCap == null) return mktCapKey === "all";
       if (s.marketCap < mktMin) return false;
       if (mktMax !== Infinity && s.marketCap > mktMax) return false;
       return true;
     });
+    // For "top50", limit universe to the best 50 candidates (already sorted by score)
+    const filtered = mktCapKey === "top50" ? preFiltered.slice(0, 50) : preFiltered;
 
     const isPowerLaw = weightMethod === "power";
 

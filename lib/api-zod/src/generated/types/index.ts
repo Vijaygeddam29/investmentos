@@ -30,6 +30,7 @@ export * from "./listCompaniesParams";
 export * from "./listDriftSignalsParams";
 export * from "./listFactorSnapshotsParams";
 export * from "./listOpportunityAlertsParams";
+export * from "./listScoresCapTier";
 export * from "./listScoresEngine";
 export * from "./listScoresParams";
 export * from "./listTopMoversEngine";

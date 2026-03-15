@@ -86,6 +86,8 @@ export interface ScoreItem {
   ticker: string;
   name?: string;
   sector?: string;
+  country?: string;
+  marketCap?: number;
   date?: string;
   fortressScore: number;
   rocketScore: number;
@@ -475,6 +477,7 @@ export type ListScoresParams = {
   minScore?: number;
   limit?: number;
   offset?: number;
+  cap_tier?: ListScoresCapTier;
   country?: string;
 };
 
@@ -485,6 +488,17 @@ export const ListScoresEngine = {
   fortress: "fortress",
   rocket: "rocket",
   wave: "wave",
+} as const;
+
+export type ListScoresCapTier =
+  (typeof ListScoresCapTier)[keyof typeof ListScoresCapTier];
+
+export const ListScoresCapTier = {
+  all: "all",
+  large: "large",
+  mid: "mid",
+  small: "small",
+  top50: "top50",
 } as const;
 
 export type ListCompaniesParams = {
@@ -519,7 +533,6 @@ export type ListTopMoversParams = {
   engine?: ListTopMoversEngine;
   limit?: number;
   min_delta?: number;
-  country?: string;
 };
 
 export type ListTopMoversEngine =

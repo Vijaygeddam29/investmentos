@@ -58,6 +58,8 @@ export const ListScoresQueryParams = zod.object({
   minScore: zod.coerce.number().optional(),
   limit: zod.coerce.number().optional(),
   offset: zod.coerce.number().optional(),
+  cap_tier: zod.enum(["all", "large", "mid", "small", "top50"]).optional(),
+  country: zod.coerce.string().optional(),
 });
 
 export const ListScoresResponse = zod.object({
@@ -66,6 +68,8 @@ export const ListScoresResponse = zod.object({
       ticker: zod.string(),
       name: zod.string().optional(),
       sector: zod.string().optional(),
+      country: zod.string().optional(),
+      marketCap: zod.number().optional(),
       date: zod.string().optional(),
       fortressScore: zod.number(),
       rocketScore: zod.number(),
@@ -161,6 +165,8 @@ export const GetCompanyResponse = zod.object({
       ticker: zod.string(),
       name: zod.string().optional(),
       sector: zod.string().optional(),
+      country: zod.string().optional(),
+      marketCap: zod.number().optional(),
       date: zod.string().optional(),
       fortressScore: zod.number(),
       rocketScore: zod.number(),
