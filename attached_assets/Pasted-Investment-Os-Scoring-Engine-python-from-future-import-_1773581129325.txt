@@ -1,0 +1,233 @@
+Investment Os Scoring Engine
+· python
+from __future__ import annotations
+
+
+
+
+REQUIRED_COLUMNS_GUIDE = {
+    # Identity
+    "ticker": "Ticker symbol",
+    "company_name": "Company name",
+    "sector": "Sector / industry group",
+
+
+    # Quality raw inputs
+    "returns_on_capital": "ROIC or equivalent",
+    "gross_margin_std_5y": "5Y gross margin standard deviation",
+    "operating_margin": "Operating margin TTM or NTM",
+    "fcf_margin": "Free cash flow margin",
+    "balance_sheet_strength": "Composite 0..100 or 0..1",
+    "revenue_growth_3y": "3Y CAGR revenue",
+    "eps_growth_3y": "3Y CAGR EPS",
+    "customer_stickiness": "Composite 0..1",
+    "capital_allocation": "Composite 0..1",
+    "pricing_power": "Composite 0..1",
+
+
+    # Valuation / expectations
+    "forward_pe": "Forward P/E",
+    "forward_pe_5y_avg": "5Y avg forward P/E",
+    "ev_ebit": "Enterprise value / EBIT",
+    "ev_ebit_5y_avg": "5Y avg EV/EBIT",
+    "peer_forward_pe_median": "Peer median forward P/E",
+    "peg": "PEG ratio",
+    "peer_peg_median": "Peer median PEG",
+    "fcf_yield": "FCF yield",
+    "reverse_dcf_implied_revenue_cagr": "Market-implied revenue CAGR",
+    "reverse_dcf_implied_operating_margin": "Market-implied operating margin",
+    "price_return_12m": "12M stock return",
+    "eps_growth_12m": "12M EPS growth",
+    "ownership_crowding": "Crowding metric 0..1 or percentile",
+
+
+    # Opportunity / revisions
+    "eps_revision_90d": "3M or 90D EPS revisions",
+    "technical_damage": "0..1 or percentile where higher means worse",
+    "moat_duration": "Composite 0..1",
+    "duration_underappreciated": "Composite 0..1",
+
+
+    # Mispricing inputs (0..1)
+    "temporary_issue": "Temporary issue present and likely reversible",
+    "structural_impairment_absent": "1 if no structural impairment visible",
+    "eps_revisions_turning": "1 if revisions inflecting positive",
+    "margin_normalization": "Probability margins normalize",
+    "optionality_underappreciated": "Probability optionality underpriced",
+    "accounting_distortion": "1 if accounting distorts true economics",
+    "capital_allocation_supportive": "Buybacks/insider allocation/supportive actions",
+    "clear_catalyst": "Catalyst in 6-24 months",
+
+
+    # Fragility inputs
+    "revenue_concentration": "Higher means more concentration",
+    "margin_volatility": "Std dev or percentile",
+    "net_debt_ebitda": "Net debt / EBITDA",
+    "interest_coverage": "EBIT / interest expense",
+    "estimate_dispersion": "Analyst estimate spread",
+    "guidance_reliability": "0..1 higher is better",
+    "regulatory_risk": "0..1",
+    "tech_disruption_risk": "0..1",
+    "beta_drawdown_risk": "Beta or drawdown composite",
+
+
+    # Portfolio controls
+    "portfolio_correlation": "Correlation to your existing portfolio",
+    "liquidity_flag": "1 if size should be clipped due to liquidity",
+}
+
+
+
+
+# ============================================================
+# EXAMPLE MAIN
+# ============================================================
+
+
+
+
+def load_input(companies_path: str = "companies.csv") -> pd.DataFrame:
+    df = pd.read_csv(companies_path)
+    return df
+
+
+
+
+def validate_columns(df: pd.DataFrame) -> List[str]:
+    missing = []
+    for col in ["ticker", "company_name"]:
+        if col not in df.columns:
+            missing.append(col)
+    return missing
+
+
+
+
+def diagnostics(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [
+        "ticker", "company_name",
+        "company_quality_score",
+
+Yep — I turned it into a working Python engine you can build on in Replit.
+
+It gives you:
+
+a clear Investment OS structure
+
+support for your 2-principle model: Company Quality + Stock Opportunity
+
+the 4 added layers:
+
+Expectation score
+
+Mispricing score
+
+Fragility score
+
+Position sizing rule
+
+explicit formulas
+
+CSV-based inputs so you can plug in your own 120 factors gradually
+
+What’s in the script
+
+The code includes:
+
+derived fields like:
+
+pe_vs_history_raw = forward_pe / forward_pe_5y_avg
+
+valuation_vs_peers_raw
+
+multiple_expansion_share_raw
+
+interest_coverage_inverse_raw
+
+scoring engines for:
+
+company_quality_score
+
+stock_opportunity_score
+
+expectation_score
+
+mispricing_score
+
+fragility_score
+
+a final formula:
+
+portfolio_net_score = (
+    2.0 * company_quality_score
+    + 1.0 * stock_opportunity_score
+    + 2.0 * mispricing_score
+    - 1.0 * expectation_score
+    - 1.0 * fragility_score
+)
+
+position bands:
+
+core
+
+standard
+
+starter
+
+tactical
+
+watchlist
+
+The core logic
+
+This is the architecture:
+
+Company Quality = business strength
+
+Stock Opportunity = attractiveness of the stock
+
+Expectation = how much success is already priced in
+
+Mispricing = evidence the market is wrong
+
+Fragility = how easily the thesis can break
+
+Position size = function of all the above
+
+So it stops the system from overbuying “great but fully priced” companies and also avoids loading up on “cheap but fragile” names.
+
+Input structure
+
+The script expects a companies.csv with columns like:
+
+ticker
+
+company_name
+
+forward_pe
+
+forward_pe_5y_avg
+
+ev_ebit
+
+peer_forward_pe_median
+
+fcf_yield
+
+reverse_dcf_implied_revenue_cagr
+
+temporary_issue
+
+margin_normalization
+
+net_debt_ebitda
+
+interest_coverage
+
+etc.
+
+You can start with partial columns and expand.
+
+Best next move
+
+What you really need now is not more theory —
