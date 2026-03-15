@@ -230,7 +230,7 @@ function IntelligenceSummaryCard({ holdings, weights }: { holdings: ManualHoldin
     <div className="bg-card border border-border rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-4 h-4 text-violet-400" />
-        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Portfolio Intelligence</h3>
+        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Portfolio Intelligence Summary</h3>
         <span className="text-[10px] text-muted-foreground ml-auto">weighted avg across {holdings.length} holdings</span>
       </div>
       <div className="grid grid-cols-6 gap-2">
@@ -931,7 +931,7 @@ export default function PortfolioBuilder() {
                             const totalW = countryHoldings.reduce((s, x) => s + (manualWeights[x.ticker] ?? 0), 0);
                             rows.push(
                               <tr key={`sep-${countryName}`} className="bg-muted/15 border-y border-border/40">
-                                <td colSpan={13} className="px-3 py-1.5">
+                                <td colSpan={14} className="px-3 py-1.5">
                                   <div className="flex items-center gap-2">
                                     <span className="text-base leading-none">{countryFlag}</span>
                                     <span className="text-[11px] font-semibold text-foreground">{countryName}</span>
