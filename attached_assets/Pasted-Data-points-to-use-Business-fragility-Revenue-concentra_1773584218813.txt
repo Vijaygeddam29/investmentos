@@ -1,0 +1,249 @@
+Data points to use
+Business fragility
+
+Revenue concentration by product/customer/geography
+
+Gross margin volatility
+
+Operating margin cyclicality
+
+Dependence on one product cycle
+
+Dependence on macro or commodity price
+
+Exposure to regulation or reimbursement
+
+Switching costs actually low despite “moat” story
+
+Technological obsolescence risk
+
+Financial fragility
+
+Net debt / EBITDA
+
+Interest coverage
+
+Current ratio / liquidity runway
+
+Share dilution history
+
+Pension deficits or off-balance-sheet liabilities
+
+Dependence on refinancing markets
+
+Forecast fragility
+
+Wide dispersion in analyst estimates
+
+Frequent guidance misses
+
+High variance in quarterly results
+
+Long duration valuation with little near-term cash support
+
+Very high terminal value share in DCF
+
+Market fragility
+
+High beta
+
+High short interest
+
+Illiquidity
+
+Crowded ownership
+
+Event risk concentration
+
+Stock highly sensitive to rates or one narrative
+
+Scoring bands
+
+Score from 1 to 5:
+
+1 = very resilient
+Diverse revenue, strong balance sheet, stable margins
+
+2 = low fragility
+Some normal business risk, but manageable
+
+3 = moderate
+A few pressure points
+
+4 = fragile
+Thesis depends on several things going right
+
+5 = very fragile
+One miss can break the story badly
+
+Important:
+A stock can be high quality and still have high fragility if valuation is stretched and all future returns depend on flawless execution.
+
+4. Position size rule
+
+This converts all that into portfolio action.
+
+Position sizing is where your model becomes real.
+
+You do not want your biggest positions to be the most exciting names. You want them to be the names where quality is high, expectations are reasonable, mispricing is clear, and fragility is low.
+
+Inputs to use
+
+You should combine:
+
+Business quality score
+
+Expectation score
+
+Mispricing score
+
+Fragility score
+
+Liquidity / conviction / correlation to existing holdings
+
+A simple formula idea:
+
+Position Attractiveness = Quality + Mispricing - Expectation - Fragility
+
+You can modify weighting later.
+
+Example position size bands
+Core position: 6% to 10%
+
+Use when:
+
+Quality very high
+
+Mispricing strong
+
+Expectations moderate or low
+
+Fragility low
+
+These are your “fortress at a reasonable or temporarily discounted price” names.
+
+Standard position: 3% to 5%
+
+Use when:
+
+Quality solid
+
+Mispricing reasonable
+
+Some fragility or moderate expectations
+
+These are good ideas, but not slam dunks.
+
+Starter position: 1% to 2.5%
+
+Use when:
+
+High-quality but expensive
+
+Or high-upside but more fragile
+
+Or thesis still developing
+
+This lets you track closely without overcommitting.
+
+Tactical/speculative: 0.5% to 1%
+
+Use when:
+
+Wave / cyclical / event-driven
+
+Cheap but thesis is uncertain
+
+Fragility high
+
+Zero / watchlist
+
+Use when:
+
+No clear mispricing
+
+Expectations already euphoric
+
+Fragility too high for payoff
+
+Thesis depends on macro guesswork more than company edge
+
+Suggested scorecard fields
+
+Here’s a practical list you can actually build in a spreadsheet.
+
+Expectation score fields
+
+Forward P/E vs 5Y avg
+
+EV/EBIT vs 5Y avg
+
+FCF yield vs 5Y avg
+
+Forward P/E vs peers
+
+PEG vs peers
+
+Reverse DCF implied revenue CAGR
+
+Reverse DCF implied operating margin
+
+12M return explained by earnings vs rerating
+
+Ownership/crowding flag
+
+Mispricing reason fields
+
+Temporary issue present? yes/no
+
+Structural impairment present? yes/no
+
+EPS revisions improving? yes/no
+
+Margin normalization likely? low/medium/high
+
+Underappreciated optionality? low/medium/high
+
+Accounting distortion? yes/no
+
+Management capital allocation supportive? yes/no
+
+Clear catalyst in 6–24 months? yes/no
+
+Fragility score fields
+
+Revenue concentration
+
+Margin volatility
+
+Net debt / EBITDA
+
+Interest coverage
+
+Estimate dispersion
+
+Guidance reliability
+
+Regulatory/event dependence
+
+Technology disruption risk
+
+Beta / drawdown history
+
+Valuation sensitivity to small forecast changes
+
+Position sizing fields
+
+Quality score
+
+Expectation score
+
+Mispricing score
+
+Fragility score
+
+Correlation to current portfolio
+
+Liquidity
+
+Final position band

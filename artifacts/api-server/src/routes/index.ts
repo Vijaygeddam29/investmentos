@@ -11,6 +11,7 @@ import portfolioBuilderRouter from "./portfolio-builder";
 import anthropicRouter from "./anthropic";
 import alertsRouter from "./alerts";
 import authRouter from "./auth";
+import intelligenceRouter from "./intelligence";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(portfolioRouter);
 router.use(portfolioBuilderRouter);
 router.use(anthropicRouter);
 router.use(alertsRouter);
+router.use(intelligenceRouter);
 
 export default router;

@@ -1,0 +1,568 @@
+from __future__ import annotations
+
+"""
+Investment OS scoring engine
+
+Purpose
+-------
+A modular scoring framework that plugs into an existing 120-factor / 2-principle
+system built around:
+
+1) Company Quality
+2) Stock Opportunity
+
+This script adds four portfolio-construction layers:
+- Expectation Score
+- Mispricing Reason Score
+- Fragility Score
+- Position Size Rule
+
+Design goals
+------------
+- Clear logic
+- Human-editable factor definitions
+- Explicit formulas
+- Easy to run on Replit
+- No paid APIs required in the core engine
+- Can work first with CSV exports, then later with live data adapters
+
+How to use
+----------
+1) Export your factor data to CSV
+2) Map your existing 120 factors into the config sections below
+3) Run this file
+4) Review the ranked output and per-stock diagnostics
+
+Expected input files
+--------------------
+- companies.csv      : one row per ticker with raw factor values
+- peer_groups.csv    : optional peer medians / sector medians
+- history.csv        : optional valuation history summary per ticker
+- overrides.csv      : optional analyst overrides for qualitative items
+
+This engine is intentionally transparent rather than clever.
+"""
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+import math
+import json
+import pandas as pd
+import numpy as np
+
+
+# ============================================================
+# CONFIG
+# ============================================================
+
+
+@dataclass
+class FactorSpec:
+    name: str
+    column: str
+    weight: float
+    direction: str  # "higher_better", "lower_better", "target"
+    min_good: Optional[float] = None
+    max_good: Optional[float] = None
+    clip_low: Optional[float] = None
+    clip_high: Optional[float] = None
+    description: str = ""
+
+
+@dataclass
+class ScoreConfig:
+    company_quality_weights: Dict[str, float] = field(default_factory=dict)
+    stock_opportunity_weights: Dict[str, float] = field(default_factory=dict)
+    expectation_weights: Dict[str, float] = field(default_factory=dict)
+    mispricing_weights: Dict[str, float] = field(default_factory=dict)
+    fragility_weights: Dict[str, float] = field(default_factory=dict)
+
+    # Final portfolio score formula weights
+    w_quality: float = 2.0
+    w_opportunity: float = 1.0
+    w_expectation: float = 1.0
+    w_mispricing: float = 2.0
+    w_fragility: float = 1.0
+
+    # Position sizing bands
+    position_bands: List[Tuple[float, str, float, float]] = field(
+        default_factory=lambda: [
+            (8.0, "core", 0.06, 0.10),
+            (5.0, "standard", 0.03, 0.05),
+            (2.0, "starter", 0.01, 0.025),
+            (0.0, "tactical", 0.005, 0.01),
+            (-999.0, "watchlist", 0.0, 0.0),
+        ]
+    )
+
+
+DEFAULT_CONFIG = ScoreConfig(
+    company_quality_weights={
+        # You can replace these with your existing factor families.
+        "returns_on_capital": 0.15,
+        "gross_margin_stability": 0.10,
+        "operating_margin": 0.10,
+        "fcf_margin": 0.10,
+        "balance_sheet_strength": 0.10,
+        "revenue_growth_3y": 0.10,
+        "eps_growth_3y": 0.10,
+        "customer_stickiness": 0.10,
+        "capital_allocation": 0.075,
+        "pricing_power": 0.075,
+    },
+    stock_opportunity_weights={
+        "valuation_vs_history": 0.20,
+        "valuation_vs_peers": 0.15,
+        "fcf_yield": 0.15,
+        "earnings_revision_trend": 0.10,
+        "rerating_risk": 0.10,
+        "technical_damage": 0.05,
+        "moat_duration": 0.10,
+        "duration_underappreciated": 0.15,
+    },
+    expectation_weights={
+        "pe_vs_history": 0.20,
+        "ev_ebit_vs_history": 0.15,
+        "pe_vs_peers": 0.10,
+        "peg_vs_peers": 0.10,
+        "reverse_dcf_revenue_cagr": 0.15,
+        "reverse_dcf_operating_margin": 0.10,
+        "multiple_expansion_share": 0.10,
+        "ownership_crowding": 0.10,
+    },
+    mispricing_weights={
+        "temporary_issue": 0.15,
+        "structural_impairment_absent": 0.15,
+        "eps_revisions_turning": 0.10,
+        "margin_normalization": 0.15,
+        "optionality_underappreciated": 0.15,
+        "accounting_distortion": 0.10,
+        "capital_allocation_supportive": 0.10,
+        "clear_catalyst": 0.10,
+    },
+    fragility_weights={
+        "revenue_concentration": 0.15,
+        "margin_volatility": 0.15,
+        "net_debt_ebitda": 0.15,
+        "interest_coverage_inverse": 0.10,
+        "estimate_dispersion": 0.10,
+        "guidance_reliability_inverse": 0.10,
+        "regulatory_risk": 0.10,
+        "tech_disruption_risk": 0.10,
+        "beta_drawdown_risk": 0.05,
+    },
+)
+
+
+# ============================================================
+# NORMALIZATION HELPERS
+# ============================================================
+
+
+def safe_series(df: pd.DataFrame, col: str, default: float = np.nan) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series([default] * len(df), index=df.index)
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def percentile_rank(series: pd.Series, ascending: bool = True) -> pd.Series:
+    """
+    Returns 0..1 percentile rank.
+    ascending=True means lower values get lower rank and higher values get higher rank.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    if s.notna().sum() == 0:
+        return pd.Series(np.nan, index=series.index)
+    rank = s.rank(pct=True, ascending=ascending)
+    return rank.clip(0, 1)
+
+
+def invert01(series: pd.Series) -> pd.Series:
+    return 1 - series
+
+
+def minmax_scale(series: pd.Series, lower: Optional[float] = None, upper: Optional[float] = None) -> pd.Series:
+    s = pd.to_numeric(series, errors="coerce").copy()
+    if lower is not None:
+        s = s.clip(lower=lower)
+    if upper is not None:
+        s = s.clip(upper=upper)
+    mn, mx = s.min(skipna=True), s.max(skipna=True)
+    if pd.isna(mn) or pd.isna(mx) or mx == mn:
+        return pd.Series(np.nan, index=series.index)
+    return ((s - mn) / (mx - mn)).clip(0, 1)
+
+
+def fill_group_median(df: pd.DataFrame, col: str, group_col: str = "sector") -> pd.Series:
+    s = pd.to_numeric(df[col], errors="coerce") if col in df.columns else pd.Series(np.nan, index=df.index)
+    if group_col in df.columns:
+        return s.fillna(df.groupby(group_col)[col].transform("median") if col in df.columns else np.nan)
+    return s.fillna(s.median())
+
+
+def weighted_score(df: pd.DataFrame, metric_map: Dict[str, float], prefix: str) -> pd.Series:
+    total_weight = sum(metric_map.values())
+    if total_weight == 0:
+        return pd.Series(0.0, index=df.index)
+    acc = pd.Series(0.0, index=df.index)
+    for metric, w in metric_map.items():
+        col = f"{prefix}_{metric}"
+        if col not in df.columns:
+            continue
+        acc = acc.add(df[col].fillna(0) * w, fill_value=0)
+    return acc / total_weight
+
+
+def to_1_5(score01: pd.Series) -> pd.Series:
+    return (1 + 4 * score01).round(2)
+
+
+def to_0_5(score01: pd.Series) -> pd.Series:
+    return (5 * score01).round(2)
+
+
+# ============================================================
+# FACTOR ENGINE
+# ============================================================
+
+
+class InvestmentOSEngine:
+    def __init__(self, config: ScoreConfig = DEFAULT_CONFIG):
+        self.config = config
+
+    def compute_base_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # --------------------
+        # Example derived fields
+        # --------------------
+        out["pe_vs_history_raw"] = safe_series(out, "forward_pe") / safe_series(out, "forward_pe_5y_avg")
+        out["ev_ebit_vs_history_raw"] = safe_series(out, "ev_ebit") / safe_series(out, "ev_ebit_5y_avg")
+        out["pe_vs_peers_raw"] = safe_series(out, "forward_pe") / safe_series(out, "peer_forward_pe_median")
+        out["peg_vs_peers_raw"] = safe_series(out, "peg") / safe_series(out, "peer_peg_median")
+        out["valuation_vs_history_raw"] = (
+            out[["pe_vs_history_raw", "ev_ebit_vs_history_raw"]].median(axis=1, skipna=True)
+        )
+        out["valuation_vs_peers_raw"] = (
+            out[["pe_vs_peers_raw", "peg_vs_peers_raw"]].median(axis=1, skipna=True)
+        )
+
+        out["multiple_expansion_share_raw"] = safe_series(out, "price_return_12m") - safe_series(out, "eps_growth_12m")
+        out["interest_coverage_inverse_raw"] = 1 / safe_series(out, "interest_coverage").replace(0, np.nan)
+        out["guidance_reliability_inverse_raw"] = 1 - safe_series(out, "guidance_reliability")
+
+        # User-supplied reverse DCF and qualitative flags should already exist where possible.
+        return out
+
+    def score_company_quality(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # High is good
+        high_good = [
+            "returns_on_capital", "operating_margin", "fcf_margin", "revenue_growth_3y",
+            "eps_growth_3y", "customer_stickiness", "capital_allocation", "pricing_power"
+        ]
+        for col in high_good:
+            out[f"company_quality_{col}"] = percentile_rank(safe_series(out, col), ascending=True)
+
+        # Low volatility / strong resilience is good
+        out["company_quality_gross_margin_stability"] = invert01(percentile_rank(safe_series(out, "gross_margin_std_5y"), ascending=True))
+        out["company_quality_balance_sheet_strength"] = percentile_rank(safe_series(out, "balance_sheet_strength"), ascending=True)
+
+        out["company_quality_score01"] = weighted_score(out, self.config.company_quality_weights, "company_quality")
+        out["company_quality_score"] = to_1_5(out["company_quality_score01"])
+        return out
+
+    def score_stock_opportunity(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # Cheap vs history / peers is better
+        out["stock_opportunity_valuation_vs_history"] = invert01(percentile_rank(safe_series(out, "valuation_vs_history_raw"), ascending=True))
+        out["stock_opportunity_valuation_vs_peers"] = invert01(percentile_rank(safe_series(out, "valuation_vs_peers_raw"), ascending=True))
+        out["stock_opportunity_fcf_yield"] = percentile_rank(safe_series(out, "fcf_yield"), ascending=True)
+        out["stock_opportunity_earnings_revision_trend"] = percentile_rank(safe_series(out, "eps_revision_90d"), ascending=True)
+        out["stock_opportunity_rerating_risk"] = invert01(percentile_rank(safe_series(out, "multiple_expansion_share_raw"), ascending=True))
+        out["stock_opportunity_technical_damage"] = invert01(percentile_rank(safe_series(out, "technical_damage"), ascending=True))
+        out["stock_opportunity_moat_duration"] = percentile_rank(safe_series(out, "moat_duration"), ascending=True)
+        out["stock_opportunity_duration_underappreciated"] = percentile_rank(safe_series(out, "duration_underappreciated"), ascending=True)
+
+        out["stock_opportunity_score01"] = weighted_score(out, self.config.stock_opportunity_weights, "stock_opportunity")
+        out["stock_opportunity_score"] = to_1_5(out["stock_opportunity_score01"])
+        return out
+
+    def score_expectation(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # Higher valuation and more crowding = higher expectation
+        out["expectation_pe_vs_history"] = percentile_rank(safe_series(out, "pe_vs_history_raw"), ascending=True)
+        out["expectation_ev_ebit_vs_history"] = percentile_rank(safe_series(out, "ev_ebit_vs_history_raw"), ascending=True)
+        out["expectation_pe_vs_peers"] = percentile_rank(safe_series(out, "pe_vs_peers_raw"), ascending=True)
+        out["expectation_peg_vs_peers"] = percentile_rank(safe_series(out, "peg_vs_peers_raw"), ascending=True)
+        out["expectation_reverse_dcf_revenue_cagr"] = percentile_rank(safe_series(out, "reverse_dcf_implied_revenue_cagr"), ascending=True)
+        out["expectation_reverse_dcf_operating_margin"] = percentile_rank(safe_series(out, "reverse_dcf_implied_operating_margin"), ascending=True)
+        out["expectation_multiple_expansion_share"] = percentile_rank(safe_series(out, "multiple_expansion_share_raw"), ascending=True)
+        out["expectation_ownership_crowding"] = percentile_rank(safe_series(out, "ownership_crowding"), ascending=True)
+
+        out["expectation_score01"] = weighted_score(out, self.config.expectation_weights, "expectation")
+        out["expectation_score"] = to_1_5(out["expectation_score01"])
+        return out
+
+    def score_mispricing(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # These can be binary, ordinal 0..1, or analyst-entered probabilities.
+        # Higher = stronger evidence of mispricing.
+        source_cols = {
+            "temporary_issue": "temporary_issue",
+            "structural_impairment_absent": "structural_impairment_absent",
+            "eps_revisions_turning": "eps_revisions_turning",
+            "margin_normalization": "margin_normalization",
+            "optionality_underappreciated": "optionality_underappreciated",
+            "accounting_distortion": "accounting_distortion",
+            "capital_allocation_supportive": "capital_allocation_supportive",
+            "clear_catalyst": "clear_catalyst",
+        }
+        for metric, col in source_cols.items():
+            out[f"mispricing_{metric}"] = safe_series(out, col).clip(0, 1)
+
+        out["mispricing_score01"] = weighted_score(out, self.config.mispricing_weights, "mispricing")
+        out["mispricing_score"] = to_0_5(out["mispricing_score01"])
+        return out
+
+    def score_fragility(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        # Higher = more fragile
+        out["fragility_revenue_concentration"] = percentile_rank(safe_series(out, "revenue_concentration"), ascending=True)
+        out["fragility_margin_volatility"] = percentile_rank(safe_series(out, "margin_volatility"), ascending=True)
+        out["fragility_net_debt_ebitda"] = percentile_rank(safe_series(out, "net_debt_ebitda"), ascending=True)
+        out["fragility_interest_coverage_inverse"] = percentile_rank(safe_series(out, "interest_coverage_inverse_raw"), ascending=True)
+        out["fragility_estimate_dispersion"] = percentile_rank(safe_series(out, "estimate_dispersion"), ascending=True)
+        out["fragility_guidance_reliability_inverse"] = percentile_rank(safe_series(out, "guidance_reliability_inverse_raw"), ascending=True)
+        out["fragility_regulatory_risk"] = safe_series(out, "regulatory_risk").clip(0, 1)
+        out["fragility_tech_disruption_risk"] = safe_series(out, "tech_disruption_risk").clip(0, 1)
+        out["fragility_beta_drawdown_risk"] = percentile_rank(safe_series(out, "beta_drawdown_risk"), ascending=True)
+
+        out["fragility_score01"] = weighted_score(out, self.config.fragility_weights, "fragility")
+        out["fragility_score"] = to_1_5(out["fragility_score01"])
+        return out
+
+    def compute_final_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        out["portfolio_net_score"] = (
+            self.config.w_quality * out["company_quality_score"]
+            + self.config.w_opportunity * out["stock_opportunity_score"]
+            + self.config.w_mispricing * out["mispricing_score"]
+            - self.config.w_expectation * out["expectation_score"]
+            - self.config.w_fragility * out["fragility_score"]
+        )
+
+        out["position_band"] = "watchlist"
+        out["position_min"] = 0.0
+        out["position_max"] = 0.0
+        for threshold, label, pmin, pmax in self.config.position_bands:
+            mask = out["portfolio_net_score"] >= threshold
+            out.loc[mask & (out["position_band"] == "watchlist"), ["position_band", "position_min", "position_max"]] = [label, pmin, pmax]
+
+        # Optional conviction haircut based on concentration / correlation / liquidity
+        if "portfolio_correlation" in out.columns:
+            out["position_max"] = np.where(out["portfolio_correlation"] > 0.8, out["position_max"] * 0.8, out["position_max"])
+        if "liquidity_flag" in out.columns:
+            out["position_max"] = np.where(out["liquidity_flag"] == 1, out["position_max"] * 0.75, out["position_max"])
+
+        return out
+
+    def run(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = self.compute_base_fields(df)
+        out = self.score_company_quality(out)
+        out = self.score_stock_opportunity(out)
+        out = self.score_expectation(out)
+        out = self.score_mispricing(out)
+        out = self.score_fragility(out)
+        out = self.compute_final_scores(out)
+        return out
+
+
+# ============================================================
+# MAPPING YOUR EXISTING 120-FACTOR SYSTEM
+# ============================================================
+
+
+def build_factor_dictionary() -> Dict[str, Dict[str, str]]:
+    """
+    This is where you map your existing factor library into the new framework.
+
+    You likely already have 120 factors grouped inside:
+    - Company Quality
+    - Stock Opportunity
+
+    Extend those groups by tagging each existing factor into one or more of:
+    - expectation
+    - mispricing
+    - fragility
+
+    Example output:
+    {
+        "returns_on_capital": {
+            "principle": "company_quality",
+            "bucket": "quality",
+            "formula": "roc_ttm or roic_ttm",
+            "why": "Measures moat and capital efficiency"
+        }
+    }
+    """
+    return {
+        "returns_on_capital": {
+            "principle": "company_quality",
+            "bucket": "quality",
+            "formula": "NOPAT / invested_capital",
+            "why": "Captures reinvestment quality and moat strength",
+        },
+        "pe_vs_history_raw": {
+            "principle": "stock_opportunity",
+            "bucket": "expectation",
+            "formula": "forward_pe / forward_pe_5y_avg",
+            "why": "Shows how much premium is already priced in",
+        },
+        "margin_normalization": {
+            "principle": "stock_opportunity",
+            "bucket": "mispricing",
+            "formula": "analyst override 0..1",
+            "why": "Temporary compression may create re-rating opportunity",
+        },
+        "net_debt_ebitda": {
+            "principle": "company_quality",
+            "bucket": "fragility",
+            "formula": "net debt / EBITDA",
+            "why": "Higher leverage makes thesis more fragile",
+        },
+    }
+
+
+# ============================================================
+# DATA CONTRACT
+# ============================================================
+
+
+REQUIRED_COLUMNS_GUIDE = {
+    # Identity
+    "ticker": "Ticker symbol",
+    "company_name": "Company name",
+    "sector": "Sector / industry group",
+
+    # Quality raw inputs
+    "returns_on_capital": "ROIC or equivalent",
+    "gross_margin_std_5y": "5Y gross margin standard deviation",
+    "operating_margin": "Operating margin TTM or NTM",
+    "fcf_margin": "Free cash flow margin",
+    "balance_sheet_strength": "Composite 0..100 or 0..1",
+    "revenue_growth_3y": "3Y CAGR revenue",
+    "eps_growth_3y": "3Y CAGR EPS",
+    "customer_stickiness": "Composite 0..1",
+    "capital_allocation": "Composite 0..1",
+    "pricing_power": "Composite 0..1",
+
+    # Valuation / expectations
+    "forward_pe": "Forward P/E",
+    "forward_pe_5y_avg": "5Y avg forward P/E",
+    "ev_ebit": "Enterprise value / EBIT",
+    "ev_ebit_5y_avg": "5Y avg EV/EBIT",
+    "peer_forward_pe_median": "Peer median forward P/E",
+    "peg": "PEG ratio",
+    "peer_peg_median": "Peer median PEG",
+    "fcf_yield": "FCF yield",
+    "reverse_dcf_implied_revenue_cagr": "Market-implied revenue CAGR",
+    "reverse_dcf_implied_operating_margin": "Market-implied operating margin",
+    "price_return_12m": "12M stock return",
+    "eps_growth_12m": "12M EPS growth",
+    "ownership_crowding": "Crowding metric 0..1 or percentile",
+
+    # Opportunity / revisions
+    "eps_revision_90d": "3M or 90D EPS revisions",
+    "technical_damage": "0..1 or percentile where higher means worse",
+    "moat_duration": "Composite 0..1",
+    "duration_underappreciated": "Composite 0..1",
+
+    # Mispricing inputs (0..1)
+    "temporary_issue": "Temporary issue present and likely reversible",
+    "structural_impairment_absent": "1 if no structural impairment visible",
+    "eps_revisions_turning": "1 if revisions inflecting positive",
+    "margin_normalization": "Probability margins normalize",
+    "optionality_underappreciated": "Probability optionality underpriced",
+    "accounting_distortion": "1 if accounting distorts true economics",
+    "capital_allocation_supportive": "Buybacks/insider allocation/supportive actions",
+    "clear_catalyst": "Catalyst in 6-24 months",
+
+    # Fragility inputs
+    "revenue_concentration": "Higher means more concentration",
+    "margin_volatility": "Std dev or percentile",
+    "net_debt_ebitda": "Net debt / EBITDA",
+    "interest_coverage": "EBIT / interest expense",
+    "estimate_dispersion": "Analyst estimate spread",
+    "guidance_reliability": "0..1 higher is better",
+    "regulatory_risk": "0..1",
+    "tech_disruption_risk": "0..1",
+    "beta_drawdown_risk": "Beta or drawdown composite",
+
+    # Portfolio controls
+    "portfolio_correlation": "Correlation to your existing portfolio",
+    "liquidity_flag": "1 if size should be clipped due to liquidity",
+}
+
+
+# ============================================================
+# EXAMPLE MAIN
+# ============================================================
+
+
+def load_input(companies_path: str = "companies.csv") -> pd.DataFrame:
+    df = pd.read_csv(companies_path)
+    return df
+
+
+def validate_columns(df: pd.DataFrame) -> List[str]:
+    missing = []
+    for col in ["ticker", "company_name"]:
+        if col not in df.columns:
+            missing.append(col)
+    return missing
+
+
+def diagnostics(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [
+        "ticker", "company_name",
+        "company_quality_score",
+        "stock_opportunity_score",
+        "expectation_score",
+        "mispricing_score",
+        "fragility_score",
+        "portfolio_net_score",
+        "position_band", "position_min", "position_max",
+    ]
+    cols = [c for c in cols if c in df.columns]
+    return df[cols].sort_values("portfolio_net_score", ascending=False)
+
+
+def save_outputs(full_df: pd.DataFrame, ranked_df: pd.DataFrame) -> None:
+    full_df.to_csv("investment_os_full_output.csv", index=False)
+    ranked_df.to_csv("investment_os_ranked_output.csv", index=False)
+
+
+if __name__ == "__main__":
+    df = load_input("companies.csv")
+    missing = validate_columns(df)
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    engine = InvestmentOSEngine(DEFAULT_CONFIG)
+    scored = engine.run(df)
+    ranked = diagnostics(scored)
+    save_outputs(scored, ranked)
+
+    print("Top ideas by portfolio_net_score")
+    print(ranked.head(25).to_string(index=False))
+
+    print("\nSaved:")
+    print("- investment_os_full_output.csv")
+    print("- investment_os_ranked_output.csv")
