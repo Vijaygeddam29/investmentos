@@ -739,8 +739,8 @@ function NarrativePanel({ ticker, scores }: { ticker: string; scores?: Narrative
               { key: "quality"     as const, label: "Quality",     weight: "×2", score: scores?.Q, color: "text-emerald-400", bar: "bg-emerald-500", bg: "border-emerald-500/20" },
               { key: "opportunity" as const, label: "Opportunity", weight: "×1", score: scores?.O, color: "text-blue-400",    bar: "bg-blue-500",    bg: "border-blue-500/20"    },
               { key: "mispricing"  as const, label: "Mispricing",  weight: "×2", score: scores?.M, color: "text-amber-400",   bar: "bg-amber-500",   bg: "border-amber-500/20"   },
-              { key: "expectation" as const, label: "Expectation", weight: "−1", score: scores?.E, color: "text-orange-400",  bar: "bg-orange-500",  bg: "border-orange-500/20"  },
-              { key: "fragility"   as const, label: "Fragility",   weight: "−1", score: scores?.F, color: "text-red-400",     bar: "bg-red-500",     bg: "border-red-500/20"     },
+              { key: "expectation" as const, label: "Expectation", weight: "−1×", score: scores?.E, color: "text-orange-400",  bar: "bg-orange-500",  bg: "border-orange-500/20"  },
+              { key: "fragility"   as const, label: "Fragility",   weight: "−1×", score: scores?.F, color: "text-red-400",     bar: "bg-red-500",     bg: "border-red-500/20"     },
             ]).map(({ key, label, weight, score, color, bar, bg }) => (
               <div key={key} className={`rounded-lg border ${bg} bg-secondary/10 p-3 space-y-1.5`}>
                 <div className="flex items-center gap-2">
