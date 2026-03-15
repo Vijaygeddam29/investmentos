@@ -11,6 +11,7 @@ import { FactorAccordion } from "./FactorAccordion";
 import { PriceScoreChart } from "./PriceScoreChart";
 import { ValuationBandChart } from "./ValuationBandChart";
 import { ValueChainTab } from "./ValueChainTab";
+import { InvestmentThesisTab } from "./InvestmentThesisTab";
 
 const LEADERSHIP_LOOKUP: Record<string, { founderLed: boolean; dualClass: boolean; ceoTenureYears: number; visionRating: string }> = {
   NVDA: { founderLed: true,  dualClass: false, ceoTenureYears: 31, visionRating: "HIGH" },
@@ -205,8 +206,11 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
 
             <ScrollArea className="flex-1">
               <div className="p-6">
-                <Tabs defaultValue="overview" className="w-full">
-                  <TabsList className="w-full grid grid-cols-6 mb-6 bg-secondary/50 text-[11px]">
+                <Tabs defaultValue="thesis" className="w-full">
+                  <TabsList className="w-full grid grid-cols-7 mb-6 bg-secondary/50 text-[11px]">
+                    <TabsTrigger value="thesis" className="text-[11px] flex items-center gap-1">
+                      <Award className="w-3 h-3 text-violet-400" />Thesis
+                    </TabsTrigger>
                     <TabsTrigger value="overview" className="text-[11px]">AI Memo</TabsTrigger>
                     <TabsTrigger value="factors" className="text-[11px]">Factors</TabsTrigger>
                     <TabsTrigger value="valuation" className="text-[11px]">Entry/Exit</TabsTrigger>
@@ -220,9 +224,19 @@ export function CompanyDrawer({ ticker, open, onOpenChange }: CompanyDrawerProps
                       )}
                     </TabsTrigger>
                     <TabsTrigger value="value-chain" className="text-[11px] flex items-center gap-1">
-                      <Link2 className="w-3 h-3" />Value Chain
+                      <Link2 className="w-3 h-3" />Chain
                     </TabsTrigger>
                   </TabsList>
+
+                  {/* ── Investment Thesis ── */}
+                  <TabsContent value="thesis" className="animate-in fade-in duration-300">
+                    <InvestmentThesisTab
+                      company={company}
+                      scores={scores}
+                      latestMetrics={latestMetrics}
+                      countryContext={(scores as any)?.countryContext ?? company?.country ?? undefined}
+                    />
+                  </TabsContent>
 
                   {/* ── AI Memo ── */}
                   <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">

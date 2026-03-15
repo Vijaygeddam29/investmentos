@@ -429,53 +429,75 @@ async function fetchAnalystData(ticker: string, currentPrice: number | null): Pr
   }
 }
 
-// ─── Peer Benchmarks ──────────────────────────────────────────────────────────
-
-export async function fetchPeerBenchmarks(ticker: string): Promise<{
+// ─── Peer Benchmarks (same-country only) ──────────────────────────────────────
+/**
+ * Fetches peer company benchmarks for a ticker.
+ * Critically — filters peers to the SAME COUNTRY as the subject company.
+ * Comparing a UK company's P/E to US peers would produce misleading signals.
+ */
+export async function fetchPeerBenchmarks(ticker: string, companyCountry: string | null): Promise<{
   pePeerMedian: number | null;
   evEbitdaPeerMedian: number | null;
   revenueGrowthPeerMedian: number | null;
   grossMarginPeerMedian: number | null;
 }> {
+  const nullResult = { pePeerMedian: null, evEbitdaPeerMedian: null, revenueGrowthPeerMedian: null, grossMarginPeerMedian: null };
   try {
     const peers = await fmpFetch("peers", { symbol: ticker }).catch(() => []);
-    const peerTickers: string[] = Array.isArray(peers)
-      ? (peers[0]?.peersList ?? peers).slice(0, 6)
+    const allPeerTickers: string[] = Array.isArray(peers)
+      ? (peers[0]?.peersList ?? peers).slice(0, 10) // fetch up to 10, then filter
       : [];
 
-    if (!peerTickers.length) return {
-      pePeerMedian: null, evEbitdaPeerMedian: null,
-      revenueGrowthPeerMedian: null, grossMarginPeerMedian: null,
-    };
+    if (!allPeerTickers.length) return nullResult;
 
-    const peerMetrics = await Promise.all(
-      peerTickers.map(p =>
-        fmpFetch("key-metrics", { symbol: p, period: "annual" })
-          .then(d => d?.[0] ?? null)
-          .catch(() => null)
-      )
-    );
+    // Filter to same-country peers only
+    let filteredPeers = allPeerTickers;
+    if (companyCountry) {
+      const peerCompanies = await db
+        .select({ ticker: companiesTable.ticker, country: companiesTable.country })
+        .from(companiesTable)
+        .where(eq(companiesTable.country, companyCountry));
+      const samCountrySet = new Set(peerCompanies.map(c => c.ticker));
+      const sameCountry = allPeerTickers.filter(t => samCountrySet.has(t));
+      // Use same-country if we have at least 2; otherwise fall back to all peers
+      filteredPeers = sameCountry.length >= 2 ? sameCountry : allPeerTickers;
+    }
 
-    const valid = peerMetrics.filter(Boolean);
+    const peerTickers = filteredPeers.slice(0, 6);
 
-    function median(arr: (number | null)[]): number | null {
-      const nums = arr.filter((v): v is number => v != null).sort((a, b) => a - b);
+    const [peerKeyMetrics, peerIncomeGrowth] = await Promise.all([
+      Promise.all(
+        peerTickers.map(p =>
+          fmpFetch("key-metrics", { symbol: p, period: "annual" })
+            .then(d => d?.[0] ?? null).catch(() => null)
+        )
+      ),
+      Promise.all(
+        peerTickers.map(p =>
+          fmpFetch("financial-growth", { symbol: p, period: "annual" })
+            .then(d => d?.[0] ?? null).catch(() => null)
+        )
+      ),
+    ]);
+
+    const validMetrics = peerKeyMetrics.filter(Boolean);
+    const validGrowth  = peerIncomeGrowth.filter(Boolean);
+
+    function median(arr: (number | null | undefined)[]): number | null {
+      const nums = arr.filter((v): v is number => v != null && isFinite(v as number)).sort((a, b) => (a as number) - (b as number));
       if (!nums.length) return null;
       const mid = Math.floor(nums.length / 2);
-      return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+      return nums.length % 2 ? nums[mid] : ((nums[mid - 1] + nums[mid]) / 2);
     }
 
     return {
-      pePeerMedian: median(valid.map(m => m.peRatio ?? null)),
-      evEbitdaPeerMedian: median(valid.map(m => m.evToEBITDA ?? null)),
-      revenueGrowthPeerMedian: null, // requires income statement growth data
-      grossMarginPeerMedian: null,
+      pePeerMedian:            median(validMetrics.map((m: any) => m.peRatio ?? null)),
+      evEbitdaPeerMedian:      median(validMetrics.map((m: any) => m.evToEBITDA ?? null)),
+      revenueGrowthPeerMedian: median(validGrowth.map((g: any) => g.revenueGrowth ?? null)),
+      grossMarginPeerMedian:   median(validMetrics.map((m: any) => m.netProfitMargin ?? null)),
     };
   } catch {
-    return {
-      pePeerMedian: null, evEbitdaPeerMedian: null,
-      revenueGrowthPeerMedian: null, grossMarginPeerMedian: null,
-    };
+    return nullResult;
   }
 }
 
@@ -497,12 +519,22 @@ export async function fetchAndStoreMetrics(ticker: string) {
     throw new Error(`No financial data found for ${ticker}`);
   }
 
-  // Insider/institutional/analyst/peer calls are skipped to conserve API quota.
-  // These fields remain null until a premium FMP plan is available.
+  // Fetch company country for same-country peer filtering
+  const companyRow = await db
+    .select({ country: companiesTable.country })
+    .from(companiesTable)
+    .where(eq(companiesTable.ticker, ticker))
+    .limit(1);
+  const companyCountry = companyRow[0]?.country ?? null;
+
+  // Insider/institutional/analyst calls skipped (FMP free tier doesn't provide these).
+  // Peer benchmarks are now enabled — filtered to same-country peers only.
   const insiderData = { insiderOwnership: null, insiderBuying: null };
   const institutionalOwnership = null;
   const analystData = { forwardPe: null, earningsSurprises: null, analystUpside: null };
-  const peerBenchmarks = { pePeerMedian: null, evEbitdaPeerMedian: null, revenueGrowthPeerMedian: null, grossMarginPeerMedian: null };
+  const peerBenchmarks = await fetchPeerBenchmarks(ticker, companyCountry).catch(() => ({
+    pePeerMedian: null, evEbitdaPeerMedian: null, revenueGrowthPeerMedian: null, grossMarginPeerMedian: null,
+  }));
 
   const count = Math.min(10, Math.max(keyMetrics.length, incomeStmt.length, 1));
   let inserted = 0;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
@@ -478,7 +478,36 @@ export default function PortfolioBuilder() {
                       </tr>
                     </thead>
                     <tbody>
-                      {holdings.map((h, i) => {
+                      {(() => {
+                        // Group holdings by country, inserting separator rows
+                        const rows: React.ReactNode[] = [];
+                        let lastCountry: string | null = null;
+
+                        holdings.forEach((h, i) => {
+                          const countryName = h.country || "Unknown";
+                          const countryFlag = COUNTRY_FLAGS[countryName] ?? "🌐";
+
+                          if (countryName !== lastCountry) {
+                            // Calculate total weight and count for this country group
+                            const countryHoldings = holdings.filter(x => (x.country || "Unknown") === countryName);
+                            const totalWeight = countryHoldings.reduce((s, x) => s + x.weight, 0);
+                            rows.push(
+                              <tr key={`sep-${countryName}`} className="bg-muted/15 border-y border-border/40">
+                                <td colSpan={12} className="px-4 py-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-base leading-none">{countryFlag}</span>
+                                    <span className="text-[11px] font-semibold text-foreground">{countryName}</span>
+                                    <span className="text-[10px] text-muted-foreground">{countryHoldings.length} stocks</span>
+                                    <span className="text-[10px] text-muted-foreground ml-1">
+                                      total weight <strong className="text-foreground font-mono">{(totalWeight * 100).toFixed(1)}%</strong>
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                            lastCountry = countryName;
+                          }
+
                         const composite = Math.round(h.compositeScore * 100);
                         const compColor =
                           composite >= 70 ? "text-emerald-400" :
@@ -499,7 +528,7 @@ export default function PortfolioBuilder() {
                           netPct != null && netPct >= 45 ? "text-amber-400" :
                           netPct != null && netPct >= 30 ? "text-orange-400" :
                                                            "text-red-400";
-                        return (
+                        rows.push(
                           <tr
                             key={h.ticker}
                             className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors ${
@@ -576,7 +605,10 @@ export default function PortfolioBuilder() {
                             </td>
                           </tr>
                         );
-                      })}
+                        }); // end holdings.forEach
+
+                        return rows;
+                      })()}
                     </tbody>
                   </table>
                 </div>

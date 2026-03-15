@@ -18,7 +18,8 @@
 import YahooFinanceClass from "yahoo-finance2";
 import { db } from "@workspace/db";
 import { companiesTable, financialMetricsTable, priceHistoryTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
+import { normaliseCountryName } from "./country-benchmarks";
 
 const yahooFinance = new (YahooFinanceClass as any)({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -322,76 +323,198 @@ export async function yfFetchAndStoreMetrics(ticker: string) {
 
 // ─── Null Field Patcher ───────────────────────────────────────────────────────
 /**
- * yfPatchNullFields() — fills null/missing fields in the latest financial_metrics
- * record for a ticker using Yahoo Finance data. Called after FMP harvest to
- * backfill any gaps (e.g. when FMP free tier omits certain fields).
+ * yfPatchNullFields() — fills null/missing fields in the MOST RECENT financial_metrics
+ * record for a ticker using Yahoo Finance data.
  *
- * Only writes fields that are currently null in the DB — never overwrites
- * existing non-null FMP values.
+ * Called PROACTIVELY at pipeline start AND after each FMP harvest — not on query.
+ * Only writes fields currently null in the DB — never overwrites existing FMP values.
+ * Also patches the company's country if it is null or needs normalisation.
  */
 export async function yfPatchNullFields(ticker: string): Promise<void> {
   try {
-    // Fetch a lightweight summary from YF
+    // Comprehensive summary fetch — more modules = more fields backfilled
     const quoteSummary = await yahooFinance.quoteSummary(ticker, {
-      modules: ["financialData", "defaultKeyStatistics", "summaryDetail"],
+      modules: [
+        "financialData",          // margins, FCF, ratios, current liquidity — very rich
+        "defaultKeyStatistics",   // P/B, PEG, EV/EBITDA, short interest, beta
+        "summaryDetail",          // trailing PE, forward PE, dividend, P/S
+        "earningsTrend",          // analyst forward estimates + revenue revision
+        "recommendationTrend",    // analyst buy/sell/hold consensus
+        "assetProfile",           // country, sector, industry (for company table)
+        "price",                  // current price, market cap, currency
+      ],
     }).catch(() => null);
 
     if (!quoteSummary) return;
 
-    const fd = quoteSummary.financialData ?? {};
-    const ks = quoteSummary.defaultKeyStatistics ?? {};
-    const sd = quoteSummary.summaryDetail ?? {};
+    const fd = quoteSummary.financialData          ?? {};
+    const ks = quoteSummary.defaultKeyStatistics    ?? {};
+    const sd = quoteSummary.summaryDetail           ?? {};
+    const ap = quoteSummary.assetProfile            ?? {};
+    const pr = quoteSummary.price                   ?? {};
+    const et = quoteSummary.earningsTrend           ?? {};
 
-    // Build a patch with only the fields we can get from YF
+    // Derive analyst consensus upside from forward earnings estimate
+    const trendList: any[] = et.trend ?? [];
+    const nextYr = trendList.find((t: any) => t.period === "+1y") ?? {};
+    const tgtPrice = n(nextYr?.earningsEstimate?.avg) ?? null;
+    const currPrice = n(fd.currentPrice) ?? n(sd.previousClose) ?? null;
+    const analystUpside = tgtPrice != null && currPrice != null && currPrice > 0
+      ? (tgtPrice - currPrice) / currPrice : null;
+
+    // Revenue + op CF for FCF-derived fields
+    const revenue    = n(fd.totalRevenue);
+    const opCF       = n(fd.operatingCashflow);
+    const fcf        = n(fd.freeCashflow);
+    const mktCap     = n(pr.marketCap) ?? n(sd.marketCap);
+    const netMargin  = n(fd.profitMargins);
+    const netIncome  = revenue != null && netMargin != null ? revenue * netMargin : null;
+    const fcfYield   = fcf != null && mktCap != null && mktCap > 0 ? fcf / mktCap : null;
+    const fcfMargin  = fcf != null && revenue != null && revenue > 0 ? fcf / revenue : null;
+    const opCfToRev  = opCF != null && revenue != null && revenue > 0 ? opCF / revenue : null;
+    const fcfToNI    = fcf != null && netIncome != null && netIncome !== 0 ? fcf / netIncome : null;
+
+    // Build comprehensive patch record
     const patch: Record<string, number | null> = {
-      revenueGrowth1y:  n(fd.revenueGrowth),
-      grossMargin:      n(fd.grossMargins),
-      operatingMargin:  n(fd.operatingMargins),
-      netMargin:        n(fd.profitMargins),
-      currentRatio:     n(fd.currentRatio),
-      quickRatio:       n(fd.quickRatio),
-      debtToEquity:     n(fd.debtToEquity),
-      roe:              n(fd.returnOnEquity),
-      roa:              n(fd.returnOnAssets),
-      dividendYield:    n(sd.dividendYield) ?? n(sd.trailingAnnualDividendYield),
-      peRatio:          n(sd.trailingPE),
-      priceToBook:      n(ks.priceToBook),
-      pegRatio:         n(ks.pegRatio),
-      evToEbitda:       n(ks.enterpriseToEbitda),
-      evToSales:        n(ks.enterpriseToRevenue),
-      forwardPe:        n(sd.forwardPE),
+      // Margins — most reliable from Yahoo Finance
+      grossMargin:            n(fd.grossMargins),
+      operatingMargin:        n(fd.operatingMargins),
+      netMargin:              netMargin,
+      fcfMargin:              fcfMargin,
+      operatingCfToRevenue:   opCfToRev,
+      fcfToNetIncome:         fcfToNI,
+
+      // Growth
+      revenueGrowth1y:        n(fd.revenueGrowth),
+      epsGrowth1y:            n(fd.earningsGrowth),
+
+      // Liquidity / leverage
+      currentRatio:           n(fd.currentRatio),
+      quickRatio:             n(fd.quickRatio),
+      debtToEquity:           n(fd.debtToEquity),
+
+      // Returns
+      roe:                    n(fd.returnOnEquity),
+      roa:                    n(fd.returnOnAssets),
+
+      // Valuation
+      peRatio:                n(sd.trailingPE),
+      forwardPe:              n(sd.forwardPE),
+      priceToBook:            n(ks.priceToBook),
+      pegRatio:               n(ks.pegRatio),
+      priceToSales:           n(sd.priceToSalesTrailing12Months),
+      evToEbitda:             n(ks.enterpriseToEbitda),
+      evToSales:              n(ks.enterpriseToRevenue),
+      fcfYield:               fcfYield,
+
+      // Income / cash flow
+      revenue:                revenue,
+      freeCashFlow:           fcf,
+      earningsYield:          n(sd.trailingPE) ? 1 / n(sd.trailingPE)! : null,
+
+      // Dividend
+      dividendYield:          n(sd.dividendYield) ?? n(sd.trailingAnnualDividendYield),
+      payoutRatio:            n(sd.payoutRatio),
+
+      // Analyst signals
+      analystUpside:          analystUpside,
+
+      // Market cap
+      marketCap:              mktCap != null ? mktCap / 1e9 : null, // store in billions
     };
 
-    // Fetch the latest metrics row for this ticker
-    const today = new Date().toISOString().split("T")[0];
-    const existing = await db
+    // ── Patch financial_metrics row (most recent, not just today) ────────────
+    const existingRows = await db
       .select()
       .from(financialMetricsTable)
-      .where(and(eq(financialMetricsTable.ticker, ticker), eq(financialMetricsTable.date, today)))
+      .where(eq(financialMetricsTable.ticker, ticker))
+      .orderBy(desc(financialMetricsTable.date))
       .limit(1);
 
-    if (!existing.length) return;
-
-    const row = existing[0] as Record<string, any>;
-
-    // Only patch fields that are currently null in the DB
-    const updates: Record<string, number | null> = {};
-    for (const [field, value] of Object.entries(patch)) {
-      if (value != null && row[field] == null) {
-        updates[field] = value;
+    if (existingRows.length > 0) {
+      const row = existingRows[0] as Record<string, any>;
+      const metricsUpdates: Record<string, number | null> = {};
+      for (const [field, value] of Object.entries(patch)) {
+        if (value != null && row[field] == null) {
+          metricsUpdates[field] = value;
+        }
+      }
+      if (Object.keys(metricsUpdates).length > 0) {
+        await db
+          .update(financialMetricsTable)
+          .set(metricsUpdates)
+          .where(eq(financialMetricsTable.id, row.id));
+        console.log(`[YF Patch] ${ticker} — backfilled ${Object.keys(metricsUpdates).length} fields from Yahoo Finance`);
       }
     }
 
-    if (Object.keys(updates).length > 0) {
-      await db
-        .update(financialMetricsTable)
-        .set(updates)
-        .where(and(eq(financialMetricsTable.ticker, ticker), eq(financialMetricsTable.date, today)));
-      console.log(`[YF Patch] ${ticker} — backfilled ${Object.keys(updates).length} null fields from Yahoo Finance`);
+    // ── Also patch company country/sector if null ────────────────────────────
+    const companyRows = await db
+      .select({ country: companiesTable.country, sector: companiesTable.sector })
+      .from(companiesTable)
+      .where(eq(companiesTable.ticker, ticker))
+      .limit(1);
+
+    if (companyRows.length > 0) {
+      const co = companyRows[0];
+      const companyUpdates: Record<string, string | null> = {};
+
+      const yfCountry = normaliseCountryName((ap as any).country as string | undefined);
+      const yfSector  = (ap as any).sector as string | undefined;
+
+      if (yfCountry && !co.country) companyUpdates.country = yfCountry;
+      // Normalise existing country values even if non-null (fixes US/GB/IL etc.)
+      else if (co.country) {
+        const normalised = normaliseCountryName(co.country);
+        if (normalised && normalised !== co.country) companyUpdates.country = normalised;
+      }
+      if (yfSector && !co.sector) companyUpdates.sector = yfSector;
+
+      if (Object.keys(companyUpdates).length > 0) {
+        await db.update(companiesTable).set(companyUpdates).where(eq(companiesTable.ticker, ticker));
+      }
     }
+
   } catch (err: any) {
     console.warn(`[YF Patch] ${ticker} — patch failed: ${err.message}`);
   }
+}
+
+// ─── Universe-wide Proactive YF Patch ────────────────────────────────────────
+/**
+ * runYfPatchUniverse() — called at pipeline start BEFORE per-ticker processing.
+ * Loops all companies and proactively backfills null fields from Yahoo Finance.
+ * This ensures scoring runs with the richest possible data without waiting for
+ * a user query to trigger the patch.
+ *
+ * Rate-limited: 300ms delay between each ticker to stay under YF limits.
+ */
+export async function runYfPatchUniverse(onProgress?: (done: number, total: number, ticker: string) => void): Promise<{ patched: number; failed: number }> {
+  const companies = await db
+    .select({ ticker: companiesTable.ticker })
+    .from(companiesTable)
+    .orderBy(companiesTable.ticker);
+
+  let patched = 0;
+  let failed  = 0;
+  const total = companies.length;
+
+  console.log(`[YF Universe Patch] Starting proactive patch for ${total} companies...`);
+
+  for (const { ticker } of companies) {
+    try {
+      await yfPatchNullFields(ticker);
+      patched++;
+    } catch {
+      failed++;
+    }
+    onProgress?.(patched + failed, total, ticker);
+    // Polite delay to avoid hitting YF rate limits
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  console.log(`[YF Universe Patch] Complete — ${patched} companies patched, ${failed} failed`);
+  return { patched, failed };
 }
 
 // ─── Price History ────────────────────────────────────────────────────────────

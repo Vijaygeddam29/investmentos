@@ -1,7 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
-import { Loader2, LayoutGrid, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Loader2, LayoutGrid, TrendingUp, TrendingDown, Minus, Globe, BarChart2 } from "lucide-react";
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  "United States": "🇺🇸", "United Kingdom": "🇬🇧", "India": "🇮🇳",
+  "Germany": "🇩🇪", "France": "🇫🇷", "Japan": "🇯🇵", "China": "🇨🇳",
+  "Netherlands": "🇳🇱", "Switzerland": "🇨🇭", "Australia": "🇦🇺",
+  "Canada": "🇨🇦", "Brazil": "🇧🇷", "Ireland": "🇮🇪", "Spain": "🇪🇸",
+  "Italy": "🇮🇹", "Taiwan": "🇹🇼", "South Korea": "🇰🇷", "Singapore": "🇸🇬",
+  "Israel": "🇮🇱", "Denmark": "🇩🇰", "Hong Kong": "🇭🇰", "Uruguay": "🇺🇾",
+};
 
 // ─── Sector Macro Context ─────────────────────────────────────────────────────
 const SECTOR_MACRO: Record<string, { outlook: string; tailwinds: string[]; headwinds: string[]; bias: "bullish" | "neutral" | "cautious" }> = {
@@ -115,7 +124,11 @@ function ScoreRow({ label, value, barColor }: { label: string; value: number | n
   );
 }
 
+type ViewMode = "sector" | "country";
+
 export default function SectorHeatmap() {
+  const [viewMode, setViewMode] = useState<ViewMode>("sector");
+
   const { data, isLoading } = useListFactorSnapshots(
     { limit: 500 },
     { query: { refetchOnWindowFocus: false } }
@@ -160,6 +173,50 @@ export default function SectorHeatmap() {
       .sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
   }, [data]);
 
+  const countries = useMemo(() => {
+    if (!data?.snapshots) return [];
+
+    const map = new Map<string, typeof data.snapshots>();
+    for (const s of data.snapshots) {
+      const key = s.country ?? "Unknown";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+
+    return Array.from(map.entries())
+      .map(([name, items]) => {
+        const fortress  = avg(items.map(i => i.fortressScore));
+        const rocket    = avg(items.map(i => i.rocketScore));
+        const wave      = avg(items.map(i => i.waveScore));
+        const momentum  = avg(items.map(i => i.momentumScore));
+        const composite = fortress != null && rocket != null && wave != null
+          ? fortress * 0.4 + rocket * 0.35 + wave * 0.25
+          : fortress ?? 0;
+        // sectors represented
+        const sectorCounts = new Map<string, number>();
+        for (const s of items) {
+          if (s.sector) sectorCounts.set(s.sector, (sectorCounts.get(s.sector) ?? 0) + 1);
+        }
+        const topSectors = Array.from(sectorCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s]) => s);
+        return {
+          name,
+          flag: COUNTRY_FLAGS[name] ?? "🌐",
+          count: items.length,
+          fortress,
+          rocket,
+          wave,
+          momentum,
+          composite,
+          topSectors,
+          topTickers: items
+            .sort((a, b) => ((b.fortressScore ?? 0) + (b.rocketScore ?? 0)) - ((a.fortressScore ?? 0) + (a.rocketScore ?? 0)))
+            .slice(0, 5)
+            .map(i => i.ticker),
+        };
+      })
+      .sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
+  }, [data]);
+
   const topSector    = sectors[0];
   const bottomSector = sectors[sectors.length - 1];
   const totalCos     = sectors.reduce((s, sec) => s + sec.count, 0);
@@ -167,9 +224,26 @@ export default function SectorHeatmap() {
   return (
     <Layout>
       <div className="max-w-[1600px] mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-display font-bold tracking-tight mb-1">Sector Heatmap</h1>
-          <p className="text-muted-foreground text-sm">Composite engine scores across all sectors. Leading sectors show the highest quality + growth + momentum mix.</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-display font-bold tracking-tight mb-1">Sector Heatmap</h1>
+            <p className="text-muted-foreground text-sm">Composite engine scores across all sectors and geographies.</p>
+          </div>
+          {/* View mode toggle */}
+          <div className="flex items-center rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setViewMode("sector")}
+              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "sector" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <BarChart2 className="w-3 h-3" />By Sector
+            </button>
+            <button
+              onClick={() => setViewMode("country")}
+              className={`text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${viewMode === "country" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Globe className="w-3 h-3" />By Country
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -181,6 +255,87 @@ export default function SectorHeatmap() {
             <LayoutGrid className="w-10 h-10 opacity-30" />
             <p>No sector data available. Run the pipeline first.</p>
           </div>
+        ) : viewMode === "country" ? (
+          <>
+            {/* Country summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-card p-4 text-center">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Countries</div>
+                <div className="text-2xl font-bold">{countries.filter(c => c.name !== "Unknown").length}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">in universe</div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4 text-center">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Companies</div>
+                <div className="text-2xl font-bold">{totalCos}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">scored</div>
+              </div>
+              <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/10 p-4 text-center">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Leading Market</div>
+                <div className="font-bold text-emerald-400 text-sm">{countries[0]?.flag} {countries[0]?.name ?? "—"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">composite {countries[0]?.composite != null ? (countries[0].composite * 100).toFixed(0) : "—"}/100</div>
+              </div>
+              <div className="rounded-xl border border-orange-500/20 bg-orange-950/10 p-4 text-center">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Lagging Market</div>
+                <div className="font-bold text-orange-400 text-sm">{countries.filter(c => c.name !== "Unknown").slice(-1)[0]?.flag} {countries.filter(c => c.name !== "Unknown").slice(-1)[0]?.name ?? "—"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">composite {countries.slice(-1)[0]?.composite != null ? (countries.slice(-1)[0].composite * 100).toFixed(0) : "—"}/100</div>
+              </div>
+            </div>
+
+            {/* Country cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {countries.filter(c => c.name !== "Unknown").map((c, rank) => {
+                const str = strengthLabel(c.composite);
+                return (
+                  <div key={c.name} className={`rounded-xl border p-4 transition-all hover:scale-[1.005] ${str.bg} ${str.border}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-mono text-muted-foreground">#{rank + 1}</span>
+                          <span className="text-xl">{c.flag}</span>
+                          <h3 className="font-semibold text-sm text-foreground">{c.name}</h3>
+                        </div>
+                        <div className="text-[9px] text-muted-foreground">{c.count} companies</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-xl font-mono font-bold ${str.color}`}>
+                          {c.composite != null ? (c.composite * 100).toFixed(0) : "—"}
+                        </div>
+                        <div className={`text-[9px] font-semibold uppercase tracking-wide ${str.color}`}>{str.label}</div>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 mb-3">
+                      <ScoreRow label="Fortress"  value={c.fortress}  barColor="bg-emerald-500" />
+                      <ScoreRow label="Rocket"    value={c.rocket}    barColor="bg-orange-500"  />
+                      <ScoreRow label="Wave"      value={c.wave}      barColor="bg-cyan-500"    />
+                      {c.momentum != null && (
+                        <ScoreRow label="Momentum" value={c.momentum} barColor="bg-violet-500"  />
+                      )}
+                    </div>
+                    {c.topTickers.length > 0 && (
+                      <div className="border-t border-white/8 pt-2.5 mb-2">
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1.5">Top picks</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {c.topTickers.map(t => (
+                            <span key={t} className="font-mono text-[10px] px-2 py-0.5 bg-black/25 rounded border border-white/10 text-foreground/80">{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {c.topSectors.length > 0 && (
+                      <div className="border-t border-white/8 pt-2.5">
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1.5">Key sectors</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {c.topSectors.map(s => (
+                            <span key={s} className="text-[9px] px-1.5 py-0.5 bg-secondary/50 rounded border border-border/30 text-muted-foreground">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <>
             {/* Summary bar */}

@@ -38,6 +38,9 @@ export const scoresTable = pgTable("scores", {
   fragilityScore: real("fragility_score"),
   portfolioNetScore: real("portfolio_net_score"),
 
+  // Country-specific benchmark group used when scoring (US | UK | India | Europe | EM)
+  countryContext: text("country_context"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

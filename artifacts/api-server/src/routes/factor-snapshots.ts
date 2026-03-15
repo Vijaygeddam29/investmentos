@@ -68,6 +68,14 @@ router.get("/factor-snapshots", async (req, res) => {
         waveDelta:              factorSnapshotsTable.waveDelta,
         entryDelta:             factorSnapshotsTable.entryDelta,
         createdAt:              factorSnapshotsTable.createdAt,
+        // 6-Layer intelligence scores
+        companyQualityScore:    factorSnapshotsTable.companyQualityScore,
+        stockOpportunityScore:  factorSnapshotsTable.stockOpportunityScore,
+        expectationScore:       factorSnapshotsTable.expectationScore,
+        mispricingScore:        factorSnapshotsTable.mispricingScore,
+        fragilityScore:         factorSnapshotsTable.fragilityScore,
+        portfolioNetScore:      factorSnapshotsTable.portfolioNetScore,
+        countryContext:         factorSnapshotsTable.countryContext,
         // Company fields
         name:                   companiesTable.name,
         sector:                 companiesTable.sector,

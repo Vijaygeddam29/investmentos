@@ -2,9 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
-  Activity, 
-  Lightbulb, 
-  AlertTriangle, 
+  Radio,
   Globe,
   Filter,
   LayoutGrid,
@@ -29,9 +27,7 @@ const navGroups = [
     label: "Research",
     items: [
       { icon: LayoutDashboard, label: "Dashboards",     href: "/" },
-      { icon: Activity,        label: "Drift Signals",  href: "/signals/drift" },
-      { icon: Lightbulb,       label: "Opportunities",  href: "/signals/opportunities" },
-      { icon: AlertTriangle,   label: "Risk Alerts",    href: "/signals/risk" },
+      { icon: Radio,           label: "Signals",         href: "/signals" },
       { icon: Globe,           label: "Universe",        href: "/universe" },
       { icon: Filter,          label: "Screener",        href: "/screener" },
       { icon: LayoutGrid,      label: "Sector Heatmap", href: "/sector-heatmap" },

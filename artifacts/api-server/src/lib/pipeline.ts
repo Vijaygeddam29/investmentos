@@ -13,7 +13,7 @@
  */
 
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
-import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices, yfPatchNullFields } from "./yf-harvester";
+import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices, yfPatchNullFields, runYfPatchUniverse } from "./yf-harvester";
 import { fmpQuotaExhausted } from "./fmp-client";
 import { calculateAllScores } from "./scoring-engines";
 import { computeEntryTimingScore } from "./entry-timing";
@@ -21,6 +21,7 @@ import { detectDrift, detectOpportunities, detectRisks } from "./detectors";
 import { generateAiMemo } from "./ai-memo";
 import { calibrateUniverseScores } from "./normalizer";
 import { writeFactorSnapshot } from "./factor-warehouse";
+import { normaliseCountryName } from "./country-benchmarks";
 import { db } from "@workspace/db";
 import { companiesTable, financialMetricsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -49,10 +50,15 @@ let currentTicker: string | null = null;
 let totalTickers = 0;
 let currentStep: string | null = null;
 let pipelineResults: PipelineTickerResult[] = [];
+let yfPatchStats: { patched: number; failed: number } | null = null;
+let stocksScored = 0;
+let fmpCount = 0;
+let yfCount = 0;
 
 interface PipelineTickerResult {
   ticker: string;
   success: boolean;
+  dataSource?: "fmp" | "yahoo";
   error?: string;
   fortressScore?: number;
   rocketScore?: number;
@@ -68,6 +74,9 @@ export function getPipelineStatus() {
     currentTicker,
     currentStep,
     totalTickers,
+    stocksScored,
+    yfPatchStats,
+    dataSourceBreakdown: { fmp: fmpCount, yahoo: yfCount },
     results: pipelineResults,
   };
 }
@@ -87,6 +96,10 @@ export async function runPipeline(tickers?: string[]) {
   currentTicker = null;
   currentStep = null;
   pipelineResults = [];
+  yfPatchStats = null;
+  stocksScored = 0;
+  fmpCount = 0;
+  yfCount = 0;
 
   const tickerList = tickers?.length
     ? tickers.map(t => t.toUpperCase().trim()).filter(Boolean)
@@ -102,32 +115,64 @@ export async function runPipeline(tickers?: string[]) {
   let failed = 0;
 
   try {
+    // ── Pre-flight: Country normalisation ────────────────────────────────────
+    currentStep = "country-normalisation";
+    console.log("[Pipeline] Pre-flight: normalising country names in companies table...");
+    const allCos = await db.select({ ticker: companiesTable.ticker, country: companiesTable.country }).from(companiesTable);
+    for (const co of allCos) {
+      if (!co.country) continue;
+      const normalised = normaliseCountryName(co.country);
+      if (normalised && normalised !== co.country) {
+        await db.update(companiesTable).set({ country: normalised }).where(eq(companiesTable.ticker, co.ticker));
+      }
+    }
+    console.log("[Pipeline] Country normalisation complete.");
+
+    // ── Pro-active Yahoo Finance null-field patch ─────────────────────────────
+    // Runs BEFORE per-ticker scoring so that scoring always has the richest data.
+    // This is called regardless of whether FMP will run — it fills gaps proactively.
+    currentStep = "yf-patch";
+    console.log("[Pipeline] Starting proactive Yahoo Finance null-field patch for all companies...");
+    yfPatchStats = await runYfPatchUniverse((done, total, ticker) => {
+      currentTicker = ticker;
+    }).catch(err => {
+      console.warn("[Pipeline] YF universe patch error:", err.message);
+      return { patched: 0, failed: 0 };
+    });
+    console.log(`[Pipeline] YF patch complete — ${yfPatchStats.patched} patched, ${yfPatchStats.failed} failed`);
+
     for (const ticker of tickerList) {
       currentTicker = ticker;
       try {
         console.log(`[Pipeline] ── ${ticker} (${processed + 1}/${tickerList.length}) ──`);
 
         currentStep = "harvesting";
+        let usedSource: "fmp" | "yahoo" = "yahoo";
         if (await needsFmpFetch(ticker)) {
           if (!fmpQuotaExhausted()) {
             try {
               await fetchAndStoreCompany(ticker);
               await fetchAndStoreMetrics(ticker);
               await fetchAndStorePrices(ticker);
-              // Patch any null fields FMP left behind (runs after FMP even on success)
+              // Patch any remaining null fields FMP left behind
               await yfPatchNullFields(ticker).catch(() => {});
+              usedSource = "fmp";
+              fmpCount++;
               console.log(`[Pipeline] ${ticker} — harvested via FMP`);
             } catch (fmpErr: any) {
               console.warn(`[Pipeline] ${ticker} — FMP failed (${fmpErr.message}), trying Yahoo Finance...`);
               await yfFetchAndStoreCompany(ticker);
               await yfFetchAndStoreMetrics(ticker);
               await yfFetchAndStorePrices(ticker);
+              usedSource = "yahoo";
+              yfCount++;
               console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
             }
           } else {
             console.log(`[Pipeline] ${ticker} — FMP quota exhausted, using Yahoo Finance...`);
             await yfFetchAndStoreCompany(ticker);
             await yfFetchAndStoreMetrics(ticker);
+            yfCount++;
             await yfFetchAndStorePrices(ticker);
             console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
           }
@@ -164,6 +209,7 @@ export async function runPipeline(tickers?: string[]) {
         pipelineResults.push({
           ticker,
           success: true,
+          dataSource: usedSource,
           fortressScore: scores.fortressScore,
           rocketScore: scores.rocketScore,
           waveScore: scores.waveScore,
@@ -171,6 +217,7 @@ export async function runPipeline(tickers?: string[]) {
         });
 
         processed++;
+        stocksScored = processed;
         tickersProcessed = processed;
         console.log(`[Pipeline] ${ticker} done — F:${scores.fortressScore} R:${scores.rocketScore} W:${scores.waveScore} Entry:${entryTimingScore.toFixed(2)}`);
       } catch (error: any) {

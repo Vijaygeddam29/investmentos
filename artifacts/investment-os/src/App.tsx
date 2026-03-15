@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 // Pages
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
-import { DriftSignals, OpportunityAlerts, RiskAlerts } from "@/pages/Signals";
+import Signals from "@/pages/Signals";
 import Universe from "@/pages/Universe";
 import Screener from "@/pages/Screener";
 import SectorHeatmap from "@/pages/SectorHeatmap";
@@ -41,9 +41,10 @@ function ProtectedRoutes() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
-      <Route path="/signals/drift" component={DriftSignals} />
-      <Route path="/signals/opportunities" component={OpportunityAlerts} />
-      <Route path="/signals/risk" component={RiskAlerts} />
+      <Route path="/signals" component={Signals} />
+      <Route path="/signals/drift" component={Signals} />
+      <Route path="/signals/opportunities" component={Signals} />
+      <Route path="/signals/risk" component={Signals} />
       <Route path="/universe" component={Universe} />
       <Route path="/screener" component={Screener} />
       <Route path="/sector-heatmap" component={SectorHeatmap} />

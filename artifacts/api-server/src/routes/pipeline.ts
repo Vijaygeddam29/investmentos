@@ -22,6 +22,9 @@ router.get("/pipeline/status", (_req, res) => {
     currentTicker: status.currentTicker ?? undefined,
     currentStep: status.currentStep ?? undefined,
     totalTickers: status.totalTickers ?? undefined,
+    stocksScored: status.stocksScored ?? undefined,
+    yfPatchStats: status.yfPatchStats ?? undefined,
+    dataSourceBreakdown: status.dataSourceBreakdown ?? undefined,
     results: status.results ?? undefined,
   });
 });

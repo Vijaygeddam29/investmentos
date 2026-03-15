@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { financialMetricsTable, priceHistoryTable, scoresTable } from "@workspace/db/schema";
+import { financialMetricsTable, priceHistoryTable, scoresTable, companiesTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { computeLeadershipSignalScore } from "./leadership-signals";
 import {
@@ -7,6 +7,7 @@ import {
   computeStockOpportunityScore,
   computeDataCoverage,
 } from "./verdict-engine";
+import { getCountryBenchmarks, type CountryBenchmarks } from "./country-benchmarks";
 
 // ─── Utility functions ─────────────────────────────────────────────────────────
 
@@ -435,21 +436,21 @@ export function scoreLeadershipConviction(ticker: string, metrics: any[]): numbe
 // ─── LAYER 3: EXPECTATION SCORE ───────────────────────────────────────────────
 // How much success is already priced in.
 // Higher = market has high expectations = LESS attractive entry (fully priced / euphoric).
-// Uses: P/E premium vs peers/history, FCF yield (inverted), margin of safety (inverted),
-//       analyst upside (inverted), EV/EBITDA, EV/Sales.
+// Uses country-specific norms: a 25× P/E is "elevated" in the UK but "moderate" in India.
 
-export function scoreExpectation(metrics: any[]): number {
+export function scoreExpectation(metrics: any[], benchmarks?: CountryBenchmarks): number {
   if (!metrics.length) return 0.5;
   const latest = metrics[0];
+  const b = benchmarks ?? getCountryBenchmarks(null);
 
   const scores = [
-    normalize(latest.peVsPeerMedian, 0.5, 2.0),         // premium vs peers = high expectation
-    normalize(latest.forwardPe, 10, 60),                 // high forward PE = priced-to-perfection
-    1 - normalize(latest.fcfYield, 0.01, 0.09),          // low yield = expensive = high expectation
-    1 - normalize(latest.marginOfSafety, -0.25, 0.35),   // low margin of safety = high expectation
-    1 - normalize(latest.analystUpside, 0, 0.40),        // low upside = mostly priced in
-    normalize(latest.evToEbitda, 5, 35),                 // high EV/EBITDA = high expectation
-    normalize(latest.evToSales, 1, 15),                  // high EV/Sales = high expectation
+    normalize(latest.peVsPeerMedian, 0.5, 2.0),                          // premium vs peers = high expectation
+    normalize(latest.forwardPe, b.forwardPeRange[0], b.forwardPeRange[1] * 1.5), // country-norm forward PE
+    1 - normalize(latest.fcfYield, b.fcfYieldAttractive, b.fcfYieldAttractive * 0.2), // low yield = expensive
+    1 - normalize(latest.marginOfSafety, -0.25, 0.35),                    // low margin of safety = high expectation
+    1 - normalize(latest.analystUpside, 0, b.analystUpsideThreshold * 2.5), // low upside = priced in
+    normalize(latest.evToEbitda, b.evEbitdaRange[0], b.evEbitdaRange[1]), // country-norm EV/EBITDA
+    normalize(latest.evToSales, b.evSalesRange[0], b.evSalesRange[1]),    // country-norm EV/Sales
   ];
 
   return avg(scores);
@@ -458,22 +459,23 @@ export function scoreExpectation(metrics: any[]): number {
 // ─── LAYER 4: MISPRICING SCORE ────────────────────────────────────────────────
 // Evidence the market is wrong — specifically, that reality will be better than priced.
 // Higher = stronger evidence of market mispricing = MORE attractive.
-// Uses: earnings surprises, insider conviction, margin recovery, analyst upside,
-//       quality-vs-price gap, FCF yield on quality, Altman Z (healthy but cheap).
+// Uses earnings surprises, insider conviction, margin recovery, analyst upside,
+// quality-vs-price gap, FCF yield (country-adjusted), Altman Z (healthy but cheap).
 
-export function scoreMispricing(metrics: any[], qualityScore = 0.5, valuationScore = 0.5): number {
+export function scoreMispricing(metrics: any[], qualityScore = 0.5, valuationScore = 0.5, benchmarks?: CountryBenchmarks): number {
   if (!metrics.length) return 0.5;
   const latest = metrics[0];
+  const b = benchmarks ?? getCountryBenchmarks(null);
 
   const scores = [
-    normalize(latest.earningsSurprises, -0.05, 0.15),       // market underestimated earnings
-    normalize(latest.insiderBuying, 0, 1),                   // insiders see undervaluation
-    normalize(latest.analystUpside, 0, 0.50),                // analysts see disconnect from fair value
-    normalize(latest.grossMarginTrend, -0.05, 0.05),         // margins recovering (trough used by mkt)
-    normalize(latest.operatingMarginTrend, -0.05, 0.05),     // improving fundamentals not repriced
-    normalize(latest.altmanZScore, 1.8, 5),                  // financially sound (false distress fear)
-    normalize(latest.fcfYield, 0.01, 0.10),                  // generates cash, not priced in
-    clamp(qualityScore + valuationScore - 0.5),              // quality not rewarded in price
+    normalize(latest.earningsSurprises, -0.05, 0.15),                              // market underestimated earnings
+    normalize(latest.insiderBuying, 0, 1),                                          // insiders see undervaluation
+    normalize(latest.analystUpside, 0, b.analystUpsideThreshold * 3),              // analysts see disconnect
+    normalize(latest.grossMarginTrend, -0.05, 0.05),                                // margins recovering
+    normalize(latest.operatingMarginTrend, -0.05, 0.05),                            // improving fundamentals not repriced
+    normalize(latest.altmanZScore, 1.8, 5),                                         // financially sound (false distress fear)
+    normalize(latest.fcfYield, b.fcfYieldAttractive * 0.25, b.fcfYieldAttractive * 2.5), // cash generator, not priced
+    clamp(qualityScore + valuationScore - 0.5),                                     // quality not rewarded in price
   ];
 
   return avg(scores);
@@ -482,20 +484,21 @@ export function scoreMispricing(metrics: any[], qualityScore = 0.5, valuationSco
 // ─── LAYER 5: FRAGILITY SCORE ─────────────────────────────────────────────────
 // How easily can the investment thesis break?
 // Higher = more fragile = thesis depends on conditions that can collapse quickly.
-// Uses: leverage, interest coverage, liquidity, margin stability, FCF conversion.
+// Uses leverage, interest coverage, liquidity, margin stability — norms are country-specific.
 
-export function scoreFragility(metrics: any[]): number {
+export function scoreFragility(metrics: any[], benchmarks?: CountryBenchmarks): number {
   if (!metrics.length) return 0.5;
   const latest = metrics[0];
+  const b = benchmarks ?? getCountryBenchmarks(null);
 
   const scores = [
-    normalize(latest.netDebtEbitda, 0, 6),             // high debt = refinancing risk
-    1 - normalize(latest.interestCoverage, 0, 20),     // low coverage = debt servicing risk
-    normalize(latest.debtToEquity, 0, 3),              // high leverage = equity fragility
-    1 - normalize(latest.currentRatio, 0.5, 3),        // illiquidity = short-term thesis risk
-    1 - stability(metrics.map(m => m.grossMargin)),    // volatile margins = uncontrollable costs
-    1 - stability(metrics.map(m => m.operatingMargin)),// earnings unpredictability
-    1 - normalize(latest.fcfToNetIncome, 0.3, 1.5),    // poor cash conversion = low earnings quality
+    normalize(latest.netDebtEbitda, 0, b.netDebtEbitdaCeiling * 1.5), // country leverage ceiling
+    1 - normalize(latest.interestCoverage, 0, b.interestCoverageFloor * 6), // country coverage floor
+    normalize(latest.debtToEquity, 0, 3),                               // high leverage = equity fragility
+    1 - normalize(latest.currentRatio, 0.5, 3),                         // illiquidity = short-term thesis risk
+    1 - stability(metrics.map(m => m.grossMargin)),                     // volatile margins = uncontrollable costs
+    1 - stability(metrics.map(m => m.operatingMargin)),                 // earnings unpredictability
+    1 - normalize(latest.fcfToNetIncome, 0.3, 1.5),                     // poor cash conversion = low earnings quality
   ];
 
   return avg(scores);
@@ -569,15 +572,25 @@ const WAVE_WEIGHTS = {
 // ─── Main scoring pipeline ─────────────────────────────────────────────────────
 
 export async function calculateAllScores(ticker: string) {
-  const metrics = await db.select().from(financialMetricsTable)
-    .where(eq(financialMetricsTable.ticker, ticker))
-    .orderBy(desc(financialMetricsTable.date))
-    .limit(5);
+  const [metricsRows, pricesRows, companyRows] = await Promise.all([
+    db.select().from(financialMetricsTable)
+      .where(eq(financialMetricsTable.ticker, ticker))
+      .orderBy(desc(financialMetricsTable.date))
+      .limit(5),
+    db.select().from(priceHistoryTable)
+      .where(eq(priceHistoryTable.ticker, ticker))
+      .orderBy(desc(priceHistoryTable.date))
+      .limit(365),
+    db.select({ country: companiesTable.country })
+      .from(companiesTable)
+      .where(eq(companiesTable.ticker, ticker))
+      .limit(1),
+  ]);
 
-  const prices = await db.select().from(priceHistoryTable)
-    .where(eq(priceHistoryTable.ticker, ticker))
-    .orderBy(desc(priceHistoryTable.date))
-    .limit(365);
+  const metrics = metricsRows;
+  const prices  = pricesRows;
+  const country = companyRows[0]?.country ?? null;
+  const benchmarks = getCountryBenchmarks(country);
 
   const profitability     = scoreProfitability(metrics);
   const growth            = scoreGrowth(metrics);
@@ -643,9 +656,9 @@ export async function calculateAllScores(ticker: string) {
   const today = new Date().toISOString().split("T")[0];
   const r = (v: number) => Math.round(v * 100) / 100;
 
-  const expectationScore  = r(scoreExpectation(metrics));
-  const mispricingScore   = r(scoreMispricing(metrics, companyQualityScore, valuation));
-  const fragilityScore    = r(scoreFragility(metrics));
+  const expectationScore  = r(scoreExpectation(metrics, benchmarks));
+  const mispricingScore   = r(scoreMispricing(metrics, companyQualityScore, valuation, benchmarks));
+  const fragilityScore    = r(scoreFragility(metrics, benchmarks));
   const portfolioNetScore = r(computePortfolioNetScore({
     companyQualityScore,
     stockOpportunityScore,
@@ -676,6 +689,7 @@ export async function calculateAllScores(ticker: string) {
     mispricingScore,
     fragilityScore,
     portfolioNetScore,
+    countryContext:         benchmarks.market, // which benchmark set was used
   };
 
   const existing = await db.select({ id: scoresTable.id, date: scoresTable.date })

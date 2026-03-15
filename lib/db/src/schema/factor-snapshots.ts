@@ -7,7 +7,7 @@
  * Pattern used by Bridgewater, Two Sigma, Renaissance etc.:
  *   nightly pipeline → factor_snapshots → instant UI reads
  */
-import { pgTable, serial, text, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, timestamp, varchar } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 
 export const factorSnapshotsTable = pgTable("factor_snapshots", {
@@ -57,6 +57,10 @@ export const factorSnapshotsTable = pgTable("factor_snapshots", {
   fragilityScore: real("fragility_score"),
   // portfolioNetScore: (2*quality + 1*opportunity + 2*mispricing - expectation - fragility) / 7
   portfolioNetScore: real("portfolio_net_score"),
+
+  // ── Country-aware scoring context ─────────────────────────────────────
+  // Which benchmark set was used when scoring (US | UK | India | Europe | EM)
+  countryContext: varchar("country_context", { length: 20 }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
