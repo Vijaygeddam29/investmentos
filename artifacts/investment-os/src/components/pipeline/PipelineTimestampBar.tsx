@@ -79,7 +79,7 @@ export function PipelineTimestampBar({ className }: { className?: string }) {
           <span className="text-border hidden sm:inline">·</span>
           <span className="flex items-center gap-1.5 text-blue-400/60">
             <Calendar className="w-3 h-3" />
-            Auto-run: <strong className="text-foreground/70 font-mono">{format(nextRun, "EEE dd MMM, HH:mm")} UTC</strong>
+            Auto-run: every Sunday · Next: <strong className="text-foreground/70 font-mono">{format(nextRun, "EEE d MMM, HH:mm")} UTC</strong>
           </span>
         </>
       )}

@@ -169,8 +169,8 @@ async function scheduledPipelineRun() {
   }
   console.log("[Scheduler] Weekly auto-run starting...");
   try {
-    await setSetting("last_auto_run", new Date().toISOString());
     await runPipeline();
+    await setSetting("last_auto_run", new Date().toISOString());
     console.log("[Scheduler] Weekly auto-run complete — sending email report...");
     await sendWeeklyEmails();
   } catch (err) {
@@ -189,14 +189,17 @@ app.listen(port, () => {
   setTimeout(async () => {
     try {
       const lastRun = await getSetting("last_auto_run");
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
       if (!lastRun) {
-        console.log("[Scheduler] No previous auto-run recorded, skipping startup run");
+        console.log("[Scheduler] No previous auto-run found — triggering initial pipeline run...");
+        scheduledPipelineRun().catch(console.error);
         return;
       }
+
       const age = Date.now() - new Date(lastRun).getTime();
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
       if (age > SEVEN_DAYS) {
-        console.log("[Scheduler] Last auto-run was >7 days ago, triggering pipeline...");
+        console.log(`[Scheduler] Last auto-run was ${Math.round(age / 3600000)}h ago (>7 days) — triggering pipeline...`);
         scheduledPipelineRun().catch(console.error);
       } else {
         console.log(`[Scheduler] Last auto-run was ${Math.round(age / 3600000)}h ago — next scheduled: ${getNextSundayAt2AM().toISOString()}`);
