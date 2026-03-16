@@ -16,9 +16,10 @@ interface CompanyTableProps {
   data: ScoreItem[];
   isLoading: boolean;
   defaultSortBy?: string;
+  emptyMessage?: { title: string; hint: string };
 }
 
-export function CompanyTable({ data, isLoading, defaultSortBy = "fortressScore" }: CompanyTableProps) {
+export function CompanyTable({ data, isLoading, defaultSortBy = "fortressScore", emptyMessage }: CompanyTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: defaultSortBy, desc: true }]);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
 
@@ -164,9 +165,12 @@ export function CompanyTable({ data, isLoading, defaultSortBy = "fortressScore" 
   }
 
   if (data.length === 0) {
+    const title = emptyMessage?.title ?? "No companies found for this view.";
+    const hint = emptyMessage?.hint;
     return (
-      <div className="py-12 text-center border border-dashed border-border rounded-xl bg-card/30">
-        <p className="text-muted-foreground">No companies found for this view.</p>
+      <div className="py-12 text-center border border-dashed border-border rounded-xl bg-card/30 space-y-2">
+        <p className="text-muted-foreground font-medium">{title}</p>
+        {hint && <p className="text-sm text-muted-foreground/70 max-w-md mx-auto">{hint}</p>}
       </div>
     );
   }

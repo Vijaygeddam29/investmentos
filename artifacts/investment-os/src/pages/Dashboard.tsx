@@ -51,6 +51,33 @@ export default function Dashboard() {
   const RegimeIcon = regimeCfg.icon;
   const alerts = alertsData?.alerts ?? [];
 
+  function emptyMsg(engine: "fortress" | "rocket" | "wave"): { title: string; hint: string } {
+    if (capTier === "small") {
+      if (engine === "fortress") return {
+        title: "No small-cap stocks meet the Fortress quality threshold.",
+        hint: "Fortress requires sustained profitability, strong cash flow and low debt — rare among companies under $2B. Try the Rocket or Wave tabs for small-cap opportunities.",
+      };
+      if (engine === "rocket") return {
+        title: "No small-cap Rocket candidates right now.",
+        hint: "Rocket looks for high-growth momentum. Check back after the next weekly rescore, or switch to Wave for technical signals.",
+      };
+      return {
+        title: "No small-cap Wave signals at this time.",
+        hint: "Wave scans for near-term technical momentum. The current market may favour larger-cap names — try 'All Caps' to broaden the search.",
+      };
+    }
+    if (capTier === "mid") {
+      if (engine === "fortress") return {
+        title: "Very few mid-cap Fortress stocks qualify.",
+        hint: "Only companies with consistently high ROIC, strong free cash flow, and a clean balance sheet clear the Fortress bar. Broaden to 'All Caps' to include large-cap leaders.",
+      };
+    }
+    return {
+      title: "No companies found for this view.",
+      hint: "Try adjusting the cap-size filter or switching strategy engines.",
+    };
+  }
+
   function handleTickerClick(ticker: string) {
     setSelectedTicker(ticker);
     setDrawerOpen(true);
@@ -123,7 +150,7 @@ export default function Dashboard() {
                 Scores heavily weight Profitability (30%) and Capital Efficiency (20%).
               </div>
             </div>
-            <CompanyTable data={fortressData?.scores || []} isLoading={fLoading} defaultSortBy="fortressScore" />
+            <CompanyTable data={fortressData?.scores || []} isLoading={fLoading} defaultSortBy="fortressScore" emptyMessage={emptyMsg("fortress")} />
           </TabsContent>
 
           <TabsContent value="rocket" className="m-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -135,7 +162,7 @@ export default function Dashboard() {
                 Scores heavily weight Growth (30%) and Innovation (30%).
               </div>
             </div>
-            <CompanyTable data={rocketData?.scores || []} isLoading={rLoading} defaultSortBy="rocketScore" />
+            <CompanyTable data={rocketData?.scores || []} isLoading={rLoading} defaultSortBy="rocketScore" emptyMessage={emptyMsg("rocket")} />
           </TabsContent>
 
           <TabsContent value="wave" className="m-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -147,7 +174,7 @@ export default function Dashboard() {
                 Scores heavily weight Market Momentum (40%) and Valuation (30%).
               </div>
             </div>
-            <CompanyTable data={waveData?.scores || []} isLoading={wLoading} defaultSortBy="waveScore" />
+            <CompanyTable data={waveData?.scores || []} isLoading={wLoading} defaultSortBy="waveScore" emptyMessage={emptyMsg("wave")} />
           </TabsContent>
         </Tabs>
 
