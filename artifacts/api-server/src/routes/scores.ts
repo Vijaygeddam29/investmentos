@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable, factorSnapshotsTable } from "@workspace/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable, factorSnapshotsTable, priceHistoryTable } from "@workspace/db/schema";
+import { eq, desc, asc, gte, and } from "drizzle-orm";
 
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 import { compounderRating } from "../lib/scoring-engines";
@@ -265,6 +265,34 @@ router.get("/scores/:ticker/history", async (req, res) => {
     }));
 
     res.json({ ticker: ticker.toUpperCase(), history, count: history.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GET /api/prices/:ticker?days=180 ────────────────────────────────────────
+router.get("/prices/:ticker", async (req, res) => {
+  try {
+    const ticker = req.params.ticker.toUpperCase();
+    const days   = Math.min(parseInt((req.query.days as string) ?? "180", 10) || 180, 760);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const prices = await db
+      .select({
+        date:   priceHistoryTable.date,
+        open:   priceHistoryTable.open,
+        high:   priceHistoryTable.high,
+        low:    priceHistoryTable.low,
+        close:  priceHistoryTable.close,
+        volume: priceHistoryTable.volume,
+      })
+      .from(priceHistoryTable)
+      .where(and(eq(priceHistoryTable.ticker, ticker), gte(priceHistoryTable.date, cutoffStr)))
+      .orderBy(asc(priceHistoryTable.date));
+
+    res.json({ ticker, prices, count: prices.length });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -456,7 +456,7 @@ function MomentumView({ snaps, onOpenDrawer }: {
         return true;
       })
       .map(s => ({ s, sig: momentumSignals(s) }))
-      .filter(({ sig }) => sig.count >= 2 && (s.momentumScore != null && s.momentumScore * 100 >= minMom))
+      .filter(({ s, sig }) => sig.count >= 2 && (s.momentumScore != null && s.momentumScore * 100 >= minMom))
       .sort((a, b) => (b.sig.count - a.sig.count) || ((b.s.momentumScore ?? 0) - (a.s.momentumScore ?? 0)))
       .slice(0, 60);
   }, [snaps, capFilter, minMom]);

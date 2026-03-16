@@ -26,8 +26,8 @@ import {
   BookOpen, LineChart as LineChartIcon,
 } from "lucide-react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip,
-  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartTooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -908,15 +908,24 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
   const ticker = snapshot?.ticker;
   const [activeTab, setActiveTab] = useState<"analysis" | "narrative" | "chart">("analysis");
 
-  const { data: historyData, isLoading: historyLoading } = useQuery<{ ticker: string; history: any[]; count: number }>({
-    queryKey: ["score-history", ticker],
+  interface PricePoint { date: string; open: number | null; high: number | null; low: number | null; close: number | null; volume: number | null; sma20?: number | null; sma50?: number | null; }
+  const { data: priceData, isLoading: priceLoading } = useQuery<{ ticker: string; prices: PricePoint[]; count: number }>({
+    queryKey: ["price-history", ticker],
     queryFn: async () => {
-      const r = await fetch(`/api/scores/${ticker}/history?limit=30`);
-      if (!r.ok) throw new Error("history fetch failed");
+      const r = await fetch(`/api/prices/${ticker}?days=180`);
+      if (!r.ok) throw new Error("price fetch failed");
       return r.json();
     },
     enabled: !!ticker && open && activeTab === "chart",
     staleTime: 10 * 60_000,
+  });
+
+  const { data: chartNarrative } = useQuery<NarrativeResponse>({
+    queryKey: ["intelligence-narrative", ticker],
+    queryFn: () => customFetch(`/api/intelligence/${ticker}/narrative`),
+    enabled: !!ticker && open && activeTab === "chart",
+    staleTime: 30 * 60_000,
+    retry: false,
   });
 
   const { data, isLoading } = useQuery<IntelligenceDetail>({
@@ -1027,177 +1036,278 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
         )}
 
         {/* ── Chart tab ── */}
-        {activeTab === "chart" && (
-          <div className="px-5 py-5 space-y-6">
-            {historyLoading && (
-              <div className="flex items-center justify-center h-48 gap-3">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Loading score history…</span>
+        {activeTab === "chart" && (() => {
+          // ── SMA helper ──────────────────────────────────────────────────────
+          function sma(arr: (number | null)[], w: number): (number | null)[] {
+            return arr.map((_, i) => {
+              if (i < w - 1) return null;
+              const slice = arr.slice(i - w + 1, i + 1);
+              if (slice.some(v => v == null)) return null;
+              return Math.round((slice.reduce((s, v) => s + (v ?? 0), 0) / w) * 100) / 100;
+            });
+          }
+
+          const rawPrices = priceData?.prices ?? [];
+          const closes    = rawPrices.map(p => p.close);
+          const sma20arr  = sma(closes, 20);
+          const sma50arr  = sma(closes, 50);
+
+          const chartData = rawPrices.map((p, i) => ({
+            date:  p.date,
+            close: p.close != null ? Math.round(p.close * 100) / 100 : null,
+            sma20: sma20arr[i],
+            sma50: sma50arr[i],
+          }));
+
+          const currentPrice  = closes.filter(v => v != null).slice(-1)[0] ?? null;
+          const mos           = snapshot?.marginOfSafety ?? null;
+          const fairValue     = currentPrice != null && mos != null ? Math.round(currentPrice * (1 + mos) * 100) / 100 : null;
+
+          const allCloses     = closes.filter((v): v is number => v != null);
+          const w52High       = allCloses.length ? Math.max(...allCloses) : null;
+          const w52Low        = allCloses.length ? Math.min(...allCloses) : null;
+          const priceRange    = w52High != null && w52Low != null ? [w52Low * 0.97, w52High * 1.03] : ["auto", "auto"];
+
+          // ── Score labels ─────────────────────────────────────────────────────
+          const scoreCards = [
+            { label: "Quality",     code: "Q", score: Q, color: "emerald", desc: Q == null ? null : Q >= 75 ? "Exceptional business quality — high ROIC, durable margins and clean balance sheet." : Q >= 60 ? "Above-average fundamentals with consistent profitability and capital returns." : Q >= 45 ? "Adequate quality with some mixed signals in margins or return metrics." : "Quality concerns — weak profitability or capital efficiency warrants caution." },
+            { label: "Opportunity", code: "O", score: O, color: "blue",    desc: O == null ? null : O >= 70 ? "Compelling stock setup — strong momentum, positive revisions, attractive entry." : O >= 50 ? "Reasonable opportunity with selective positive signals." : O >= 35 ? "Limited upside catalysts visible; setup is neutral." : "Poor stock opportunity — momentum is weak and signals are unfavourable." },
+            { label: "Mispricing",  code: "M", score: M, color: "amber",   desc: M == null ? null : M >= 70 ? "Significant undervaluation — FCF yield and margin of safety suggest deep discount." : M >= 50 ? "Moderate mispricing — some valuation gap present." : M >= 35 ? "Near fair value; limited margin of safety available." : "Stock appears fully or over-valued relative to fundamentals." },
+            { label: "Expectation", code: "E", score: E, color: "orange",  desc: E == null ? null : E >= 70 ? "High expectations priced in — elevated multiples compress future return potential." : E >= 50 ? "Moderate expectations; market is optimistic but not extreme." : E >= 35 ? "Reasonable expectations — room for positive surprises." : "Low expectations — contrarian upside if fundamentals recover." },
+            { label: "Fragility",   code: "F", score: F, color: "red",     desc: F == null ? null : F >= 70 ? "Elevated fragility — balance sheet stress, high short interest or cash flow risk." : F >= 50 ? "Some fragility factors present; thesis has identifiable risks." : F >= 35 ? "Manageable risks — thesis is broadly intact." : "Low fragility — resilient business with few structural vulnerabilities." },
+          ];
+
+          const n = chartNarrative?.narrative;
+          const thesisColors: Record<string, string> = {
+            "Compounder":                   "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+            "Quality at Reasonable Price":  "bg-blue-500/15 text-blue-400 border-blue-500/30",
+            "Turnaround":                   "bg-amber-500/15 text-amber-400 border-amber-500/30",
+            "Expectation Reset":            "bg-orange-500/15 text-orange-400 border-orange-500/30",
+            "Mispriced Optionality":        "bg-violet-500/15 text-violet-400 border-violet-500/30",
+            "Cyclical Recovery":            "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+            "Tactical Rebound":             "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+            "Overhyped Quality":            "bg-red-500/15 text-red-400 border-red-500/30",
+            "Value Trap Risk":              "bg-red-500/15 text-red-400 border-red-500/30",
+          };
+          const verdictColors: Record<string, string> = {
+            "Build": "text-emerald-400", "Add": "text-blue-400", "Starter": "text-amber-400",
+            "Hold": "text-muted-foreground", "Watch": "text-orange-400", "Trim": "text-orange-400", "Avoid": "text-red-400",
+          };
+          const colorMap: Record<string, string> = { emerald: "text-emerald-400", blue: "text-blue-400", amber: "text-amber-400", orange: "text-orange-400", red: "text-red-400" };
+          const bgMap:    Record<string, string> = { emerald: "border-emerald-500/20 bg-emerald-950/10", blue: "border-blue-500/20 bg-blue-950/10", amber: "border-amber-500/20 bg-amber-950/10", orange: "border-orange-500/20 bg-orange-950/10", red: "border-red-500/20 bg-red-950/10" };
+
+          return (
+            <div className="px-5 py-5 space-y-5">
+
+              {/* ── Price Chart ─────────────────────────────────────────── */}
+              <div className="rounded-xl border border-border bg-card/50 p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <LineChartIcon className="w-3.5 h-3.5 text-violet-400" />
+                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Price Chart — 6 Months</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground/60">
+                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-yellow-400 inline-block rounded" />20d SMA</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-orange-400 inline-block rounded" />50d SMA</span>
+                    {fairValue != null && <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-emerald-400 inline-block rounded border-dashed" />Fair Value</span>}
+                  </div>
+                </div>
+
+                {priceLoading && (
+                  <div className="flex items-center justify-center h-52 gap-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Loading price data…</span>
+                  </div>
+                )}
+
+                {!priceLoading && chartData.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-52 text-muted-foreground gap-2">
+                    <LineChartIcon className="w-7 h-7 opacity-25" />
+                    <p className="text-xs">No price data available for this ticker.</p>
+                  </div>
+                )}
+
+                {!priceLoading && chartData.length > 0 && (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.35} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
+                        tickFormatter={(d: string) => {
+                          if (!d) return "";
+                          const [, m, day] = d.split("-");
+                          return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m)-1]} ${parseInt(day)}`;
+                        }}
+                        interval={Math.floor(chartData.length / 5)}
+                      />
+                      <YAxis
+                        domain={priceRange as any}
+                        tick={{ fill: "#6b7280", fontSize: 9 }}
+                        tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+                        width={42}
+                      />
+                      <RechartTooltip
+                        contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                        labelStyle={{ color: "#9ca3af", fontFamily: "monospace", fontSize: 10 }}
+                        formatter={(value: any, name: string) => [`$${Number(value).toFixed(2)}`, name]}
+                      />
+                      {/* 52-week bands */}
+                      {w52High != null && <ReferenceLine y={w52High} stroke="#6b7280" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: "52W High", position: "insideTopRight", fill: "#6b7280", fontSize: 8 }} />}
+                      {w52Low  != null && <ReferenceLine y={w52Low}  stroke="#6b7280" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: "52W Low",  position: "insideBottomRight", fill: "#6b7280", fontSize: 8 }} />}
+                      {/* Fair value projection */}
+                      {fairValue != null && (
+                        <ReferenceLine
+                          y={fairValue}
+                          stroke="#10b981"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                          strokeOpacity={0.8}
+                          label={{ value: `Fair Value $${fairValue.toFixed(0)}`, position: "insideTopLeft", fill: "#10b981", fontSize: 8 }}
+                        />
+                      )}
+                      <Area type="monotone" dataKey="close" name="Price" stroke="#8b5cf6" strokeWidth={2} fill="url(#priceGrad)" dot={false} connectNulls />
+                      <Line type="monotone" dataKey="sma20" name="20d SMA" stroke="#facc15" strokeWidth={1.5} dot={false} connectNulls strokeOpacity={0.85} />
+                      <Line type="monotone" dataKey="sma50" name="50d SMA" stroke="#fb923c" strokeWidth={1.5} dot={false} connectNulls strokeOpacity={0.85} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )}
+
+                {/* Current price vs fair value summary */}
+                {currentPrice != null && (
+                  <div className="mt-3 flex items-center gap-4 flex-wrap text-[10px] font-mono text-muted-foreground border-t border-border/40 pt-3">
+                    <span>Current <span className="text-foreground font-bold">${currentPrice.toFixed(2)}</span></span>
+                    {w52High != null && <span>52W High <span className="text-foreground">${w52High.toFixed(2)}</span></span>}
+                    {w52Low  != null && <span>52W Low  <span className="text-foreground">${w52Low.toFixed(2)}</span></span>}
+                    {fairValue != null && (
+                      <span className={mos! >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        Fair Value <span className="font-bold">${fairValue.toFixed(2)}</span>
+                        {" "}({mos! >= 0 ? "+" : ""}{Math.round(mos! * 100)}% MoS)
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
 
-            {!historyLoading && (!historyData || historyData.count === 0) && (
-              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
-                <LineChartIcon className="w-8 h-8 opacity-30" />
-                <p className="text-sm">No historical snapshots yet. Run the pipeline to collect data.</p>
+              {/* ── Q / O / M / E / F Score Snapshot ────────────────────── */}
+              <div className="rounded-xl border border-border bg-card/50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-3.5 h-3.5 text-violet-400" />
+                  <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Intelligence Snapshot</span>
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {scoreCards.map(({ label, code, score, color, desc }) => (
+                    <div key={code} className={`rounded-lg border p-2.5 ${bgMap[color]}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[9px] font-mono font-bold uppercase ${colorMap[color]}`}>{code}</span>
+                        <span className={`text-sm font-bold font-mono ${colorMap[color]}`}>{score ?? "—"}</span>
+                      </div>
+                      <div className="text-[9px] text-muted-foreground/70 leading-snug">{label}</div>
+                      {(code === "E" || code === "F") && score != null && (
+                        <div className="text-[8px] text-muted-foreground/40 mt-0.5 font-mono">lower = better</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {scoreCards.some(c => c.desc != null) && (
+                  <div className="mt-3 space-y-1.5">
+                    {scoreCards.filter(c => c.desc).map(({ code, label, color, desc }) => (
+                      <div key={code} className="flex gap-2 text-[10px] leading-relaxed">
+                        <span className={`font-bold font-mono shrink-0 ${colorMap[color]}`}>{code}</span>
+                        <span className="text-muted-foreground/80">{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
 
-            {historyData && historyData.count > 0 && (() => {
-              const history = historyData.history;
-              const latestMoS = history[history.length - 1]?.marginOfSafety;
-
-              return (
-                <>
-                  {/* ── Model 2: Net Score Trend ─────────────────── */}
-                  <div className="rounded-xl border border-border bg-card/50 p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <LineChartIcon className="w-3.5 h-3.5 text-violet-400" />
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Net Score Trend</span>
-                      <span className="text-[10px] text-muted-foreground/50 ml-1">with band zones</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
-                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis
-                          domain={[0, 100]}
-                          tick={{ fill: "#6b7280", fontSize: 9 }}
-                          ticks={[0, 30, 45, 60, 75, 100]}
-                        />
-                        <RechartTooltip
-                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
-                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
-                          formatter={(value: any, name: string) => [`${value}`, name]}
-                        />
-                        {/* Band zone shading */}
-                        <ReferenceArea y1={75} y2={100} fill="#10b981" fillOpacity={0.06} label={{ value: "CORE", position: "insideTopRight", fill: "#10b981", fontSize: 9 }} />
-                        <ReferenceArea y1={60} y2={75}  fill="#3b82f6" fillOpacity={0.05} label={{ value: "STANDARD", position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
-                        <ReferenceArea y1={45} y2={60}  fill="#f59e0b" fillOpacity={0.05} label={{ value: "STARTER", position: "insideTopRight", fill: "#f59e0b", fontSize: 9 }} />
-                        <ReferenceArea y1={30} y2={45}  fill="#f97316" fillOpacity={0.05} label={{ value: "TACTICAL", position: "insideTopRight", fill: "#f97316", fontSize: 9 }} />
-                        <ReferenceLine y={75} stroke="#10b981" strokeDasharray="3 3" strokeOpacity={0.5} />
-                        <ReferenceLine y={60} stroke="#3b82f6" strokeDasharray="3 3" strokeOpacity={0.4} />
-                        <ReferenceLine y={45} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.4} />
-                        <ReferenceLine y={30} stroke="#f97316" strokeDasharray="3 3" strokeOpacity={0.4} />
-                        <Line
-                          type="monotone" dataKey="netScore" name="Net Score"
-                          stroke="#8b5cf6" strokeWidth={2} dot={false}
-                          connectNulls
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+              {/* ── Narrative Intelligence ──────────────────────────────── */}
+              {n ? (
+                <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Investment Thesis</span>
                   </div>
 
-                  {/* ── Model 1: Fortress / Rocket / Wave ──────────── */}
-                  <div className="rounded-xl border border-border bg-card/50 p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Model 1 Scores</span>
-                      <span className="text-[10px] text-muted-foreground/50 ml-1">Fortress · Rocket · Wave</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
-                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 9 }} ticks={[0, 25, 50, 75, 100]} />
-                        <RechartTooltip
-                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
-                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
-                        <Line type="monotone" dataKey="fortressScore" name="Fortress" stroke="#10b981" strokeWidth={1.5} dot={false} connectNulls />
-                        <Line type="monotone" dataKey="rocketScore"   name="Rocket"   stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls />
-                        <Line type="monotone" dataKey="waveScore"     name="Wave"     stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* ── Model 2: Q / O / M / E / F ─────────────────── */}
-                  <div className="rounded-xl border border-border bg-card/50 p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Brain className="w-3.5 h-3.5 text-violet-400" />
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Intelligence Components</span>
-                      <span className="text-[10px] text-muted-foreground/50 ml-1">Q · O · M · E · F</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
-                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 9 }} ticks={[0, 25, 50, 75, 100]} />
-                        <RechartTooltip
-                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
-                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
-                        <Line type="monotone" dataKey="qualityScore"     name="Quality"     stroke="#10b981" strokeWidth={1.5} dot={false} connectNulls />
-                        <Line type="monotone" dataKey="opportunityScore" name="Opportunity" stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
-                        <Line type="monotone" dataKey="mispricingScore"  name="Mispricing"  stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls />
-                        <Line type="monotone" dataKey="expectationScore" name="Expectation" stroke="#f97316" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 2" />
-                        <Line type="monotone" dataKey="fragilityScore"   name="Fragility"   stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 2" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <p className="text-[9px] text-muted-foreground/50 mt-1 font-mono">Dashed lines (E, F) are penalty scores — lower is better</p>
-                  </div>
-
-                  {/* ── Margin of Safety Gauge ────────────────────── */}
-                  {latestMoS != null && (
-                    <div className="rounded-xl border border-border bg-card/50 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Target className="w-3.5 h-3.5 text-amber-400" />
-                        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Margin of Safety</span>
+                  {/* Thesis type + verdict + core tension */}
+                  <div className="flex items-start gap-3">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${thesisColors[n.thesis_type] ?? "bg-secondary text-muted-foreground border-border/50"}`}>{n.thesis_type}</span>
+                        <span className={`text-base font-bold font-mono ${verdictColors[n.verdict] ?? "text-muted-foreground"}`}>{n.verdict}</span>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <div className="h-3 w-full bg-muted/30 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                latestMoS >= 0.3 ? "bg-emerald-500" : latestMoS >= 0.15 ? "bg-amber-500" : latestMoS >= 0 ? "bg-orange-500" : "bg-red-500"
-                              }`}
-                              style={{ width: `${Math.min(Math.max(latestMoS * 100 + 50, 0), 100)}%` }}
-                            />
+                      {n.one_line_verdict && (
+                        <p className="text-[11px] text-foreground/90 font-medium">{n.one_line_verdict}</p>
+                      )}
+                      {n.core_tension && (
+                        <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed">"{n.core_tension}"</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Why it could work / why not */}
+                  {(n.why_could_work || n.why_may_not_work) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {n.why_could_work && (
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <TrendingUp className="w-3 h-3 text-emerald-400" />
+                            <span className="text-[9px] font-mono text-emerald-400 uppercase font-semibold">Why it could work</span>
                           </div>
-                          <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-1 font-mono">
-                            <span>−50% (overvalued)</span>
-                            <span>Fair value</span>
-                            <span>+50% (deep value)</span>
-                          </div>
+                          <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{n.why_could_work}</p>
                         </div>
-                        <div className="text-right shrink-0">
-                          <div className={`text-2xl font-bold font-mono ${
-                            latestMoS >= 0.3 ? "text-emerald-400" : latestMoS >= 0.15 ? "text-amber-400" : latestMoS >= 0 ? "text-orange-400" : "text-red-400"
-                          }`}>
-                            {latestMoS >= 0 ? "+" : ""}{Math.round(latestMoS * 100)}%
+                      )}
+                      {n.why_may_not_work && (
+                        <div className="rounded-lg border border-red-500/20 bg-red-950/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <TrendingDown className="w-3 h-3 text-red-400" />
+                            <span className="text-[9px] font-mono text-red-400 uppercase font-semibold">Why it may not</span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">vs intrinsic value</div>
-                          <div className={`text-[10px] font-semibold mt-0.5 ${
-                            latestMoS >= 0.3 ? "text-emerald-400" : latestMoS >= 0.15 ? "text-amber-400" : latestMoS >= 0 ? "text-orange-400" : "text-red-400"
-                          }`}>
-                            {latestMoS >= 0.3 ? "Strong Discount" : latestMoS >= 0.15 ? "Moderate Discount" : latestMoS >= 0 ? "Slight Discount" : "Premium to Value"}
-                          </div>
+                          <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{n.why_may_not_work}</p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
-                </>
-              );
-            })()}
-          </div>
-        )}
+
+                  {/* Action triggers */}
+                  {(n.buy_trigger || n.trim_trigger) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {n.buy_trigger && (
+                        <div className="rounded-lg border border-blue-500/20 bg-blue-950/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <Zap className="w-3 h-3 text-blue-400" />
+                            <span className="text-[9px] font-mono text-blue-400 uppercase font-semibold">Buy trigger</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{n.buy_trigger}</p>
+                        </div>
+                      )}
+                      {n.trim_trigger && (
+                        <div className="rounded-lg border border-orange-500/20 bg-orange-950/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <ShieldAlert className="w-3 h-3 text-orange-400" />
+                            <span className="text-[9px] font-mono text-orange-400 uppercase font-semibold">Trim trigger</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{n.trim_trigger}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border/50 bg-card/30 p-4 text-center">
+                  <Sparkles className="w-5 h-5 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground/60">Open the Narrative tab to generate the full investment thesis — it will appear here automatically once cached.</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Analysis tab ── */}
         {activeTab === "analysis" && isLoading && !data && (
