@@ -1,9 +1,10 @@
 import app from "./app";
 import cron from "node-cron";
-import { runPipeline, isPipelineRunning } from "./lib/pipeline";
+import { runPipeline, isPipelineRunning, getPipelineStatus } from "./lib/pipeline";
+import { sendPipelineReport, sendSignalAlert } from "./lib/mailer";
 import { db } from "@workspace/db";
-import { settingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
+import { eq, desc, gte } from "drizzle-orm";
 
 const rawPort = process.env["PORT"];
 
@@ -41,6 +42,126 @@ function getNextSundayAt2AM(): Date {
   return d;
 }
 
+async function sendWeeklyEmails(): Promise<void> {
+  try {
+    const status = getPipelineStatus();
+    const today = new Date().toISOString().slice(0, 10);
+
+    const topFortress = await db
+      .select({
+        ticker: scoresTable.ticker,
+        company: companiesTable.name,
+        fortressScore: scoresTable.fortressScore,
+        rocketScore: scoresTable.rocketScore,
+        waveScore: scoresTable.waveScore,
+      })
+      .from(scoresTable)
+      .leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
+      .where(eq(scoresTable.date, today))
+      .orderBy(desc(scoresTable.fortressScore))
+      .limit(8);
+
+    const topRocket = await db
+      .select({
+        ticker: scoresTable.ticker,
+        company: companiesTable.name,
+        fortressScore: scoresTable.fortressScore,
+        rocketScore: scoresTable.rocketScore,
+        waveScore: scoresTable.waveScore,
+      })
+      .from(scoresTable)
+      .leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
+      .where(eq(scoresTable.date, today))
+      .orderBy(desc(scoresTable.rocketScore))
+      .limit(8);
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const opportunities = await db
+      .select({
+        ticker: opportunityAlertsTable.ticker,
+        alertType: opportunityAlertsTable.alertType,
+        score: opportunityAlertsTable.score,
+      })
+      .from(opportunityAlertsTable)
+      .where(gte(opportunityAlertsTable.date, cutoffStr))
+      .orderBy(desc(opportunityAlertsTable.score))
+      .limit(10);
+
+    const riskSignals = await db
+      .select({
+        ticker: riskAlertsTable.ticker,
+        riskLevel: riskAlertsTable.riskLevel,
+        description: riskAlertsTable.description,
+        activeSignalCount: riskAlertsTable.activeSignalCount,
+      })
+      .from(riskAlertsTable)
+      .where(gte(riskAlertsTable.date, cutoffStr))
+      .orderBy(desc(riskAlertsTable.createdAt))
+      .limit(10);
+
+    const nextDate = getNextSundayAt2AM().toUTCString().replace(" GMT", " UTC");
+
+    await sendPipelineReport({
+      processed: status.tickersProcessed ?? 0,
+      failed: status.lastRunFailed,
+      updated: status.lastRunUpdated,
+      fmpCount: status.dataSourceBreakdown?.fmp ?? 0,
+      yahooCount: status.dataSourceBreakdown?.yahoo ?? 0,
+      nextRunDate: nextDate,
+      topFortress: topFortress.map(r => ({
+        ticker: r.ticker,
+        company: r.company ?? undefined,
+        fortressScore: r.fortressScore,
+        rocketScore: r.rocketScore,
+        waveScore: r.waveScore,
+      })),
+      topRocket: topRocket.map(r => ({
+        ticker: r.ticker,
+        company: r.company ?? undefined,
+        fortressScore: r.fortressScore,
+        rocketScore: r.rocketScore,
+        waveScore: r.waveScore,
+      })),
+      newOpportunities: opportunities.map(o => ({
+        ticker: o.ticker,
+        alertType: o.alertType,
+        score: o.score ?? 0,
+      })),
+      highRisk: riskSignals.map(r => ({
+        ticker: r.ticker,
+        signalType: r.riskLevel.toUpperCase(),
+        severity: r.riskLevel,
+        description: r.description,
+      })),
+    });
+
+    const signalAlerts: Parameters<typeof sendSignalAlert>[0] = [
+      ...opportunities.slice(0, 5).map(o => ({
+        ticker: o.ticker,
+        type: "opportunity" as const,
+        title: o.alertType,
+        detail: `Score crossed threshold`,
+        score: o.score ?? undefined,
+      })),
+      ...riskSignals.slice(0, 5).map(r => ({
+        ticker: r.ticker,
+        type: "risk" as const,
+        title: r.riskLevel.toUpperCase(),
+        detail: r.description,
+      })),
+    ];
+
+    if (signalAlerts.length > 0) {
+      await sendSignalAlert(signalAlerts);
+    }
+  } catch (err) {
+    console.error("[Mailer] Failed to send weekly emails:", err);
+  }
+}
+
 async function scheduledPipelineRun() {
   if (isPipelineRunning()) {
     console.log("[Scheduler] Pipeline already running, skipping scheduled run");
@@ -50,7 +171,8 @@ async function scheduledPipelineRun() {
   try {
     await setSetting("last_auto_run", new Date().toISOString());
     await runPipeline();
-    console.log("[Scheduler] Weekly auto-run complete");
+    console.log("[Scheduler] Weekly auto-run complete — sending email report...");
+    await sendWeeklyEmails();
   } catch (err) {
     console.error("[Scheduler] Weekly auto-run failed:", err);
   }
