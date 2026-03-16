@@ -12,4 +12,5 @@ export * from "./score-alerts";
 export * from "./value-chains";
 export * from "./users";
 export * from "./otp-codes";
+export * from "./settings";
 export type { RiskAlert } from "./signals";

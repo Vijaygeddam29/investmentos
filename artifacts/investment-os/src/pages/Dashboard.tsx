@@ -5,6 +5,7 @@ import { CompanyTable } from "@/components/dashboard/CompanyTable";
 import { TopMovers } from "@/components/dashboard/TopMovers";
 import { useListScores, useGetMarketRegime, useListAlerts, ListScoresEngine, ListScoresCapTier } from "@workspace/api-client-react";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
+import { useAuth } from "@/contexts/AuthContext";
 import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -35,11 +36,13 @@ export default function Dashboard() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [capTier, setCapTier] = useState<ListScoresCapTier | "all">("all");
 
+  const { market } = useAuth();
+  const countryParam = market !== "All" ? market : undefined;
   const capParam = capTier === "all" ? undefined : capTier as ListScoresCapTier;
 
-  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, cap_tier: capParam });
-  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, cap_tier: capParam });
-  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, cap_tier: capParam });
+  const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, cap_tier: capParam, country: countryParam });
+  const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, cap_tier: capParam, country: countryParam });
+  const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, cap_tier: capParam, country: countryParam });
   const { data: regimeData } = useGetMarketRegime();
   const { data: alertsData } = useListAlerts({ days: 7, limit: 10 });
 

@@ -26,7 +26,7 @@ import { db } from "@workspace/db";
 import { companiesTable, financialMetricsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
-const CACHE_TTL_MS = 23 * 60 * 60 * 1000; // 23 hours — refresh once per day
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — weekly refresh
 
 async function needsFmpFetch(ticker: string): Promise<boolean> {
   const rows = await db
@@ -66,6 +66,10 @@ interface PipelineTickerResult {
   rocketScore?: number;
   waveScore?: number;
   entryTimingScore?: number;
+}
+
+export function isPipelineRunning() {
+  return pipelineRunning;
 }
 
 export function getPipelineStatus() {

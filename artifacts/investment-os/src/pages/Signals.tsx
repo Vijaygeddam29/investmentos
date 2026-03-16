@@ -1,6 +1,7 @@
 import { useState, useMemo, Fragment } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { PipelineTimestampBar } from "@/components/pipeline/PipelineTimestampBar";
 import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/company/IntelligenceDrawer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -309,6 +310,9 @@ export default function Signals() {
   const [drawerOpen, setDrawerOpen]   = useState(false);
   const [defsOpen, setDefsOpen]       = useState(false);
 
+  const { market } = useAuth();
+  const countryParam = market !== "All" ? market : undefined;
+
   const capParams = (() => {
     if (capTier === "large") return { market_cap_min: 10_000_000_000 };
     if (capTier === "mid")   return { market_cap_min: 2_000_000_000, market_cap_max: 10_000_000_000 };
@@ -317,7 +321,7 @@ export default function Signals() {
   })();
 
   const { data, isLoading } = useListFactorSnapshots(
-    { limit: 500, ...capParams },
+    { limit: 500, country: countryParam, ...capParams },
     { query: { refetchOnWindowFocus: false } }
   );
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react/custom-fetch";
-import { Activity, CheckCircle2, AlertTriangle, RefreshCw, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, AlertTriangle, RefreshCw, XCircle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 
 interface PipelineStatus {
@@ -14,6 +14,8 @@ interface PipelineStatus {
   currentStep: string | null;
   yfPatchStats: { patched: number; failed: number } | null;
   dataSourceBreakdown: { fmp: number; yahoo: number };
+  nextScheduledRun?: string;
+  lastAutoRun?: string;
 }
 
 export function PipelineTimestampBar({ className }: { className?: string }) {
@@ -28,6 +30,7 @@ export function PipelineTimestampBar({ className }: { className?: string }) {
   const isRunning   = data?.running;
   const updated     = data?.lastRunUpdated ?? 0;
   const failed      = data?.lastRunFailed ?? 0;
+  const nextRun     = data?.nextScheduledRun ? new Date(data.nextScheduledRun) : null;
 
   return (
     <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground ${className ?? ""}`}>
@@ -68,6 +71,16 @@ export function PipelineTimestampBar({ className }: { className?: string }) {
               </span>
             </>
           )}
+        </>
+      )}
+
+      {!isRunning && nextRun && (
+        <>
+          <span className="text-border hidden sm:inline">·</span>
+          <span className="flex items-center gap-1.5 text-blue-400/60">
+            <Calendar className="w-3 h-3" />
+            Auto-run: <strong className="text-foreground/70 font-mono">{format(nextRun, "EEE dd MMM, HH:mm")} UTC</strong>
+          </span>
         </>
       )}
     </div>

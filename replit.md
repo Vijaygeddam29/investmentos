@@ -77,13 +77,27 @@ artifacts-monorepo/
 7. Momentum (RSI, moving averages, volume trends)
 8. Valuation (P/E, EV/EBITDA, FCF yield, PEG)
 
-### Universe (175 Tickers)
+### Universe (~320 Tickers, Curated Compounders)
 - US large-cap (NASDAQ/NYSE): AAPL, MSFT, NVDA, GOOGL/GOOG + 40 others
-- US mid-cap growth: cybersecurity (CRWD, PANW, ZS), cloud/SaaS (SNOW, DDOG, NET, NOW, HUBS), fintech (SQ, NU, MELI), AI/semis (ARM, ASML, PLTR, TSM), biotech (LLY, ISRG, VRTX, REGN)
+- US large-cap compounders: HON, ETN, ITW, ROK, AME, ANET, ADI, ADP, NKE, CMG, MCD, ABT, LIN, SHW, ECL, etc.
+- US mid-cap growth: cybersecurity (CRWD, PANW, ZS), cloud/SaaS (SNOW, DDOG, NET, NOW, HUBS), fintech (NU, MELI), AI/semis (ARM, ASML, PLTR, TSM), biotech (LLY, ISRG, VRTX, REGN)
+- US mid-cap (NTNX, BRZE, DOCS, WING, CAVA, DUOL, RDDT, etc.)
+- US small-cap quality (ALRM, FIVE, OLLI, SWAV, LMND, etc.)
 - UK LSE quality compounders: RELX.L, LSEG.L, DPLM.L, HLMA.L, RMV.L, AUTO.L, EXPN.L, BA.L, RR.L + originals
 - European ADRs: SAP, RACE, LVMUY, HESAY, LRLCY
 - India NSE: 10 large-cap + 8 mid-cap growth (TITAN, DIVISLAB, PIDILITIND, etc.)
 - marketCap stored in **billions** in factor_snapshots (e.g. 283.7 = $283.7B)
+- **Source column**: `seed` (curated compounders) vs `user_added` (user custom entries)
+- **Quick-add**: `POST /api/universe/quick-add` validates any ticker via Yahoo Finance, auto-fills metadata
+
+### Weekly Pipeline Scheduler
+- **CACHE_TTL_MS**: 7 days — data only re-fetched once per week
+- **Cron**: `node-cron` runs pipeline every Sunday at 2 AM UTC
+- **Startup check**: On server restart, checks `last_auto_run` in DB settings table; if >7 days, auto-triggers
+- **Settings table**: `settings` table in DB (key/value) persists `last_auto_run` timestamp
+- **Pipeline status**: Exposes `nextScheduledRun` and `lastAutoRun` in `/api/pipeline/status`
+- **UI**: PipelineTimestampBar shows "Auto-run: Sun 22 Mar, 02:00 UTC"
+- **Manual runs**: Still work — mid-week manual runs only rescore (fast, no API calls) since data is fresh
 
 ### 6-Layer Investment Intelligence Framework
 Each company is scored across 6 layers (0–100 scale):
