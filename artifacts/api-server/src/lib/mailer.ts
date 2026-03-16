@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const NOTIFY_EMAIL = "vijay@marketlifes.com";
-const FALLBACK_FROM = "Investment OS <onboarding@resend.dev>";
+const FALLBACK_FROM = "Investment OS <noreply@marketlifes.co.uk>";
 
 async function getResendClient(): Promise<{ client: Resend; from: string }> {
   const hostname = process.env["REPLIT_CONNECTORS_HOSTNAME"];
