@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { scoresTable, companiesTable, aiVerdictsTable, financialMetricsTable, factorSnapshotsTable } from "@workspace/db/schema";
+import { eq, desc, asc } from "drizzle-orm";
 
 import { detectMarketRegime, computeCompositeScore } from "../lib/market-regime";
 import { compounderRating } from "../lib/scoring-engines";
@@ -213,6 +213,58 @@ router.get("/scores", async (req, res) => {
       scores: enriched,
       total: afterFilter.length,
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GET /api/scores/:ticker/history ─────────────────────────────────────────
+// Returns the last N snapshots for a ticker in chronological order.
+// Includes fortress/rocket/wave scores plus the 5-layer Model 2 scores.
+router.get("/scores/:ticker/history", async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit as string) || 30));
+
+    const rows = await db
+      .select({
+        date:                   factorSnapshotsTable.date,
+        fortressScore:          factorSnapshotsTable.fortressScore,
+        rocketScore:            factorSnapshotsTable.rocketScore,
+        waveScore:              factorSnapshotsTable.waveScore,
+        companyQualityScore:    factorSnapshotsTable.companyQualityScore,
+        stockOpportunityScore:  factorSnapshotsTable.stockOpportunityScore,
+        mispricingScore:        factorSnapshotsTable.mispricingScore,
+        expectationScore:       factorSnapshotsTable.expectationScore,
+        fragilityScore:         factorSnapshotsTable.fragilityScore,
+        portfolioNetScore:      factorSnapshotsTable.portfolioNetScore,
+        marginOfSafety:         factorSnapshotsTable.marginOfSafety,
+        momentumScore:          factorSnapshotsTable.momentumScore,
+        rsi:                    factorSnapshotsTable.rsi,
+      })
+      .from(factorSnapshotsTable)
+      .where(eq(factorSnapshotsTable.ticker, ticker.toUpperCase()))
+      .orderBy(desc(factorSnapshotsTable.date))
+      .limit(limit);
+
+    // Return in chronological order (oldest first) for charting
+    const history = rows.reverse().map(r => ({
+      date:               r.date,
+      fortressScore:      r.fortressScore != null ? Math.round(r.fortressScore * 100) : null,
+      rocketScore:        r.rocketScore   != null ? Math.round(r.rocketScore   * 100) : null,
+      waveScore:          r.waveScore     != null ? Math.round(r.waveScore     * 100) : null,
+      qualityScore:       r.companyQualityScore   != null ? Math.round(r.companyQualityScore   * 100) : null,
+      opportunityScore:   r.stockOpportunityScore != null ? Math.round(r.stockOpportunityScore * 100) : null,
+      mispricingScore:    r.mispricingScore       != null ? Math.round(r.mispricingScore       * 100) : null,
+      expectationScore:   r.expectationScore      != null ? Math.round(r.expectationScore      * 100) : null,
+      fragilityScore:     r.fragilityScore        != null ? Math.round(r.fragilityScore        * 100) : null,
+      netScore:           r.portfolioNetScore      != null ? Math.round(r.portfolioNetScore      * 100) : null,
+      marginOfSafety:     r.marginOfSafety,
+      momentumScore:      r.momentumScore,
+      rsi:                r.rsi,
+    }));
+
+    res.json({ ticker: ticker.toUpperCase(), history, count: history.length });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

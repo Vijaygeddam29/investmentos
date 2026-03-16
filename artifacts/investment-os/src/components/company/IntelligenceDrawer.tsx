@@ -23,8 +23,12 @@ import {
   Brain, Loader2, AlertTriangle, CheckCircle2, Target, BarChart3,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus,
   RefreshCw, Sparkles, ArrowRight, Zap, ShieldAlert,
-  BookOpen,
+  BookOpen, LineChart as LineChartIcon,
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip,
+  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
+} from "recharts";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -902,7 +906,18 @@ interface Props {
 
 export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
   const ticker = snapshot?.ticker;
-  const [activeTab, setActiveTab] = useState<"analysis" | "narrative">("analysis");
+  const [activeTab, setActiveTab] = useState<"analysis" | "narrative" | "chart">("analysis");
+
+  const { data: historyData, isLoading: historyLoading } = useQuery<{ ticker: string; history: any[]; count: number }>({
+    queryKey: ["score-history", ticker],
+    queryFn: async () => {
+      const r = await fetch(`/api/scores/${ticker}/history?limit=30`);
+      if (!r.ok) throw new Error("history fetch failed");
+      return r.json();
+    },
+    enabled: !!ticker && open && activeTab === "chart",
+    staleTime: 10 * 60_000,
+  });
 
   const { data, isLoading } = useQuery<IntelligenceDetail>({
     queryKey: ["intelligence-detail", ticker],
@@ -986,8 +1001,9 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
           {/* ── Tab switcher ── */}
           <div className="flex gap-1 mt-4 border-b border-border/40 -mx-5 px-5">
             {([
-              { id: "analysis",  label: "Analysis",  icon: BarChart3 },
-              { id: "narrative", label: "Narrative",  icon: Sparkles  },
+              { id: "analysis",  label: "Analysis",  icon: BarChart3     },
+              { id: "chart",     label: "Chart",     icon: LineChartIcon },
+              { id: "narrative", label: "Narrative", icon: Sparkles      },
             ] as const).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -1008,6 +1024,179 @@ export function IntelligenceDrawer({ snapshot, open, onOpenChange }: Props) {
         {/* ── Narrative tab ── */}
         {activeTab === "narrative" && ticker && (
           <NarrativePanel ticker={ticker} scores={{ Q, O, M, E, F }} />
+        )}
+
+        {/* ── Chart tab ── */}
+        {activeTab === "chart" && (
+          <div className="px-5 py-5 space-y-6">
+            {historyLoading && (
+              <div className="flex items-center justify-center h-48 gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Loading score history…</span>
+              </div>
+            )}
+
+            {!historyLoading && (!historyData || historyData.count === 0) && (
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
+                <LineChartIcon className="w-8 h-8 opacity-30" />
+                <p className="text-sm">No historical snapshots yet. Run the pipeline to collect data.</p>
+              </div>
+            )}
+
+            {historyData && historyData.count > 0 && (() => {
+              const history = historyData.history;
+              const latestMoS = history[history.length - 1]?.marginOfSafety;
+
+              return (
+                <>
+                  {/* ── Model 2: Net Score Trend ─────────────────── */}
+                  <div className="rounded-xl border border-border bg-card/50 p-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <LineChartIcon className="w-3.5 h-3.5 text-violet-400" />
+                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Net Score Trend</span>
+                      <span className="text-[10px] text-muted-foreground/50 ml-1">with band zones</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
+                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          domain={[0, 100]}
+                          tick={{ fill: "#6b7280", fontSize: 9 }}
+                          ticks={[0, 30, 45, 60, 75, 100]}
+                        />
+                        <RechartTooltip
+                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
+                          formatter={(value: any, name: string) => [`${value}`, name]}
+                        />
+                        {/* Band zone shading */}
+                        <ReferenceArea y1={75} y2={100} fill="#10b981" fillOpacity={0.06} label={{ value: "CORE", position: "insideTopRight", fill: "#10b981", fontSize: 9 }} />
+                        <ReferenceArea y1={60} y2={75}  fill="#3b82f6" fillOpacity={0.05} label={{ value: "STANDARD", position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
+                        <ReferenceArea y1={45} y2={60}  fill="#f59e0b" fillOpacity={0.05} label={{ value: "STARTER", position: "insideTopRight", fill: "#f59e0b", fontSize: 9 }} />
+                        <ReferenceArea y1={30} y2={45}  fill="#f97316" fillOpacity={0.05} label={{ value: "TACTICAL", position: "insideTopRight", fill: "#f97316", fontSize: 9 }} />
+                        <ReferenceLine y={75} stroke="#10b981" strokeDasharray="3 3" strokeOpacity={0.5} />
+                        <ReferenceLine y={60} stroke="#3b82f6" strokeDasharray="3 3" strokeOpacity={0.4} />
+                        <ReferenceLine y={45} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.4} />
+                        <ReferenceLine y={30} stroke="#f97316" strokeDasharray="3 3" strokeOpacity={0.4} />
+                        <Line
+                          type="monotone" dataKey="netScore" name="Net Score"
+                          stroke="#8b5cf6" strokeWidth={2} dot={false}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* ── Model 1: Fortress / Rocket / Wave ──────────── */}
+                  <div className="rounded-xl border border-border bg-card/50 p-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Model 1 Scores</span>
+                      <span className="text-[10px] text-muted-foreground/50 ml-1">Fortress · Rocket · Wave</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
+                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 9 }} ticks={[0, 25, 50, 75, 100]} />
+                        <RechartTooltip
+                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+                        <Line type="monotone" dataKey="fortressScore" name="Fortress" stroke="#10b981" strokeWidth={1.5} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="rocketScore"   name="Rocket"   stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="waveScore"     name="Wave"     stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* ── Model 2: Q / O / M / E / F ─────────────────── */}
+                  <div className="rounded-xl border border-border bg-card/50 p-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Brain className="w-3.5 h-3.5 text-violet-400" />
+                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Intelligence Components</span>
+                      <span className="text-[10px] text-muted-foreground/50 ml-1">Q · O · M · E · F</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.4} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: "#6b7280", fontSize: 9, fontFamily: "monospace" }}
+                          tickFormatter={(d: string) => d?.slice(5) ?? ""}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 9 }} ticks={[0, 25, 50, 75, 100]} />
+                        <RechartTooltip
+                          contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                          labelStyle={{ color: "#9ca3af", fontFamily: "monospace" }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+                        <Line type="monotone" dataKey="qualityScore"     name="Quality"     stroke="#10b981" strokeWidth={1.5} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="opportunityScore" name="Opportunity" stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="mispricingScore"  name="Mispricing"  stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="expectationScore" name="Expectation" stroke="#f97316" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 2" />
+                        <Line type="monotone" dataKey="fragilityScore"   name="Fragility"   stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 2" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-[9px] text-muted-foreground/50 mt-1 font-mono">Dashed lines (E, F) are penalty scores — lower is better</p>
+                  </div>
+
+                  {/* ── Margin of Safety Gauge ────────────────────── */}
+                  {latestMoS != null && (
+                    <div className="rounded-xl border border-border bg-card/50 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Target className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Margin of Safety</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <div className="h-3 w-full bg-muted/30 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                latestMoS >= 0.3 ? "bg-emerald-500" : latestMoS >= 0.15 ? "bg-amber-500" : latestMoS >= 0 ? "bg-orange-500" : "bg-red-500"
+                              }`}
+                              style={{ width: `${Math.min(Math.max(latestMoS * 100 + 50, 0), 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-1 font-mono">
+                            <span>−50% (overvalued)</span>
+                            <span>Fair value</span>
+                            <span>+50% (deep value)</span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className={`text-2xl font-bold font-mono ${
+                            latestMoS >= 0.3 ? "text-emerald-400" : latestMoS >= 0.15 ? "text-amber-400" : latestMoS >= 0 ? "text-orange-400" : "text-red-400"
+                          }`}>
+                            {latestMoS >= 0 ? "+" : ""}{Math.round(latestMoS * 100)}%
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">vs intrinsic value</div>
+                          <div className={`text-[10px] font-semibold mt-0.5 ${
+                            latestMoS >= 0.3 ? "text-emerald-400" : latestMoS >= 0.15 ? "text-amber-400" : latestMoS >= 0 ? "text-orange-400" : "text-red-400"
+                          }`}>
+                            {latestMoS >= 0.3 ? "Strong Discount" : latestMoS >= 0.15 ? "Moderate Discount" : latestMoS >= 0 ? "Slight Discount" : "Premium to Value"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         )}
 
         {/* ── Analysis tab ── */}

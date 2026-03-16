@@ -1,4 +1,5 @@
 import { useState, useMemo, Fragment } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { useListFactorSnapshots } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,8 +8,12 @@ import { IntelligenceDrawer, type IntelligenceSnapshot } from "@/components/comp
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Crown, ChevronDown, ChevronUp, ChevronsUpDown, Filter,
-  Loader2, Info, Brain, ChevronRight,
+  Loader2, Info, Brain, ChevronRight, Bell,
 } from "lucide-react";
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  ResponsiveContainer,
+} from "recharts";
 
 // ─── Country flags ─────────────────────────────────────────────────────────────
 const FLAGS: Record<string, string> = {
@@ -219,33 +224,36 @@ function ExpandedRow({ s, onOpenDrawer }: { s: any; onOpenDrawer: () => void }) 
           ))}
         </div>
 
-        {/* Recommendation + drill-down */}
+        {/* Recommendation + drill-down + radar */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          {band && (
-            <div className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
-              band.label === "CORE" ? "border-emerald-500/30 bg-emerald-950/10" :
-              band.label === "STANDARD" ? "border-blue-500/30 bg-blue-950/10" :
-              band.label === "STARTER" ? "border-amber-500/30 bg-amber-950/10" :
-              band.label === "TACTICAL" ? "border-orange-500/30 bg-orange-950/10" :
-              "border-border"
-            }`}>
-              <div>
-                <div className={`text-sm font-bold ${band.ac}`}>{band.action}</div>
-                <div className="text-[10px] text-muted-foreground">
-                  Band: <strong className="text-foreground">{band.label}</strong>
-                  {band.minPct > 0 && <span> · Suggested size: <strong className={`font-mono ${band.ac}`}>{band.minPct}–{band.maxPct}%</strong></span>}
+          <div className="flex items-center gap-3 flex-wrap flex-1">
+            {band && (
+              <div className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                band.label === "CORE" ? "border-emerald-500/30 bg-emerald-950/10" :
+                band.label === "STANDARD" ? "border-blue-500/30 bg-blue-950/10" :
+                band.label === "STARTER" ? "border-amber-500/30 bg-amber-950/10" :
+                band.label === "TACTICAL" ? "border-orange-500/30 bg-orange-950/10" :
+                "border-border"
+              }`}>
+                <div>
+                  <div className={`text-sm font-bold ${band.ac}`}>{band.action}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Band: <strong className="text-foreground">{band.label}</strong>
+                    {band.minPct > 0 && <span> · Suggested size: <strong className={`font-mono ${band.ac}`}>{band.minPct}–{band.maxPct}%</strong></span>}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          <button
-            onClick={onOpenDrawer}
-            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 font-medium border border-primary/30 hover:border-primary/60 rounded-lg px-3 py-2 transition-colors"
-          >
-            <Brain className="w-3.5 h-3.5" />
-            Full Intelligence Thesis
-            <ChevronRight className="w-3 h-3" />
-          </button>
+            )}
+            <button
+              onClick={onOpenDrawer}
+              className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 font-medium border border-primary/30 hover:border-primary/60 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Brain className="w-3.5 h-3.5" />
+              Full Intelligence Thesis
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+          <IntelRadar q={Q} o={O} m={M} e={E} f={F} />
         </div>
       </td>
     </tr>
@@ -294,6 +302,100 @@ function CountrySep({ country, count, avgNet }: { country: string; count: number
         </div>
       </td>
     </tr>
+  );
+}
+
+// ─── Recent alerts panel ───────────────────────────────────────────────────────
+
+type AlertType = "VERDICT_CHANGE" | "SCORE_RISE" | "SCORE_DROP" | "COMPOUNDER_CHANGE";
+
+const ALERT_META: Record<AlertType, { color: string; bg: string; border: string; dot: string; label: string }> = {
+  VERDICT_CHANGE:    { color: "text-violet-400",  bg: "bg-violet-950/20",  border: "border-violet-500/30",  dot: "bg-violet-400",  label: "Verdict" },
+  SCORE_RISE:        { color: "text-emerald-400", bg: "bg-emerald-950/15", border: "border-emerald-500/30", dot: "bg-emerald-400", label: "Rise" },
+  SCORE_DROP:        { color: "text-red-400",      bg: "bg-red-950/15",    border: "border-red-500/30",     dot: "bg-red-400",     label: "Drop" },
+  COMPOUNDER_CHANGE: { color: "text-blue-400",    bg: "bg-blue-950/15",   border: "border-blue-500/30",    dot: "bg-blue-400",    label: "Compounder" },
+};
+
+function RecentAlertsPanel() {
+  const { data, isLoading } = useQuery<{ alerts: any[]; count: number }>({
+    queryKey: ["signals-alerts"],
+    queryFn: async () => {
+      const r = await fetch("/api/alerts?days=7&limit=20");
+      if (!r.ok) throw new Error("alerts fetch failed");
+      return r.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const alerts = data?.alerts ?? [];
+
+  if (!isLoading && alerts.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60">
+        <Bell className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider font-semibold">Recent Alerts</span>
+        <span className="text-[10px] text-muted-foreground/50 ml-1">last 7 days</span>
+        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground ml-auto" />}
+        {!isLoading && <span className="text-[10px] text-muted-foreground/50 ml-auto font-mono">{alerts.length} alert{alerts.length !== 1 ? "s" : ""}</span>}
+      </div>
+      {alerts.length > 0 && (
+        <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide flex-wrap">
+          {alerts.map(a => {
+            const meta = ALERT_META[a.alertType as AlertType] ?? ALERT_META.SCORE_RISE;
+            return (
+              <div key={a.id} className={`flex-shrink-0 rounded-lg border px-3 py-2 min-w-[180px] max-w-[260px] ${meta.bg} ${meta.border}`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                  <span className={`text-[9px] font-bold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                  <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono">{a.date}</span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mb-0.5">
+                  <span className={`text-xs font-bold font-mono ${meta.color}`}>{a.ticker}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed line-clamp-2">{a.message}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Mini radar chart for Q/O/M/E/F ───────────────────────────────────────────
+
+function IntelRadar({ q, o, m, e, f }: { q: number | null; o: number | null; m: number | null; e: number | null; f: number | null }) {
+  if (q == null || o == null || m == null || e == null || f == null) return null;
+  const data = [
+    { axis: "Q", value: q, fill: "#34d399" },
+    { axis: "O", value: o, fill: "#60a5fa" },
+    { axis: "M", value: m, fill: "#fbbf24" },
+    { axis: "E", value: 100 - e, fill: "#fb923c" },
+    { axis: "F", value: 100 - f, fill: "#f87171" },
+  ];
+  return (
+    <div className="flex flex-col items-center">
+      <div className="text-[9px] text-muted-foreground/60 mb-1 font-mono uppercase tracking-wider">Intelligence Radar</div>
+      <ResponsiveContainer width={140} height={120}>
+        <RadarChart cx="50%" cy="50%" outerRadius={45} data={data}>
+          <PolarGrid stroke="#374151" strokeOpacity={0.6} />
+          <PolarAngleAxis
+            dataKey="axis"
+            tick={{ fill: "#9ca3af", fontSize: 9, fontFamily: "monospace" }}
+          />
+          <Radar
+            dataKey="value"
+            stroke="#8b5cf6"
+            fill="#8b5cf6"
+            fillOpacity={0.25}
+            strokeWidth={1.5}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+      <div className="text-[8px] text-muted-foreground/40 font-mono">E/F inverted (lower = better)</div>
+    </div>
   );
 }
 
@@ -506,6 +608,9 @@ export default function Signals() {
             </div>
           </div>
         </div>
+
+        {/* ── Recent alerts ────────────────────────────────── */}
+        <RecentAlertsPanel />
 
         {/* ── Formula + definitions (collapsible) ─────────── */}
         <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 overflow-hidden">

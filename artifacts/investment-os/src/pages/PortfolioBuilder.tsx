@@ -16,6 +16,23 @@ import {
 type Strategy     = "fortress" | "rocket" | "wave";
 type WeightMethod = "equal" | "score" | "risk" | "power";
 type MarketCapTier = "all" | "top50" | "large" | "mid" | "small";
+type BuildMode    = "approaching" | "momentum" | "model1" | "model2";
+
+interface M1Settings { minFortress: number; minRocket: number; minWave: number }
+interface M2Settings { minQ: number; minO: number; minM: number; maxE: number; maxF: number }
+
+const DEFAULT_M1: M1Settings = { minFortress: 50, minRocket: 50, minWave: 50 };
+const DEFAULT_M2: M2Settings = { minQ: 60, minO: 50, minM: 45, maxE: 75, maxF: 75 };
+
+interface AllSnapshot {
+  ticker: string; name: string; sector: string; country: string; marketCap: number | null;
+  portfolioNetScore: number | null; companyQualityScore: number | null;
+  stockOpportunityScore: number | null; mispricingScore: number | null;
+  expectationScore: number | null; fragilityScore: number | null;
+  fortressScore: number | null; rocketScore: number | null; waveScore: number | null;
+  momentumScore: number | null; rsi: number | null; ret3m: number | null;
+  macdHistogram: number | null; entryScore: number | null; marginOfSafety: number | null;
+}
 
 interface BuilderHolding {
   rank:                  number;
@@ -129,6 +146,402 @@ function bandStyle(band: string | undefined) {
   if (band === "starter")   return { badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",       action: "Add",        actionColor: "text-amber-400" };
   if (band === "tactical")  return { badge: "bg-orange-500/15 text-orange-400 border-orange-500/30",    action: "Watch",      actionColor: "text-orange-400" };
   return                           { badge: "bg-secondary text-muted-foreground border-border/50",       action: "Avoid",      actionColor: "text-red-400" };
+}
+
+// ─── Pre-entry classification helpers ─────────────────────────────────────────
+
+function approachingCriteria(s: AllSnapshot, m2: M2Settings) {
+  const qThr = m2.minQ * 0.8, oThr = m2.minO * 0.8, mThr = m2.minM * 0.8;
+  return [
+    { label: "Quality",     met: s.companyQualityScore   != null && s.companyQualityScore   * 100 >= qThr, value: s.companyQualityScore,   threshold: qThr, color: "text-emerald-400", icon: "Q" },
+    { label: "Mispricing",  met: s.mispricingScore       != null && s.mispricingScore       * 100 >= mThr, value: s.mispricingScore,       threshold: mThr, color: "text-amber-400",   icon: "M" },
+    { label: "Opportunity", met: s.stockOpportunityScore != null && s.stockOpportunityScore * 100 >= oThr, value: s.stockOpportunityScore, threshold: oThr, color: "text-blue-400",    icon: "O" },
+    { label: "Expectation ✓", met: s.expectationScore   != null && s.expectationScore      * 100 <= m2.maxE, value: s.expectationScore,   threshold: m2.maxE, color: "text-orange-400", icon: "E", inverted: true },
+    { label: "Fragility ✓",   met: s.fragilityScore     != null && s.fragilityScore        * 100 <= m2.maxF, value: s.fragilityScore,     threshold: m2.maxF, color: "text-red-400",    icon: "F", inverted: true },
+  ];
+}
+
+function momentumSignals(s: AllSnapshot) {
+  const rsiOk  = s.rsi          != null && s.rsi          >= 50 && s.rsi          <= 70;
+  const momOk  = s.momentumScore != null && s.momentumScore * 100 >= 60;
+  const retOk  = s.ret3m         != null && s.ret3m         > 0;
+  const macdOk = s.macdHistogram != null && s.macdHistogram > 0;
+  return { rsiOk, momOk, retOk, macdOk, count: [rsiOk, momOk, retOk, macdOk].filter(Boolean).length, qualifies: rsiOk && momOk && retOk };
+}
+
+function funnelCounts(
+  allSnaps: AllSnapshot[],
+  mode: BuildMode,
+  m1: M1Settings,
+  m2: M2Settings,
+  sectorCap: number,
+  holdings: ManualHolding[]
+) {
+  const universe = allSnaps.length;
+  let scoreFiltered = allSnaps;
+
+  if (mode === "model1" || mode === "approaching") {
+    scoreFiltered = allSnaps.filter(s =>
+      (s.fortressScore ?? 0) * 100 >= m1.minFortress ||
+      (s.rocketScore   ?? 0) * 100 >= m1.minRocket   ||
+      (s.waveScore     ?? 0) * 100 >= m1.minWave
+    );
+  } else if (mode === "model2") {
+    scoreFiltered = allSnaps.filter(s =>
+      (s.companyQualityScore   ?? 0) * 100 >= m2.minQ &&
+      (s.stockOpportunityScore ?? 0) * 100 >= m2.minO &&
+      (s.mispricingScore       ?? 0) * 100 >= m2.minM &&
+      (s.expectationScore      ?? 1) * 100 <= m2.maxE &&
+      (s.fragilityScore        ?? 1) * 100 <= m2.maxF
+    );
+  } else if (mode === "momentum") {
+    scoreFiltered = allSnaps.filter(s => momentumSignals(s).qualifies);
+  }
+
+  const sectorMap: Record<string, number> = {};
+  const sectorCapped = scoreFiltered.filter(s => {
+    const cnt = (sectorMap[s.sector] ?? 0);
+    if (cnt >= sectorCap) return false;
+    sectorMap[s.sector] = cnt + 1;
+    return true;
+  });
+
+  return { universe, scoreFiltered: scoreFiltered.length, sectorCapped: sectorCapped.length, portfolio: holdings.length };
+}
+
+// ─── Funnel Bar component ─────────────────────────────────────────────────────
+
+function FunnelBar({ counts }: { counts: { universe: number; scoreFiltered: number; sectorCapped: number; portfolio: number } }) {
+  const steps = [
+    { label: "Universe",      count: counts.universe,      color: "bg-muted/60",     textColor: "text-muted-foreground" },
+    { label: "Score filter",  count: counts.scoreFiltered, color: "bg-blue-500/70",  textColor: "text-blue-400" },
+    { label: "Sector cap",    count: counts.sectorCapped,  color: "bg-amber-500/70", textColor: "text-amber-400" },
+    { label: "Portfolio",     count: counts.portfolio,     color: "bg-emerald-500",  textColor: "text-emerald-400" },
+  ];
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <BarChart3 className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Portfolio Funnel</span>
+      </div>
+      <div className="flex items-center gap-1">
+        {steps.map((step, i) => (
+          <React.Fragment key={step.label}>
+            <div className="flex-1 min-w-0">
+              <div className={`h-2 rounded-full ${step.color} mb-1.5`} style={{ width: `${Math.max(4, (step.count / (steps[0].count || 1)) * 100)}%` }} />
+              <div className={`text-xs font-bold font-mono ${step.textColor}`}>{step.count}</div>
+              <div className="text-[10px] text-muted-foreground truncate">{step.label}</div>
+            </div>
+            {i < steps.length - 1 && <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 mb-4" />}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Model Settings Panel ─────────────────────────────────────────────────────
+
+function ModelSettingsPanel({
+  mode, m1, m2, onM1, onM2,
+}: {
+  mode: BuildMode; m1: M1Settings; m2: M2Settings;
+  onM1: (v: M1Settings) => void; onM2: (v: M2Settings) => void;
+}) {
+  if (mode === "model1" || mode === "approaching") {
+    const items = [
+      { key: "minFortress" as const, label: "Min Fortress",  color: "text-blue-400",   bar: "bg-blue-500",   val: m1.minFortress },
+      { key: "minRocket"   as const, label: "Min Rocket",    color: "text-orange-400", bar: "bg-orange-500", val: m1.minRocket },
+      { key: "minWave"     as const, label: "Min Wave",      color: "text-cyan-400",   bar: "bg-cyan-500",   val: m1.minWave },
+    ];
+    const tooStrict = items.some(i => i.val > 80);
+    return (
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Model 1 Thresholds</div>
+        {items.map(item => (
+          <div key={item.key}>
+            <div className="flex items-center justify-between mb-1">
+              <span className={`text-xs font-medium ${item.color}`}>{item.label}</span>
+              <span className={`text-xs font-bold font-mono ${item.color}`}>{item.val}</span>
+            </div>
+            <input type="range" min={0} max={100} step={5} value={item.val}
+              onChange={e => onM1({ ...m1, [item.key]: Number(e.target.value) })}
+              className="w-full accent-primary h-1"
+            />
+          </div>
+        ))}
+        {tooStrict && (
+          <div className="flex items-start gap-1.5 text-amber-400 text-[10px] bg-amber-500/10 rounded-lg p-2">
+            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+            <span>Thresholds above 80 may return very few stocks.</span>
+          </div>
+        )}
+        <button onClick={() => onM1(DEFAULT_M1)} className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors">Reset to defaults</button>
+      </div>
+    );
+  }
+
+  const m2Items = [
+    { key: "minQ" as const, label: "Min Quality",     color: "text-emerald-400", sign: "min", val: m2.minQ },
+    { key: "minO" as const, label: "Min Opportunity", color: "text-blue-400",    sign: "min", val: m2.minO },
+    { key: "minM" as const, label: "Min Mispricing",  color: "text-amber-400",   sign: "min", val: m2.minM },
+    { key: "maxE" as const, label: "Max Expectation", color: "text-orange-400",  sign: "max", val: m2.maxE },
+    { key: "maxF" as const, label: "Max Fragility",   color: "text-red-400",     sign: "max", val: m2.maxF },
+  ];
+  const tooStrict = m2.minQ > 80 || m2.minO > 80 || m2.minM > 80 || m2.maxE < 40 || m2.maxF < 40;
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Model 2 Thresholds</div>
+      {m2Items.map(item => (
+        <div key={item.key}>
+          <div className="flex items-center justify-between mb-1">
+            <span className={`text-xs font-medium ${item.color}`}>{item.label}</span>
+            <span className={`text-xs font-bold font-mono ${item.color}`}>{item.sign === "min" ? "≥" : "≤"}{item.val}</span>
+          </div>
+          <input type="range" min={0} max={100} step={5} value={item.val}
+            onChange={e => onM2({ ...m2, [item.key]: Number(e.target.value) })}
+            className="w-full accent-primary h-1"
+          />
+        </div>
+      ))}
+      {tooStrict && (
+        <div className="flex items-start gap-1.5 text-amber-400 text-[10px] bg-amber-500/10 rounded-lg p-2">
+          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+          <span>Thresholds are strict — few stocks may qualify.</span>
+        </div>
+      )}
+      <button onClick={() => onM2(DEFAULT_M2)} className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors">Reset to defaults</button>
+    </div>
+  );
+}
+
+// ─── Approaching Buy Zone view ────────────────────────────────────────────────
+
+function ApproachingView({ snaps, m2, onOpenDrawer }: {
+  snaps: AllSnapshot[]; m2: M2Settings;
+  onOpenDrawer: (s: AllSnapshot) => void;
+}) {
+  const [capFilter, setCapFilter] = useState<"all" | "large" | "mid" | "small">("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
+
+  const approaching = useMemo(() => {
+    return snaps
+      .filter(s => {
+        const n = s.portfolioNetScore;
+        if (n == null) return false;
+        if (n >= 0.60) return false;
+        const criteria = approachingCriteria(s, m2);
+        return criteria.filter(c => c.met).length >= 3;
+      })
+      .filter(s => {
+        if (capFilter === "large") return (s.marketCap ?? 0) >= 10;
+        if (capFilter === "mid")   return (s.marketCap ?? 0) >= 2 && (s.marketCap ?? 0) < 10;
+        if (capFilter === "small") return (s.marketCap ?? 0) < 2;
+        return true;
+      })
+      .filter(s => sectorFilter === "all" || s.sector === sectorFilter)
+      .sort((a, b) => (b.portfolioNetScore ?? 0) - (a.portfolioNetScore ?? 0));
+  }, [snaps, m2, capFilter, sectorFilter]);
+
+  const sectors = useMemo(() => {
+    const s = new Set(snaps.map(r => r.sector).filter(Boolean));
+    return ["all", ...Array.from(s).sort()];
+  }, [snaps]);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Target className="w-4 h-4 text-amber-400" />
+          <span className="text-sm font-semibold text-amber-400">Approaching Buy Zone</span>
+          <span className="ml-auto text-xs font-mono text-amber-400">{approaching.length} stocks</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Stocks not yet meeting the full Model 2 threshold but passing 3+ of 5 criteria at 80% of the bar. Watch these for upgrades.</p>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1">
+          {(["all", "large", "mid", "small"] as const).map(c => (
+            <button key={c} onClick={() => setCapFilter(c)}
+              className={`px-2 py-1 rounded text-[11px] font-medium border transition-all ${capFilter === c ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-muted-foreground/50"}`}
+            >{c === "all" ? "All Cap" : c === "large" ? "Large" : c === "mid" ? "Mid" : "Small"}</button>
+          ))}
+        </div>
+        <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
+          className="appearance-none bg-muted/30 border border-border rounded px-2 py-1 text-[11px] text-foreground focus:outline-none"
+        >
+          {sectors.map(s => <option key={s} value={s}>{s === "all" ? "All Sectors" : s}</option>)}
+        </select>
+      </div>
+
+      {approaching.length === 0 && (
+        <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+          No stocks currently approaching the buy zone with current thresholds.
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {approaching.map(s => {
+          const criteria = approachingCriteria(s, m2);
+          const met = criteria.filter(c => c.met).length;
+          const netPct = s.portfolioNetScore != null ? Math.round(s.portfolioNetScore * 100) : null;
+          const gapToEntry = netPct != null ? 60 - netPct : null;
+          return (
+            <div key={s.ticker} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{flag(s.country)}</span>
+                    <span className="font-mono font-bold text-foreground">{s.ticker}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-[140px]">{s.name}</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.sector}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className={`text-2xl font-bold font-mono ${netPct == null ? "text-muted-foreground" : netPct >= 50 ? "text-amber-400" : "text-orange-400"}`}>{netPct ?? "—"}</div>
+                  <div className="text-[9px] text-muted-foreground">net score</div>
+                  {gapToEntry != null && gapToEntry > 0 && (
+                    <div className="text-[10px] text-muted-foreground">+{gapToEntry} to Standard</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-muted-foreground">{met}/5 criteria met</span>
+                  <span className={`text-[10px] font-semibold ${met >= 4 ? "text-amber-400" : "text-orange-400"}`}>{met >= 4 ? "Near entry" : "Watching"}</span>
+                </div>
+                <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${(met / 5) * 100}%` }} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-5 gap-1">
+                {criteria.map(c => (
+                  <div key={c.label} className={`text-center rounded p-1.5 ${c.met ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-muted/20 border border-border/50"}`}>
+                    <div className="text-[9px] font-bold mb-0.5">{c.icon}</div>
+                    <div className={`text-[10px] font-bold font-mono ${c.met ? "text-emerald-400" : "text-muted-foreground"}`}>
+                      {c.value != null ? Math.round(c.value * 100) : "—"}
+                    </div>
+                    <div className={`text-[8px] ${c.met ? "text-emerald-400/70" : "text-muted-foreground/50"}`}>{c.met ? "✓" : `${c.inverted ? ">" : "<"}${Math.round(c.threshold)}`}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => onOpenDrawer(s)} className="mt-3 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                <ExternalLink className="w-3 h-3" />Full Intelligence view
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Momentum Breakout view ───────────────────────────────────────────────────
+
+function MomentumView({ snaps, onOpenDrawer }: {
+  snaps: AllSnapshot[];
+  onOpenDrawer: (s: AllSnapshot) => void;
+}) {
+  const [capFilter, setCapFilter] = useState<"all" | "large" | "mid" | "small">("all");
+  const [minMom, setMinMom] = useState(60);
+
+  const momentum = useMemo(() => {
+    return snaps
+      .filter(s => {
+        if (capFilter === "large") return (s.marketCap ?? 0) >= 10;
+        if (capFilter === "mid")   return (s.marketCap ?? 0) >= 2 && (s.marketCap ?? 0) < 10;
+        if (capFilter === "small") return (s.marketCap ?? 0) < 2;
+        return true;
+      })
+      .map(s => ({ s, sig: momentumSignals(s) }))
+      .filter(({ sig }) => sig.count >= 2 && (s.momentumScore != null && s.momentumScore * 100 >= minMom))
+      .sort((a, b) => (b.sig.count - a.sig.count) || ((b.s.momentumScore ?? 0) - (a.s.momentumScore ?? 0)))
+      .slice(0, 60);
+  }, [snaps, capFilter, minMom]);
+
+  const qualifiedCount = momentum.filter(({ sig }) => sig.qualifies).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <TrendingUp className="w-4 h-4 text-blue-400" />
+          <span className="text-sm font-semibold text-blue-400">Momentum Breakout</span>
+          <span className="ml-auto text-xs font-mono text-blue-400">{qualifiedCount} fully qualified · {momentum.length} shown</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Stocks with RSI 50–70 (bullish, not overbought) + momentum score ≥ {minMom} + positive 3m return. Full qualification requires all 3.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1">
+          {(["all", "large", "mid", "small"] as const).map(c => (
+            <button key={c} onClick={() => setCapFilter(c)}
+              className={`px-2 py-1 rounded text-[11px] font-medium border transition-all ${capFilter === c ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-muted-foreground/50"}`}
+            >{c === "all" ? "All Cap" : c === "large" ? "Large" : c === "mid" ? "Mid" : "Small"}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>Min Momentum:</span>
+          <input type="range" min={40} max={85} step={5} value={minMom} onChange={e => setMinMom(Number(e.target.value))} className="w-20 accent-primary h-1" />
+          <span className="font-mono text-foreground w-6">{minMom}</span>
+        </div>
+      </div>
+
+      {momentum.length === 0 && (
+        <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+          No stocks meet momentum criteria with current settings.
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {momentum.map(({ s, sig }) => {
+          const netPct = s.portfolioNetScore != null ? Math.round(s.portfolioNetScore * 100) : null;
+          const bs = bandStyle(derivePositionBand(s.portfolioNetScore)?.band);
+          return (
+            <div key={s.ticker} className={`bg-card border rounded-xl p-4 ${sig.qualifies ? "border-blue-500/30" : "border-border"}`}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{flag(s.country)}</span>
+                    <span className="font-mono font-bold text-foreground">{s.ticker}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-[140px]">{s.name}</span>
+                    {sig.qualifies && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold">BREAKOUT</span>}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.sector}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  {netPct != null && <div className={`text-lg font-bold font-mono ${bs.actionColor}`}>{netPct}<span className="text-xs text-muted-foreground"> net</span></div>}
+                  <div className="text-[10px] text-muted-foreground">{sig.count}/4 signals</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "RSI",      ok: sig.rsiOk,  val: s.rsi != null ? s.rsi.toFixed(0) : "—",                          target: "50–70",   color: "text-blue-400" },
+                  { label: "Mom",      ok: sig.momOk,  val: s.momentumScore != null ? Math.round(s.momentumScore * 100) : "—", target: `≥${minMom}`,  color: "text-emerald-400" },
+                  { label: "Ret 3m",   ok: sig.retOk,  val: s.ret3m != null ? `${(s.ret3m * 100).toFixed(1)}%` : "—",         target: "> 0",     color: "text-cyan-400" },
+                  { label: "MACD",     ok: sig.macdOk, val: s.macdHistogram != null ? (s.macdHistogram > 0 ? "+" : "−") : "—", target: "> 0",    color: "text-violet-400" },
+                ].map(item => (
+                  <div key={item.label} className={`rounded-lg p-2 text-center ${item.ok ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-muted/10 border border-border/40"}`}>
+                    <div className="text-[9px] text-muted-foreground mb-0.5">{item.label}</div>
+                    <div className={`text-sm font-bold font-mono ${item.ok ? item.color : "text-muted-foreground"}`}>{item.val}</div>
+                    <div className={`text-[8px] mt-0.5 ${item.ok ? "text-emerald-400/70" : "text-muted-foreground/50"}`}>{item.ok ? "✓" : item.target}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => onOpenDrawer(s)} className="mt-3 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                <ExternalLink className="w-3 h-3" />Full Intelligence view
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function normalizeWeightsTo100(weights: Record<string, number>, locked: Set<string>): Record<string, number> {
@@ -517,6 +930,23 @@ function AddStockPanel({ onAdd, existingTickers }: { onAdd: (r: SearchResult) =>
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PortfolioBuilder() {
+  const [buildMode, setBuildMode] = useState<BuildMode>(() => {
+    return (localStorage.getItem("pb-build-mode") as BuildMode) || "model2";
+  });
+  const [m1Settings, setM1Settings] = useState<M1Settings>(() => {
+    try { return JSON.parse(localStorage.getItem("pb-m1-settings") || "null") || DEFAULT_M1; } catch { return DEFAULT_M1; }
+  });
+  const [m2Settings, setM2Settings] = useState<M2Settings>(() => {
+    try { return JSON.parse(localStorage.getItem("pb-m2-settings") || "null") || DEFAULT_M2; } catch { return DEFAULT_M2; }
+  });
+
+  const handleSetBuildMode = (m: BuildMode) => {
+    setBuildMode(m);
+    localStorage.setItem("pb-build-mode", m);
+  };
+  const handleSetM1 = (v: M1Settings) => { setM1Settings(v); localStorage.setItem("pb-m1-settings", JSON.stringify(v)); };
+  const handleSetM2 = (v: M2Settings) => { setM2Settings(v); localStorage.setItem("pb-m2-settings", JSON.stringify(v)); };
+
   const [strategy, setStrategy]           = useState<Strategy>("rocket");
   const [size, setSize]                   = useState(10);
   const [weightMethod, setWeightMethod]   = useState<WeightMethod>("score");
@@ -552,6 +982,28 @@ export default function PortfolioBuilder() {
     enabled: hasBuilt && !!buildParams,
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: allSnapsData, isLoading: allSnapsLoading } = useQuery<{ snapshots: AllSnapshot[] }>({
+    queryKey: ["all-snapshots-preentry"],
+    queryFn: () => customFetch("/api/factor-snapshots?limit=500"),
+    staleTime: 5 * 60 * 1000,
+    enabled: buildMode === "approaching" || buildMode === "momentum" || buildMode === "model1" || buildMode === "model2",
+  });
+  const allSnaps = allSnapsData?.snapshots ?? [];
+
+  function openDrawerFromSnapshot(s: AllSnapshot) {
+    setDrawerSnapshot({
+      ticker: s.ticker, name: s.name, sector: s.sector, country: s.country,
+      marketCap: s.marketCap, companyQualityScore: s.companyQualityScore,
+      stockOpportunityScore: s.stockOpportunityScore, mispricingScore: s.mispricingScore,
+      expectationScore: s.expectationScore, fragilityScore: s.fragilityScore,
+      portfolioNetScore: s.portfolioNetScore, profitabilityScore: null, growthScore: null,
+      capitalEfficiencyScore: null, financialStrengthScore: null, cashFlowQualityScore: null,
+      valuationScore: null, momentumScore: s.momentumScore, sentimentScore: null,
+      entryScore: s.entryScore, marginOfSafety: s.marginOfSafety, rsi: s.rsi, ret3m: s.ret3m,
+    });
+    setDrawerOpen(true);
+  }
 
   useEffect(() => {
     if (data?.holdings?.length && !manualMode) {
@@ -743,6 +1195,11 @@ export default function PortfolioBuilder() {
     return result;
   }, [bandGroups, manualWeights]);
 
+  const funnel = useMemo(() =>
+    allSnaps.length > 0 ? funnelCounts(allSnaps, buildMode, m1Settings, m2Settings, sectorCap, holdings) : null,
+    [allSnaps, buildMode, m1Settings, m2Settings, sectorCap, holdings]
+  );
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -774,13 +1231,42 @@ export default function PortfolioBuilder() {
           </div>
         </div>
 
+        {/* ── Build Mode Tabs ─────────────────────────────── */}
+        <div className="flex gap-1 bg-muted/20 rounded-xl p-1 border border-border">
+          {([
+            { id: "approaching", label: "Approaching Buy Zone", icon: Target,     color: "text-amber-400",  desc: "Pre-entry watchlist" },
+            { id: "momentum",    label: "Momentum Breakout",    icon: TrendingUp, color: "text-blue-400",   desc: "RSI + trend signals" },
+            { id: "model1",      label: "Model 1 Portfolio",    icon: Shield,     color: "text-cyan-400",   desc: "Fortress / Rocket / Wave" },
+            { id: "model2",      label: "Model 2 Portfolio",    icon: Brain,      color: "text-violet-400", desc: "Intelligence (Q·O·M·E·F)" },
+          ] as const).map(({ id, label, icon: Icon, color, desc }) => (
+            <button key={id} onClick={() => handleSetBuildMode(id)}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all ${buildMode === id ? "bg-card border border-border shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Icon className={`w-4 h-4 ${buildMode === id ? color : "text-muted-foreground"}`} />
+              <span className="hidden sm:block font-semibold text-[11px]">{label}</span>
+              <span className={`text-[9px] ${buildMode === id ? "text-muted-foreground" : "text-muted-foreground/50"} hidden md:block`}>{desc}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
 
           {/* ── Sidebar ─────────────────────────────────────── */}
           <div className="space-y-4">
+
+            {/* Pre-entry modes: minimal sidebar */}
+            {(buildMode === "approaching" || buildMode === "momentum") && (
+              <>
+                <ModelSettingsPanel mode={buildMode} m1={m1Settings} m2={m2Settings} onM1={handleSetM1} onM2={handleSetM2} />
+                {funnel && <FunnelBar counts={funnel} />}
+              </>
+            )}
+
+            {/* Builder modes: full sidebar */}
+            {(buildMode === "model1" || buildMode === "model2") && (<>
             <div className="bg-card border border-border rounded-xl p-5 space-y-5">
 
-              <div>
+              {buildMode === "model1" && <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Base Strategy Engine</label>
                 <p className="text-[10px] text-muted-foreground mb-2">Selects which companies enter the pool. Intelligence scoring then ranks them.</p>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -798,7 +1284,7 @@ export default function PortfolioBuilder() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               <div>
                 <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">
@@ -908,11 +1394,40 @@ export default function PortfolioBuilder() {
                 )}
               </div>
             )}
+
+            {/* Model settings panel + funnel bar */}
+            <ModelSettingsPanel mode={buildMode} m1={m1Settings} m2={m2Settings} onM1={handleSetM1} onM2={handleSetM2} />
+            {funnel && <FunnelBar counts={funnel} />}
+            </>)}
           </div>
 
           {/* ── Main content ────────────────────────────────── */}
           <div className="space-y-4">
 
+            {/* Pre-entry views */}
+            {buildMode === "approaching" && (
+              allSnapsLoading ? (
+                <div className="bg-card border border-border rounded-xl p-8 flex items-center justify-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Loading universe…</span>
+                </div>
+              ) : (
+                <ApproachingView snaps={allSnaps} m2={m2Settings} onOpenDrawer={openDrawerFromSnapshot} />
+              )
+            )}
+            {buildMode === "momentum" && (
+              allSnapsLoading ? (
+                <div className="bg-card border border-border rounded-xl p-8 flex items-center justify-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Loading universe…</span>
+                </div>
+              ) : (
+                <MomentumView snaps={allSnaps} onOpenDrawer={openDrawerFromSnapshot} />
+              )
+            )}
+
+            {/* Builder views (Model 1 / Model 2) */}
+            {(buildMode === "model1" || buildMode === "model2") && <>
             {!hasBuilt && (
               <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-20 gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-violet-500/10 flex items-center justify-center">
@@ -1262,6 +1777,7 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
             )}
+            </>}
 
           </div>
         </div>
