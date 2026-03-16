@@ -2,6 +2,7 @@ import app from "./app";
 import cron from "node-cron";
 import { runPipeline, isPipelineRunning, getPipelineStatus } from "./lib/pipeline";
 import { sendPipelineReport, sendSignalAlert } from "./lib/mailer";
+import { getNextSundayAt2AM } from "./lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
 import { eq, desc, gte } from "drizzle-orm";
@@ -30,16 +31,6 @@ async function setSetting(key: string, value: string): Promise<void> {
     .insert(settingsTable)
     .values({ key, value, updatedAt: new Date() })
     .onConflictDoUpdate({ target: settingsTable.key, set: { value, updatedAt: new Date() } });
-}
-
-function getNextSundayAt2AM(): Date {
-  const now = new Date();
-  const d = new Date(now);
-  d.setUTCHours(2, 0, 0, 0);
-  const daysUntilSunday = (7 - d.getUTCDay()) % 7 || 7;
-  d.setUTCDate(d.getUTCDate() + daysUntilSunday);
-  if (d <= now) d.setUTCDate(d.getUTCDate() + 7);
-  return d;
 }
 
 async function sendWeeklyEmails(): Promise<void> {

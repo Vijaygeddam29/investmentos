@@ -1,21 +1,12 @@
 import { Router, type IRouter } from "express";
 import { runPipeline, getPipelineStatus } from "../lib/pipeline";
 import { sendPipelineReport } from "../lib/mailer";
+import { getNextSundayAt2AM } from "../lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
 import { eq, desc, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
-
-function getNextSundayAt2AM(): string {
-  const now = new Date();
-  const d = new Date(now);
-  d.setUTCHours(2, 0, 0, 0);
-  const daysUntilSunday = (7 - d.getUTCDay()) % 7 || 7;
-  d.setUTCDate(d.getUTCDate() + daysUntilSunday);
-  if (d <= now) d.setUTCDate(d.getUTCDate() + 7);
-  return d.toISOString();
-}
 
 router.post("/pipeline/run", async (req, res) => {
   try {
@@ -49,7 +40,7 @@ router.get("/pipeline/status", async (_req, res) => {
     yfPatchStats: status.yfPatchStats ?? undefined,
     dataSourceBreakdown: status.dataSourceBreakdown ?? undefined,
     results: status.results ?? undefined,
-    nextScheduledRun: getNextSundayAt2AM(),
+    nextScheduledRun: getNextSundayAt2AM().toISOString(),
     lastAutoRun,
   });
 });
