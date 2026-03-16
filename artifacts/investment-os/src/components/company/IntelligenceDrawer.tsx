@@ -665,14 +665,39 @@ function NarrativePanel({ ticker, scores }: { ticker: string; scores?: Narrative
   }
 
   if (error || !data) {
+    const errMsg = error instanceof Error ? error.message : null;
+    const isQuotaErr = errMsg?.toLowerCase().includes("quota") || errMsg?.toLowerCase().includes("rate limit") || errMsg?.toLowerCase().includes("overload");
+    const isNoData   = errMsg?.toLowerCase().includes("intelligence") || errMsg?.toLowerCase().includes("snapshot");
     return (
       <div className="px-5 py-10 flex flex-col items-center gap-4">
         <AlertTriangle className="w-8 h-8 text-orange-400" />
-        <div className="text-center">
+        <div className="text-center space-y-1.5 max-w-[85%]">
           <p className="text-sm text-foreground font-medium">Narrative unavailable</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {error instanceof Error ? error.message : "Could not generate narrative. Ensure the company has Intelligence data."}
-          </p>
+          {isQuotaErr ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                The AI service is temporarily over capacity. This is a transient issue — try again in 30 seconds.
+              </p>
+              <p className="text-[11px] text-muted-foreground/60">
+                Narratives are cached after the first successful generation, so this only affects first-time loads.
+              </p>
+            </>
+          ) : isNoData ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Intelligence scores are missing for this company. Run the pipeline to compute Quality, Opportunity, Mispricing, Expectation, and Fragility scores before generating a narrative.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {errMsg ?? "Could not generate the investment narrative."}
+              </p>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Possible causes: the AI service is temporarily unavailable, or this company has not been scored by the pipeline yet. Use the refresh button below to try again.
+              </p>
+            </>
+          )}
         </div>
         <button
           onClick={() => refetch()}

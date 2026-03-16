@@ -13,6 +13,54 @@ interface FactorAccordionProps {
 
 const MAX_ROIC = 1.0;
 
+const FAMILY_NO_DATA_REASON: Record<string, { title: string; why: string; impact: string }> = {
+  profitability: {
+    title: "Profitability — No Data",
+    why: "Core margin and return metrics could not be fetched from the financial data provider for this reporting period.",
+    impact: "Profitability score excluded from composite ranking.",
+  },
+  growth: {
+    title: "Growth — Partially Unavailable",
+    why: "Multi-year growth rates (3Y / 5Y) require historical income statement data that the financial data provider did not return for this company. Only 1-year metrics are available when present.",
+    impact: "Growth score is computed from whichever metrics are available; missing data reduces confidence.",
+  },
+  capitalEfficiency: {
+    title: "Capital Efficiency — Partially Unavailable",
+    why: "Several derived efficiency metrics (operating leverage, reinvestment rate, shareholder yield) could not be computed from the available statement data for this company.",
+    impact: "Capital Efficiency score relies on whichever metrics are present.",
+  },
+  financialStrength: {
+    title: "Financial Strength — No Data",
+    why: "Balance sheet leverage and liquidity metrics were not returned by the financial data provider for this reporting period.",
+    impact: "Financial Strength score excluded from composite ranking.",
+  },
+  cashFlowQuality: {
+    title: "Cash Flow Quality — Partially Unavailable",
+    why: "Some cash flow quality metrics (deferred revenue growth, earnings surprises, forward PE) require supplemental analyst and statement data not available for this company in the current pipeline run.",
+    impact: "Cash Flow Quality score is computed from whichever metrics are present.",
+  },
+  innovation: {
+    title: "R&D & Innovation — Not Applicable",
+    why: "This company does not report research & development expenses, or R&D data was not returned by the financial data provider. Innovation metrics apply to technology, healthcare, biotech, and research-intensive businesses only. Non-R&D businesses (retail, industrials, financials, etc.) are expected to have no data here.",
+    impact: "Innovation score is excluded; the composite scoring formula reweights to the remaining 8 families.",
+  },
+  momentum: {
+    title: "Market Momentum — No Data",
+    why: "Price history data is unavailable for this company. Momentum indicators (RSI, moving averages, 52-week range) require at least 200 trading days of price data.",
+    impact: "Momentum score excluded from composite ranking.",
+  },
+  valuation: {
+    title: "Valuation — No Data",
+    why: "Valuation multiples (P/E, EV/EBITDA, FCF yield, etc.) could not be fetched from the financial data provider for this company.",
+    impact: "Valuation score excluded from composite ranking.",
+  },
+  sentiment: {
+    title: "Market Signals — Unavailable",
+    why: "Insider activity, institutional ownership, and analyst coverage data are sourced from a separate endpoint. This data was not available for this company in the current pipeline run — common for international stocks, smaller companies, and newly added tickers.",
+    impact: "Opportunity score reweighted to Valuation 55% / Momentum 45%.",
+  },
+};
+
 export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccordionProps) {
   const families = [
     {
@@ -167,6 +215,8 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
           const coverage = familyCoverage?.[family.id];
           const confidence = coverage ? getConfidenceLabel(coverage.pct) : null;
           const isSentimentUnavailable = family.id === "sentiment" && family.score == null;
+          const isFullyUnavailable = allEntries.length > 0 && entries.length === 0;
+          const noDataInfo = FAMILY_NO_DATA_REASON[family.id];
 
           return (
             <AccordionItem
@@ -203,7 +253,7 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-xs">
-                            {coverage.available}/{coverage.total} signals available ({coverage.pct}% coverage)
+                            {coverage?.available}/{coverage?.total} signals available ({coverage?.pct}% coverage)
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -216,17 +266,29 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-4 pt-1">
-                {isSentimentUnavailable ? (
-                  <div className="py-4 text-center space-y-1.5">
-                    <p className="text-xs text-amber-400 font-medium">Market Signals — Unavailable</p>
-                    <p className="text-[11px] text-muted-foreground max-w-[80%] mx-auto leading-relaxed">
-                      Requires insider activity, institutional ownership, and analyst coverage data.
-                      Opportunity score has been reweighted to Valuation 55% / Momentum 45%.
+                {(isSentimentUnavailable || isFullyUnavailable) && noDataInfo ? (
+                  <div className="py-4 space-y-2.5 border-t border-border/40 pt-4">
+                    <p className="text-xs font-semibold text-amber-400">{noDataInfo.title}</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      <span className="font-medium text-foreground/70">Why: </span>{noDataInfo.why}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/60 leading-relaxed italic">
+                      <span className="not-italic font-medium text-muted-foreground/80">Scoring impact: </span>{noDataInfo.impact}
                     </p>
                   </div>
                 ) : entries.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-2 text-center">No data available for this period.</p>
                 ) : (
+                  <div>
+                  {coverage != null && coverage.pct < 60 && noDataInfo && (() => {
+                    const { available, total } = coverage;
+                    return (
+                      <div className="mt-3 mb-1 px-1 py-2 rounded-md bg-amber-500/8 border border-amber-500/20 text-[10px] text-amber-400/80 leading-relaxed">
+                        <span className="font-semibold text-amber-400">Low coverage ({available}/{total}):</span>{" "}
+                        {noDataInfo.why}
+                      </div>
+                    );
+                  })()}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 pt-3 border-t border-border/50">
                     {allEntries.map(([key, value]) => {
                       const info = getMetricInfo(key);
@@ -264,6 +326,12 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
                                       Raw value exceeds 100% — accounting distortion (negative equity). Capped at 100% for scoring.
                                     </p>
                                   )}
+                                  {isUnavailable && (
+                                    <p className="text-[10px] text-amber-400/80 mt-1.5 leading-snug">
+                                      Not available: the financial data provider did not return this value for the current reporting period. It is excluded from scoring.
+                                    </p>
+                                  )}
+                                  {!isUnavailable && (
                                   <div className="mt-2.5 pt-2 border-t border-border/50 flex gap-1.5 items-start">
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0 mt-0.5">
                                       Target
@@ -272,6 +340,7 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
                                       {info.good}
                                     </span>
                                   </div>
+                                  )}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
@@ -290,6 +359,7 @@ export function FactorAccordion({ metrics, scores, familyCoverage }: FactorAccor
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 )}
               </AccordionContent>
