@@ -26,7 +26,7 @@ const router: IRouter = Router();
  * Query parameters (all optional):
  *   min_fortress, min_rocket, min_wave, min_entry  — score thresholds (0–1)
  *   sector, industry, country                      — company attribute filters
- *   market_cap_min, market_cap_max                 — market cap in USD
+ *   market_cap_min, market_cap_max                 — market cap in billions (e.g. 10 = $10B)
  *   date   — snapshot date YYYY-MM-DD
  *   limit  — max rows (default 100, max 500)
  */

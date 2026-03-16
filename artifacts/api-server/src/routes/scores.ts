@@ -27,9 +27,9 @@ router.get("/market/regime", async (_req, res) => {
   }
 });
 
-// Cap tier boundaries (USD)
-const CAP_LARGE_MIN = 10_000_000_000;
-const CAP_MID_MIN   =  2_000_000_000;
+// Cap tier boundaries — stored in billions (e.g. 10 = $10B, 2 = $2B)
+const CAP_LARGE_MIN = 10;
+const CAP_MID_MIN   =  2;
 
 type CapTier = "all" | "large" | "mid" | "small" | "top50";
 

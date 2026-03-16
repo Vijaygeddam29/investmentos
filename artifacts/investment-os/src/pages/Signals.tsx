@@ -314,9 +314,9 @@ export default function Signals() {
   const countryParam = market !== "All" ? market : undefined;
 
   const capParams = (() => {
-    if (capTier === "large") return { market_cap_min: 10_000_000_000 };
-    if (capTier === "mid")   return { market_cap_min: 2_000_000_000, market_cap_max: 10_000_000_000 };
-    if (capTier === "small") return { market_cap_max: 2_000_000_000 };
+    if (capTier === "large") return { market_cap_min: 10 };
+    if (capTier === "mid")   return { market_cap_min: 2, market_cap_max: 10 };
+    if (capTier === "small") return { market_cap_max: 2 };
     return {};
   })();
 
