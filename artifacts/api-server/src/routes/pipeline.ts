@@ -9,13 +9,16 @@ import { eq, desc, gte } from "drizzle-orm";
 const router: IRouter = Router();
 
 router.post("/pipeline/run", async (req, res) => {
-  try {
-    const tickers = req.body?.tickers;
-    const result = await runPipeline(tickers);
-    res.json(result);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  const status = getPipelineStatus();
+  if (status.running) {
+    return res.status(409).json({ error: "Pipeline already running", running: true });
   }
+  const tickers = req.body?.tickers;
+  // Fire-and-forget so HTTP doesn't time out on long runs
+  runPipeline(tickers).catch((err) =>
+    console.error("[Pipeline] background run failed:", err)
+  );
+  res.json({ started: true, message: "Pipeline started in background — check /api/pipeline/status for progress" });
 });
 
 router.get("/pipeline/status", async (_req, res) => {
