@@ -11,7 +11,7 @@ import {
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function authHeader() {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("ios_jwt");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
