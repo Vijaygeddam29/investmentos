@@ -251,7 +251,6 @@ export default function Admin() {
                     <th className="text-center px-6 py-3 text-xs font-mono text-slate-500 uppercase">Fortress</th>
                     <th className="text-center px-6 py-3 text-xs font-mono text-slate-500 uppercase">Rocket</th>
                     <th className="text-center px-6 py-3 text-xs font-mono text-slate-500 uppercase">Wave</th>
-                    <th className="text-left px-6 py-3 text-xs font-mono text-slate-500 uppercase">Verdict</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,15 +262,6 @@ export default function Admin() {
                       <td className="px-6 py-3 text-center"><ScoreBadge score={s.fortressScore ?? 0} /></td>
                       <td className="px-6 py-3 text-center"><ScoreBadge score={s.rocketScore ?? 0} /></td>
                       <td className="px-6 py-3 text-center"><ScoreBadge score={s.waveScore ?? 0} /></td>
-                      <td className="px-6 py-3">
-                        {s.verdict ? (
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                            s.verdict === "BUY"  ? "bg-green-500/15 text-green-400" :
-                            s.verdict === "SELL" ? "bg-red-500/15 text-red-400" :
-                            "bg-white/5 text-slate-400"
-                          }`}>{s.verdict}</span>
-                        ) : "—"}
-                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -69,7 +69,6 @@ router.get("/admin/stats", requireAdmin, async (_req, res) => {
         fortressScore: scoresTable.fortressScore,
         rocketScore: scoresTable.rocketScore,
         waveScore: scoresTable.waveScore,
-        verdict: scoresTable.verdict,
       })
         .from(scoresTable)
         .leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
