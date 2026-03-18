@@ -23,9 +23,11 @@ import { generateAiMemo } from "./ai-memo";
 import { calibrateUniverseScores } from "./normalizer";
 import { writeFactorSnapshot } from "./factor-warehouse";
 import { normaliseCountryName } from "./country-benchmarks";
+import { sendPipelineReport } from "./mailer";
+import { getNextSundayAt2AM } from "./scheduler-utils";
 import { db } from "@workspace/db";
-import { companiesTable, financialMetricsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { companiesTable, financialMetricsTable, scoresTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
+import { eq, desc, gte } from "drizzle-orm";
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — weekly refresh
 
@@ -257,6 +259,46 @@ export async function runPipeline(tickers?: string[]) {
     lastRunDate = new Date().toISOString();
     lastRunUpdated = processed;
     lastRunFailed = failed;
+
+    // ── Completion email ─────────────────────────────────────────────────────
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 7);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+      const [topFortress, topRocket, opportunities, riskSignals] = await Promise.all([
+        db.select({ ticker: scoresTable.ticker, company: companiesTable.name, fortressScore: scoresTable.fortressScore, rocketScore: scoresTable.rocketScore, waveScore: scoresTable.waveScore })
+          .from(scoresTable).leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
+          .where(eq(scoresTable.date, today)).orderBy(desc(scoresTable.fortressScore)).limit(8),
+        db.select({ ticker: scoresTable.ticker, company: companiesTable.name, fortressScore: scoresTable.fortressScore, rocketScore: scoresTable.rocketScore, waveScore: scoresTable.waveScore })
+          .from(scoresTable).leftJoin(companiesTable, eq(scoresTable.ticker, companiesTable.ticker))
+          .where(eq(scoresTable.date, today)).orderBy(desc(scoresTable.rocketScore)).limit(8),
+        db.select({ ticker: opportunityAlertsTable.ticker, alertType: opportunityAlertsTable.alertType, score: opportunityAlertsTable.score })
+          .from(opportunityAlertsTable).where(gte(opportunityAlertsTable.date, cutoffStr))
+          .orderBy(desc(opportunityAlertsTable.score)).limit(10),
+        db.select({ ticker: riskAlertsTable.ticker, riskLevel: riskAlertsTable.riskLevel, description: riskAlertsTable.description })
+          .from(riskAlertsTable).where(gte(riskAlertsTable.date, cutoffStr))
+          .orderBy(desc(riskAlertsTable.createdAt)).limit(10),
+      ]);
+
+      const nextRunDate = getNextSundayAt2AM().toUTCString().replace(" GMT", " UTC");
+      await sendPipelineReport({
+        processed,
+        failed,
+        updated: processed,
+        fmpCount,
+        yahooCount: yfCount,
+        nextRunDate,
+        topFortress: topFortress.map(r => ({ ticker: r.ticker, company: r.company ?? undefined, fortressScore: r.fortressScore, rocketScore: r.rocketScore, waveScore: r.waveScore })),
+        topRocket:   topRocket.map(r => ({ ticker: r.ticker, company: r.company ?? undefined, fortressScore: r.fortressScore, rocketScore: r.rocketScore, waveScore: r.waveScore })),
+        newOpportunities: opportunities.map(o => ({ ticker: o.ticker, alertType: o.alertType, score: o.score ?? 0 })),
+        highRisk: riskSignals.map(r => ({ ticker: r.ticker, signalType: r.riskLevel.toUpperCase(), severity: r.riskLevel, description: r.description })),
+      });
+      console.log("[Pipeline] Completion email sent.");
+    } catch (emailErr: any) {
+      console.warn("[Pipeline] Completion email failed:", emailErr.message);
+    }
   }
 
   return { status: "completed", processed, failed, results: pipelineResults };

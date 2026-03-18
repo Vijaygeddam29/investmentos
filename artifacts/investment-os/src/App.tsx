@@ -13,6 +13,7 @@ import Screener from "@/pages/Screener";
 import SectorHeatmap from "@/pages/SectorHeatmap";
 import Portfolio from "@/pages/Portfolio";
 import PortfolioBuilder from "@/pages/PortfolioBuilder";
+import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -50,6 +51,7 @@ function ProtectedRoutes() {
       <Route path="/sector-heatmap" component={SectorHeatmap} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/portfolio/builder" component={PortfolioBuilder} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

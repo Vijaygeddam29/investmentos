@@ -12,10 +12,12 @@ import anthropicRouter from "./anthropic";
 import alertsRouter from "./alerts";
 import authRouter from "./auth";
 import intelligenceRouter from "./intelligence";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
+router.use(adminRouter);
 router.use(healthRouter);
 router.use(pipelineRouter);
 router.use(companiesRouter);

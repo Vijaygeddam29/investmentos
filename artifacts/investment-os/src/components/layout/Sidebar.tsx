@@ -12,6 +12,7 @@ import {
   X,
   LogOut,
   User,
+  Shield,
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -117,6 +118,21 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-border space-y-1">
+        {user?.email === "vijay@marketlifes.com" && (
+          <Link
+            href="/admin"
+            onClick={isMobile ? close : undefined}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium transition-all duration-150",
+              location === "/admin"
+                ? "bg-indigo-500/15 text-indigo-400"
+                : "text-indigo-400/60 hover:bg-indigo-500/10 hover:text-indigo-400"
+            )}
+          >
+            <Shield className="w-4 h-4" />
+            Admin Console
+          </Link>
+        )}
         <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150">
           <Settings className="w-4 h-4" />
           Settings
