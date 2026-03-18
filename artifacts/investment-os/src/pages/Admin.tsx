@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
-import Layout from "@/components/layout/Layout";
+import { Layout } from "@/components/layout/Layout";
 import {
   Users, Activity, Database, TrendingUp, AlertTriangle,
   MessageSquare, RefreshCw, Play, CheckCircle, XCircle,
