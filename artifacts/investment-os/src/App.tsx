@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 // Pages
 import Login from "@/pages/Login";
@@ -35,6 +36,7 @@ function LoadingScreen() {
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
+  useAnalytics();
 
   if (loading) return <LoadingScreen />;
   if (!user) return <Redirect to="/login" />;

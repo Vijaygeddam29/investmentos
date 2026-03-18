@@ -8,6 +8,7 @@
 
 import { Router, type IRouter } from "express";
 import { requireAdmin } from "../middleware/auth";
+import { getApiMetrics } from "../middleware/metrics";
 import { runPipeline, getPipelineStatus } from "../lib/pipeline";
 import { getNextSundayAt2AM } from "../lib/scheduler-utils";
 import { db } from "@workspace/db";
@@ -92,7 +93,10 @@ router.get("/admin/stats", requireAdmin, async (_req, res) => {
 
     const pipeline = getPipelineStatus();
 
+    const apiMetrics = getApiMetrics();
+
     res.json({
+      apiMetrics,
       users: {
         total:    userTotal[0]?.n  ?? 0,
         last7d:   usersLast7[0]?.n  ?? 0,

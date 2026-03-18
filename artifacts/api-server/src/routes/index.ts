@@ -13,11 +13,13 @@ import alertsRouter from "./alerts";
 import authRouter from "./auth";
 import intelligenceRouter from "./intelligence";
 import adminRouter from "./admin";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(adminRouter);
+router.use(analyticsRouter);
 router.use(healthRouter);
 router.use(pipelineRouter);
 router.use(companiesRouter);
