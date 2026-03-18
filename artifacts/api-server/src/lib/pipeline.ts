@@ -2,7 +2,8 @@
  * Pipeline Orchestrator
  *
  * Order per ticker:
- *   1. FMP harvest (rate-limited, 10yr history, insider/analyst data)
+ *   1. Yahoo Finance harvest (primary — free, no quota)
+ *      → FMP fallback if Yahoo fails (rate-limited, richer history)
  *   2. Score (8-family factor model)
  *   3. Entry timing score
  *   4. Drift + opportunity detectors
@@ -13,7 +14,7 @@
  */
 
 import { fetchAndStoreCompany, fetchAndStoreMetrics, fetchAndStorePrices } from "./fmp-harvester";
-import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices, yfPatchNullFields, runYfPatchUniverse } from "./yf-harvester";
+import { yfFetchAndStoreCompany, yfFetchAndStoreMetrics, yfFetchAndStorePrices } from "./yf-harvester";
 import { fmpQuotaExhausted } from "./fmp-client";
 import { calculateAllScores } from "./scoring-engines";
 import { computeEntryTimingScore } from "./entry-timing";
@@ -136,19 +137,6 @@ export async function runPipeline(tickers?: string[]) {
     }
     console.log("[Pipeline] Country normalisation complete.");
 
-    // ── Pro-active Yahoo Finance null-field patch ─────────────────────────────
-    // Runs BEFORE per-ticker scoring so that scoring always has the richest data.
-    // This is called regardless of whether FMP will run — it fills gaps proactively.
-    currentStep = "yf-patch";
-    console.log("[Pipeline] Starting proactive Yahoo Finance null-field patch for all companies...");
-    yfPatchStats = await runYfPatchUniverse((done, total, ticker) => {
-      currentTicker = ticker;
-    }).catch(err => {
-      console.warn("[Pipeline] YF universe patch error:", err.message);
-      return { patched: 0, failed: 0 };
-    });
-    console.log(`[Pipeline] YF patch complete — ${yfPatchStats.patched} patched, ${yfPatchStats.failed} failed`);
-
     for (const ticker of tickerList) {
       currentTicker = ticker;
       try {
@@ -157,32 +145,27 @@ export async function runPipeline(tickers?: string[]) {
         currentStep = "harvesting";
         let usedSource: "fmp" | "yahoo" = "yahoo";
         if (await needsFmpFetch(ticker)) {
-          if (!fmpQuotaExhausted()) {
-            try {
+          // ── Primary: Yahoo Finance (free, no quota) ──────────────────────
+          try {
+            await yfFetchAndStoreCompany(ticker);
+            await yfFetchAndStoreMetrics(ticker);
+            await yfFetchAndStorePrices(ticker);
+            usedSource = "yahoo";
+            yfCount++;
+            console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
+          } catch (yfErr: any) {
+            // ── Fallback: FMP (paid, richer history) ─────────────────────
+            console.warn(`[Pipeline] ${ticker} — Yahoo Finance failed (${yfErr.message}), trying FMP...`);
+            if (!fmpQuotaExhausted()) {
               await fetchAndStoreCompany(ticker);
               await fetchAndStoreMetrics(ticker);
               await fetchAndStorePrices(ticker);
-              // Patch any remaining null fields FMP left behind
-              await yfPatchNullFields(ticker).catch(() => {});
               usedSource = "fmp";
               fmpCount++;
-              console.log(`[Pipeline] ${ticker} — harvested via FMP`);
-            } catch (fmpErr: any) {
-              console.warn(`[Pipeline] ${ticker} — FMP failed (${fmpErr.message}), trying Yahoo Finance...`);
-              await yfFetchAndStoreCompany(ticker);
-              await yfFetchAndStoreMetrics(ticker);
-              await yfFetchAndStorePrices(ticker);
-              usedSource = "yahoo";
-              yfCount++;
-              console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
+              console.log(`[Pipeline] ${ticker} — harvested via FMP (fallback)`);
+            } else {
+              throw new Error(`Yahoo Finance failed and FMP quota exhausted for ${ticker}`);
             }
-          } else {
-            console.log(`[Pipeline] ${ticker} — FMP quota exhausted, using Yahoo Finance...`);
-            await yfFetchAndStoreCompany(ticker);
-            await yfFetchAndStoreMetrics(ticker);
-            yfCount++;
-            await yfFetchAndStorePrices(ticker);
-            console.log(`[Pipeline] ${ticker} — harvested via Yahoo Finance`);
           }
         } else {
           console.log(`[Pipeline] ${ticker} — data fresh, skipping fetch`);
