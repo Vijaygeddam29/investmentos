@@ -493,14 +493,28 @@ router.patch("/options/trades/:id", requireAuth, async (req, res) => {
   const { status, closingPrice, isAssigned, realisedPnl, notes } = req.body;
 
   try {
+    const trade = await db.select().from(optionsTradesTable)
+      .where(and(eq(optionsTradesTable.id, id), eq(optionsTradesTable.userId, user.userId)))
+      .limit(1);
+    if (!trade.length) { res.status(404).json({ error: "Trade not found" }); return; }
+
+    const t = trade[0];
+    const premium = t.premiumCollected ?? 0;
+    // Auto-calculate realised P&L if closing price provided
+    const finalPnl = realisedPnl ?? (
+      closingPrice != null
+        ? (premium - closingPrice * 100)  // bought back for less = profit
+        : (status === "expired" ? premium : null)
+    );
+
     const updated = await db
       .update(optionsTradesTable)
       .set({
         status:       status ?? undefined,
-        closedAt:     status === "closed" || status === "expired" || status === "assigned" ? new Date() : undefined,
+        closedAt:     ["closed","expired","assigned"].includes(status) ? new Date() : undefined,
         closingPrice: closingPrice ?? undefined,
         isAssigned:   isAssigned ?? undefined,
-        realisedPnl:  realisedPnl ?? undefined,
+        realisedPnl:  finalPnl ?? undefined,
         notes:        notes ?? undefined,
       })
       .where(and(eq(optionsTradesTable.id, id), eq(optionsTradesTable.userId, user.userId)))
@@ -509,6 +523,276 @@ router.patch("/options/trades/:id", requireAuth, async (req, res) => {
     res.json({ trade: updated[0] });
   } catch (err) {
     res.status(500).json({ error: "Failed to update trade" });
+  }
+});
+
+// ─── Close Position via IBKR ──────────────────────────────────────────────────
+
+router.post("/options/trades/:id/close", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  const id = parseInt(req.params.id);
+  const { limitPrice } = req.body; // user-specified buy-back price, or null for market
+
+  try {
+    const trade = await db.select().from(optionsTradesTable)
+      .where(and(eq(optionsTradesTable.id, id), eq(optionsTradesTable.userId, user.userId)))
+      .limit(1);
+    if (!trade.length) { res.status(404).json({ error: "Trade not found" }); return; }
+
+    const t = trade[0];
+    if (t.status !== "open") { res.status(400).json({ error: "Trade is not open" }); return; }
+
+    const conn = await db.select().from(ibkrConnectionsTable)
+      .where(eq(ibkrConnectionsTable.userId, user.userId))
+      .limit(1);
+
+    if (!conn.length || !conn[0].accessToken) {
+      // No IBKR — just mark as closed manually
+      await db.update(optionsTradesTable)
+        .set({ status: "closed", closedAt: new Date(), notes: "Manually closed (no IBKR)" })
+        .where(eq(optionsTradesTable.id, id));
+      res.json({ status: "closed", method: "manual" });
+      return;
+    }
+
+    // Place buy-to-close order via IBKR
+    const accountId = conn[0].accountId;
+    const right = t.right === "CALL" ? "C" : "P";
+    const expiryFmt = t.expiry.replace(/-/g, "").slice(2);
+    const buyBackPrice = limitPrice ?? parseFloat(((t.premiumCollected ?? 0) / 100 * 0.5).toFixed(2));
+
+    try {
+      const orderReq = {
+        acctId: accountId,
+        symbol: t.ticker,
+        secType: "OPT",
+        lastTradeDateOrContractMonth: expiryFmt,
+        strike: t.strike,
+        right,
+        multiplier: 100,
+        orderType: limitPrice ? "LMT" : "MKT",
+        lmtPrice: limitPrice ?? undefined,
+        side: "BUY",
+        quantity: t.quantity ?? 1,
+        tif: "GTC",
+      };
+
+      const result = await ibkrApiCall(user.userId, `/iserver/account/${accountId}/order`, "POST", orderReq);
+      const ibkrCloseId = result?.order_id ?? result?.orderId ?? null;
+
+      await db.update(optionsTradesTable)
+        .set({
+          status: "closed", closedAt: new Date(),
+          closingPrice: buyBackPrice,
+          realisedPnl: (t.premiumCollected ?? 0) - buyBackPrice * 100,
+          notes: `Closed via IBKR order ${ibkrCloseId}`,
+        })
+        .where(eq(optionsTradesTable.id, id));
+
+      res.json({ status: "closed", method: "ibkr", ibkrOrderId: ibkrCloseId, buyBackPrice });
+    } catch (ibkrErr) {
+      res.status(207).json({
+        status: "ibkr_error",
+        message: "Could not place IBKR order. Close the position manually in IBKR then mark it closed here.",
+        error: (ibkrErr as Error).message,
+      });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to close position" });
+  }
+});
+
+// ─── Roll Position Forward ────────────────────────────────────────────────────
+
+router.post("/options/trades/:id/roll", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  const id = parseInt(req.params.id);
+
+  try {
+    const trade = await db.select().from(optionsTradesTable)
+      .where(and(eq(optionsTradesTable.id, id), eq(optionsTradesTable.userId, user.userId)))
+      .limit(1);
+    if (!trade.length) { res.status(404).json({ error: "Trade not found" }); return; }
+
+    const t = trade[0];
+    // Generate next-month expiry (~30 days out, third Friday)
+    const nextExpiry = new Date();
+    nextExpiry.setDate(nextExpiry.getDate() + 30);
+    const month = nextExpiry.getMonth();
+    const year = nextExpiry.getFullYear();
+    let thirdFriday = new Date(year, month, 1);
+    let fridays = 0;
+    while (fridays < 3) {
+      if (thirdFriday.getDay() === 5) fridays++;
+      if (fridays < 3) thirdFriday.setDate(thirdFriday.getDate() + 1);
+    }
+    const newExpiry = thirdFriday.toISOString().slice(0, 10);
+    const currentDte = Math.max(0, Math.round((new Date(t.expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+    // Get AI rationale for the roll
+    const rationale = await generateRollRationale({
+      ticker: t.ticker,
+      right: t.right as "PUT" | "CALL",
+      currentStrike: t.strike,
+      currentExpiry: t.expiry,
+      dte: currentDte,
+      currentPnlPct: 0, // unknown without live price
+      suggestedStrike: t.strike,
+      suggestedExpiry: newExpiry,
+    }).catch(() => null);
+
+    res.json({
+      action: "roll",
+      currentTrade: { id: t.id, ticker: t.ticker, strike: t.strike, expiry: t.expiry },
+      proposedRoll: {
+        ticker: t.ticker,
+        right: t.right,
+        strike: t.strike,
+        newExpiry,
+        daysAdded: 30,
+      },
+      rationale: rationale ?? `Rolling ${t.ticker} ${t.right} $${t.strike} from ${t.expiry} to ${newExpiry} extends the trade by ~30 days, giving the position more time to work in your favour and collecting additional premium.`,
+      instruction: `In IBKR: use the "Roll" feature on this position, or place two orders simultaneously — Buy-to-Close the ${t.expiry} contract and Sell-to-Open the ${newExpiry} contract at the same strike $${t.strike}.`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to generate roll recommendation" });
+  }
+});
+
+// ─── Covered Calls from IBKR Stock Holdings ───────────────────────────────────
+
+router.get("/options/covered-calls", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+
+  try {
+    const conn = await db.select().from(ibkrConnectionsTable)
+      .where(eq(ibkrConnectionsTable.userId, user.userId))
+      .limit(1);
+
+    if (!conn.length || !conn[0].accessToken || !conn[0].accountId) {
+      res.json({ connected: false, positions: [], message: "Connect your IBKR account to see covered call opportunities on your existing shares." });
+      return;
+    }
+
+    // Fetch IBKR stock positions
+    let ibkrPositions: Array<{ ticker: string; qty: number; avgCost: number; marketValue: number }> = [];
+    try {
+      const rawPositions = await ibkrApiCall(user.userId, `/iserver/portfolio/${conn[0].accountId}/positions/0`, "GET");
+      ibkrPositions = (rawPositions ?? [])
+        .filter((p: any) => p.assetClass === "STK" && (p.position ?? p.size ?? 0) >= 100)
+        .map((p: any) => ({
+          ticker:      p.ticker ?? p.contractDesc ?? "",
+          qty:         p.position ?? p.size ?? 0,
+          avgCost:     p.avgCost ?? 0,
+          marketValue: p.mktValue ?? p.marketValue ?? 0,
+        }));
+    } catch (ibkrErr) {
+      console.error("[CoveredCalls] IBKR positions fetch failed:", ibkrErr);
+      res.json({ connected: true, positions: [], message: "Could not fetch positions from IBKR. Your session may have expired." });
+      return;
+    }
+
+    if (!ibkrPositions.length) {
+      res.json({ connected: true, positions: [], message: "No stock positions with 100+ shares found in IBKR. You need to own at least 100 shares of a stock to sell covered calls." });
+      return;
+    }
+
+    // For each qualifying holding, generate a covered call suggestion
+    const profile = await db.select().from(userRiskProfilesTable)
+      .where(eq(userRiskProfilesTable.userId, user.userId))
+      .limit(1);
+    const { dteMax = 35 } = profile[0] ?? {};
+
+    const suggestions = ibkrPositions.map((pos) => {
+      const contracts = Math.floor(pos.qty / 100);
+      // Suggest strike 5-8% above current price
+      const currentPrice = pos.avgCost; // use avg cost as proxy; real price from IBKR
+      const callStrike = Math.ceil(currentPrice * 1.06 / 5) * 5; // round up to nearest $5
+      // Estimate premium (rough: 0.5-1.5% of strike for 30 DTE)
+      const estPremium = (callStrike * 0.008).toFixed(2);
+      const estIncome = (parseFloat(estPremium) * 100 * contracts).toFixed(0);
+
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + dteMax);
+      const expiryStr = expiry.toISOString().slice(0, 10);
+
+      return {
+        ticker: pos.ticker,
+        sharesOwned: pos.qty,
+        contracts,
+        avgCost: pos.avgCost,
+        suggestedStrike: callStrike,
+        suggestedExpiry: expiryStr,
+        dte: dteMax,
+        estPremiumPerContract: parseFloat(estPremium),
+        estTotalIncome: parseFloat(estIncome),
+        note: `You own ${pos.qty} shares (avg cost $${pos.avgCost.toFixed(2)}). Selling ${contracts} call${contracts > 1 ? "s" : ""} at $${callStrike} collects ~$${estIncome}. You keep the premium if the stock stays below $${callStrike} — and if it rises above, you sell your shares at a profit.`,
+      };
+    });
+
+    res.json({ connected: true, positions: suggestions });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch covered call opportunities" });
+  }
+});
+
+// ─── Feedback Loop: Performance Stats ────────────────────────────────────────
+
+router.get("/options/performance", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+
+  try {
+    const trades = await db.select().from(optionsTradesTable)
+      .where(eq(optionsTradesTable.userId, user.userId));
+
+    const closed = trades.filter((t) => t.status !== "open" && t.realisedPnl != null);
+    const open = trades.filter((t) => t.status === "open");
+
+    const wins = closed.filter((t) => (t.realisedPnl ?? 0) > 0);
+    const losses = closed.filter((t) => (t.realisedPnl ?? 0) <= 0);
+
+    const totalPremium = trades.reduce((s, t) => s + (t.premiumCollected ?? 0), 0);
+    const realisedPnl  = closed.reduce((s, t) => s + (t.realisedPnl ?? 0), 0);
+    const avgWin   = wins.length   ? wins.reduce((s, t) => s + (t.realisedPnl ?? 0), 0) / wins.length : 0;
+    const avgLoss  = losses.length ? losses.reduce((s, t) => s + (t.realisedPnl ?? 0), 0) / losses.length : 0;
+    const winRate  = closed.length ? wins.length / closed.length : null;
+
+    // Income efficiency: did we actually collect what the signal promised?
+    const avgRetentionPct = wins.length
+      ? wins.reduce((s, t) => s + (t.realisedPnl ?? 0) / (t.premiumCollected ?? 1), 0) / wins.length * 100
+      : null;
+
+    // Strategy breakdown
+    const byStrategy = ["PUT", "CALL"].map((right) => {
+      const group = closed.filter((t) => t.right === right);
+      const groupWins = group.filter((t) => (t.realisedPnl ?? 0) > 0);
+      return {
+        right,
+        trades: group.length,
+        winRate: group.length ? groupWins.length / group.length : null,
+        totalPnl: group.reduce((s, t) => s + (t.realisedPnl ?? 0), 0),
+      };
+    });
+
+    res.json({
+      summary: {
+        totalTrades: trades.length,
+        openTrades: open.length,
+        closedTrades: closed.length,
+        wins: wins.length,
+        losses: losses.length,
+        winRate,
+        totalPremiumCollected: totalPremium,
+        realisedPnl,
+        avgWin,
+        avgLoss,
+        avgRetentionPct,
+        expectancy: winRate != null ? (winRate * avgWin + (1 - winRate) * avgLoss) : null,
+      },
+      byStrategy,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch performance" });
   }
 });
 
