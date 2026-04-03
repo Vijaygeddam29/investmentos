@@ -19,6 +19,7 @@ import NotFound from "@/pages/not-found";
 import OptionsSignals from "@/pages/OptionsSignals";
 import OptionsPositions from "@/pages/OptionsPositions";
 import OptionsIncome from "@/pages/OptionsIncome";
+import OptionsScreener from "@/pages/OptionsScreener";
 import PreMarketIntelligence from "@/pages/PreMarketIntelligence";
 import IBKRSettings from "@/pages/IBKRSettings";
 
@@ -58,6 +59,7 @@ function ProtectedRoutes() {
       <Route path="/sector-heatmap" component={SectorHeatmap} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/portfolio/builder" component={PortfolioBuilder} />
+      <Route path="/options/screener" component={OptionsScreener} />
       <Route path="/options/signals" component={OptionsSignals} />
       <Route path="/options/positions" component={OptionsPositions} />
       <Route path="/options/income" component={OptionsIncome} />

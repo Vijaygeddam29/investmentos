@@ -25,6 +25,7 @@ import {
   userRiskProfilesTable,
   ibkrConnectionsTable,
   companiesTable,
+  scoresTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql, ne } from "drizzle-orm";
 import { requireAuth, type AuthPayload } from "../middleware/auth";
@@ -734,6 +735,165 @@ router.get("/options/covered-calls", requireAuth, async (req, res) => {
     res.json({ connected: true, positions: suggestions });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch covered call opportunities" });
+  }
+});
+
+// ─── Options Screener ─────────────────────────────────────────────────────────
+// Enriches all active signals with return-on-capital, capital required,
+// confidence score, and tier (holdings / safe / high_confidence)
+
+router.get("/options/screener", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  const {
+    strategy  = "all",
+    tier      = "all",
+    minROC    = "0",
+    maxCapital = "999999",
+    minConf   = "0",
+    minIVP    = "0",
+    sector    = "all",
+    sortBy    = "roc",
+  } = req.query as Record<string, string>;
+
+  try {
+    // 1. Fetch active signals joined with company name/sector/marketCap and latest score
+    const rows = await db
+      .selectDistinctOn([optionsSignalsTable.ticker], {
+        signal:  optionsSignalsTable,
+        company: {
+          name:      companiesTable.name,
+          sector:    companiesTable.sector,
+          marketCap: companiesTable.marketCap,
+        },
+        score: {
+          fortressScore: scoresTable.fortressScore,
+        },
+      })
+      .from(optionsSignalsTable)
+      .leftJoin(companiesTable, eq(optionsSignalsTable.ticker, companiesTable.ticker))
+      .leftJoin(scoresTable, eq(optionsSignalsTable.ticker, scoresTable.ticker))
+      .where(eq(optionsSignalsTable.status, "active"))
+      .orderBy(optionsSignalsTable.ticker, desc(optionsSignalsTable.generatedAt));
+
+    // 2. Check IBKR holdings to classify "holdings" tier
+    const holdingTickers = new Set<string>();
+    const ibkrConn = await db
+      .select()
+      .from(ibkrConnectionsTable)
+      .where(eq(ibkrConnectionsTable.userId, user.userId))
+      .limit(1);
+
+    if (ibkrConn.length && ibkrConn[0].accessToken) {
+      try {
+        const positions = await ibkrApiCall(
+          ibkrConn[0] as any,
+          "GET",
+          `/portfolio/${ibkrConn[0].accountId}/positions/0`,
+        );
+        for (const pos of (positions ?? []) as any[]) {
+          if (pos.assetClass === "STK" && pos.position >= 100) {
+            holdingTickers.add(pos.conid?.toString() ?? pos.ticker ?? "");
+          }
+        }
+      } catch (_) { /* IBKR not reachable — continue without holdings tier */ }
+    }
+
+    // 3. Enrich each signal
+    const enriched = rows.map(({ signal, company, score }) => {
+      const fortress = score?.fortressScore ?? signal.fortressScore ?? 0.5;
+      const isHolding = holdingTickers.has(signal.ticker) && signal.strategy === "SELL_CALL";
+
+      // Capital required: put = cash-secured (strike × 100); call = 0 (already own shares)
+      const capitalRequired = isHolding
+        ? 0
+        : signal.strategy === "SELL_CALL"
+          ? signal.strike * 100 // margin-secured call — approximate
+          : signal.strike * 100; // cash-secured put
+
+      // Annualised ROC — the most important metric
+      // (premium per share × 365 / DTE) / (capital per share) × 100
+      const baseCapital = isHolding ? signal.strike : signal.strike;
+      const annualizedROC = baseCapital > 0
+        ? (signal.premium / baseCapital) * (365 / Math.max(signal.dte, 1)) * 100
+        : 0;
+
+      // Composite confidence: 40% fortress, 30% IV percentile, 30% probability of profit
+      const ivNorm   = Math.min((signal.ivPercentile ?? 0) / 100, 1);
+      const probProf = signal.probabilityProfit ?? 0.65;
+      const confidenceScore = Math.round((fortress * 0.4 + ivNorm * 0.3 + probProf * 0.3) * 100);
+
+      // Tier: holdings first, then safe (high fortress), then high_confidence
+      let assignedTier: "holdings" | "safe" | "high_confidence" = "high_confidence";
+      if (isHolding) {
+        assignedTier = "holdings";
+      } else if (fortress >= 0.65) {
+        assignedTier = "safe";
+      }
+
+      return {
+        id:                signal.id,
+        ticker:            signal.ticker,
+        companyName:       company?.name ?? signal.ticker,
+        sector:            company?.sector ?? null,
+        marketCap:         company?.marketCap ?? null,
+        strategy:          signal.strategy,
+        regime:            signal.regime,
+        strike:            signal.strike,
+        expiry:            signal.expiry,
+        dte:               signal.dte,
+        premium:           signal.premium,
+        premiumYieldPct:   signal.premiumYieldPct,
+        probabilityProfit: signal.probabilityProfit,
+        ivPercentile:      signal.ivPercentile,
+        iv:                signal.iv,
+        fortressScore:     fortress,
+        aiRationale:       signal.aiRationale,
+        generatedAt:       signal.generatedAt,
+        // Computed
+        capitalRequired,
+        annualizedROC:     Math.round(annualizedROC * 10) / 10,
+        confidenceScore,
+        tier:              assignedTier,
+        maxProfit:         Math.round(signal.premium * 100),
+        // Max loss: put = (strike - premium) × 100; call covered = 0 (already own)
+        maxLoss: isHolding
+          ? null
+          : signal.strategy === "SELL_PUT"
+            ? Math.round((signal.strike - signal.premium) * 100)
+            : null,
+      };
+    });
+
+    // 4. Apply filters
+    const minROCN    = parseFloat(minROC);
+    const maxCapN    = parseFloat(maxCapital);
+    const minConfN   = parseFloat(minConf);
+    const minIVPN    = parseFloat(minIVP);
+
+    let filtered = enriched.filter((s) => {
+      if (strategy !== "all" && s.strategy !== strategy) return false;
+      if (tier     !== "all" && s.tier     !== tier)     return false;
+      if (s.annualizedROC < minROCN)                     return false;
+      if (maxCapN < 999999 && s.capitalRequired > maxCapN && s.capitalRequired > 0) return false;
+      if (s.confidenceScore < minConfN)                  return false;
+      if ((s.ivPercentile ?? 0) < minIVPN)               return false;
+      if (sector !== "all" && s.sector !== sector)       return false;
+      return true;
+    });
+
+    // 5. Sort
+    if (sortBy === "roc")        filtered.sort((a, b) => b.annualizedROC - a.annualizedROC);
+    else if (sortBy === "confidence") filtered.sort((a, b) => b.confidenceScore - a.confidenceScore);
+    else if (sortBy === "ivp")   filtered.sort((a, b) => (b.ivPercentile ?? 0) - (a.ivPercentile ?? 0));
+    else if (sortBy === "capital") filtered.sort((a, b) => a.capitalRequired - b.capitalRequired);
+
+    // 6. Collect distinct sectors for filter dropdowns
+    const sectors = [...new Set(enriched.map((s) => s.sector).filter(Boolean))].sort();
+
+    res.json({ signals: filtered, total: filtered.length, sectors });
+  } catch (err) {
+    console.error("[Options] Screener error:", err);
+    res.status(500).json({ error: "Failed to run options screener" });
   }
 });
 

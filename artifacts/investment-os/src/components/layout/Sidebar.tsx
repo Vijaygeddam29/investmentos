@@ -18,6 +18,7 @@ import {
   DollarSign,
   Sunrise,
   Link2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -43,9 +44,10 @@ const navGroups = [
   {
     label: "Options Income",
     items: [
-      { icon: TrendingDown, label: "Options Signals", href: "/options/signals" },
-      { icon: Activity,     label: "Positions",       href: "/options/positions" },
-      { icon: DollarSign,   label: "Income Tracker",  href: "/options/income" },
+      { icon: SlidersHorizontal, label: "Options Screener", href: "/options/screener" },
+      { icon: TrendingDown,      label: "Options Signals",  href: "/options/signals" },
+      { icon: Activity,          label: "Positions",        href: "/options/positions" },
+      { icon: DollarSign,        label: "Income Tracker",   href: "/options/income" },
     ],
   },
   {
