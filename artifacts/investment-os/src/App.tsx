@@ -16,6 +16,11 @@ import Portfolio from "@/pages/Portfolio";
 import PortfolioBuilder from "@/pages/PortfolioBuilder";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
+import OptionsSignals from "@/pages/OptionsSignals";
+import OptionsPositions from "@/pages/OptionsPositions";
+import OptionsIncome from "@/pages/OptionsIncome";
+import PreMarketIntelligence from "@/pages/PreMarketIntelligence";
+import IBKRSettings from "@/pages/IBKRSettings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +58,11 @@ function ProtectedRoutes() {
       <Route path="/sector-heatmap" component={SectorHeatmap} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/portfolio/builder" component={PortfolioBuilder} />
+      <Route path="/options/signals" component={OptionsSignals} />
+      <Route path="/options/positions" component={OptionsPositions} />
+      <Route path="/options/income" component={OptionsIncome} />
+      <Route path="/intelligence" component={PreMarketIntelligence} />
+      <Route path="/settings/ibkr" component={IBKRSettings} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

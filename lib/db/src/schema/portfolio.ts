@@ -1,9 +1,11 @@
-import { pgTable, serial, text, real, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, date, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
 
 export const portfolioHoldingsTable = pgTable("portfolio_holdings", {
   id:            serial("id").primaryKey(),
+  userId:        integer("user_id").references(() => usersTable.id),
   ticker:        text("ticker").notNull(),
   shares:        real("shares").notNull(),
   purchasePrice: real("purchase_price").notNull(),

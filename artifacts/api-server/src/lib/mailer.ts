@@ -270,3 +270,107 @@ export async function sendSignalAlert(alerts: {
 
   console.log(`[Mailer] Signal alert (${opps} opps, ${risks} risks) sent to ${NOTIFY_EMAIL}`);
 }
+
+// ─── Pre-Market Briefing Email ─────────────────────────────────────────────────
+
+export interface PremarketBriefingEmailData {
+  date: string;
+  macroMood: string;
+  riskLevel: string;
+  sectorAlerts: Array<{ sector: string; direction: string; reason: string }>;
+  companyAlerts: Array<{ ticker: string; name: string; headline: string; impact: string }>;
+  optionsImplications: string;
+  watchList: Array<{ item: string; reason: string }>;
+  positionSizeMultiplier: number;
+}
+
+const riskColors: Record<string, string> = {
+  low:      "#16a34a",
+  moderate: "#2563eb",
+  elevated: "#d97706",
+  high:     "#dc2626",
+};
+
+export async function sendPremarketBriefingEmail(data: PremarketBriefingEmailData): Promise<void> {
+  const { client, from } = await getResendClient();
+
+  const riskColor = riskColors[data.riskLevel] ?? "#64748b";
+  const dateStr = new Date(data.date).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
+
+  const sectorRows = data.sectorAlerts.map((s) => {
+    const dirColor = s.direction === "positive" ? "#16a34a" : s.direction === "negative" ? "#dc2626" : "#64748b";
+    const arrow = s.direction === "positive" ? "↑" : s.direction === "negative" ? "↓" : "→";
+    return `<tr>
+      <td style="padding:8px 14px;color:#e2e8f0;font-size:13px">${s.sector}</td>
+      <td style="padding:8px 14px;color:${dirColor};font-size:13px;font-weight:600">${arrow} ${s.direction.toUpperCase()}</td>
+      <td style="padding:8px 14px;color:#94a3b8;font-size:12px">${s.reason}</td>
+    </tr>`;
+  }).join("");
+
+  const watchItems = data.watchList.map((w) =>
+    `<li style="margin-bottom:6px;color:#e2e8f0;font-size:13px"><strong>${w.item}</strong>: <span style="color:#94a3b8">${w.reason}</span></li>`
+  ).join("");
+
+  const sizeWarning = data.positionSizeMultiplier < 0.9
+    ? `<div style="background:#7c3aed20;border:1px solid #7c3aed;border-radius:6px;padding:12px 16px;margin-top:16px">
+        <strong style="color:#c4b5fd">⚠️ Position Sizing Alert:</strong>
+        <span style="color:#ddd6fe;margin-left:8px">Reduce position sizes to ${Math.round(data.positionSizeMultiplier * 100)}% of normal today.</span>
+       </div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
+  <div style="max-width:640px;margin:0 auto;padding:32px 16px">
+    <div style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:24px;margin-bottom:20px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#475569;margin-bottom:8px">Investment OS · Pre-Market Intelligence</div>
+      <h1 style="margin:0;font-size:22px;font-weight:700;color:#f8fafc">${dateStr}</h1>
+      <div style="margin-top:10px;display:inline-block;background:${riskColor};color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase">
+        Risk: ${data.riskLevel}
+      </div>
+    </div>
+
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;text-transform:uppercase;color:#475569;margin-bottom:8px">Macro Mood</div>
+      <p style="margin:0;color:#e2e8f0;font-size:14px;line-height:1.6">${data.macroMood}</p>
+      ${sizeWarning}
+    </div>
+
+    ${data.sectorAlerts.length > 0 ? `
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;overflow:hidden;margin-bottom:16px">
+      <div style="padding:14px 16px;background:#0f172a;font-size:11px;text-transform:uppercase;color:#475569">Sector Alerts</div>
+      <table style="width:100%;border-collapse:collapse">
+        <tbody>${sectorRows}</tbody>
+      </table>
+    </div>` : ""}
+
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;text-transform:uppercase;color:#475569;margin-bottom:10px">Options Strategy Today</div>
+      <p style="margin:0;color:#e2e8f0;font-size:14px;line-height:1.6">${data.optionsImplications}</p>
+    </div>
+
+    ${data.watchList.length > 0 ? `
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;text-transform:uppercase;color:#475569;margin-bottom:10px">Watch List Today</div>
+      <ul style="margin:0;padding-left:20px">${watchItems}</ul>
+    </div>` : ""}
+
+    <div style="text-align:center;margin-top:24px">
+      <a href="https://invest.marketlifes.co.uk/options/signals" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">View Signals Dashboard</a>
+    </div>
+    <div style="margin-top:24px;font-size:11px;color:#374151;text-align:center">Investment OS · Pre-Market Intelligence · ${dateStr}</div>
+  </div>
+</body>
+</html>`;
+
+  await client.emails.send({
+    from,
+    to: [NOTIFY_EMAIL],
+    subject: `🌅 Pre-Market Briefing — ${data.riskLevel.toUpperCase()} risk · ${dateStr}`,
+    html,
+  });
+
+  console.log(`[Mailer] Pre-market briefing sent for ${data.date}`);
+}

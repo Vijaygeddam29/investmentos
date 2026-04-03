@@ -13,6 +13,11 @@ import {
   LogOut,
   User,
   Shield,
+  TrendingDown,
+  Activity,
+  DollarSign,
+  Sunrise,
+  Link2,
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -27,7 +32,8 @@ const navGroups = [
   {
     label: "Research",
     items: [
-      { icon: LayoutDashboard, label: "Dashboards",     href: "/" },
+      { icon: LayoutDashboard, label: "Dashboard",      href: "/" },
+      { icon: Sunrise,         label: "Pre-Market",     href: "/intelligence" },
       { icon: Radio,           label: "Signals",         href: "/signals" },
       { icon: Globe,           label: "Universe",        href: "/universe" },
       { icon: Filter,          label: "Screener",        href: "/screener" },
@@ -35,10 +41,19 @@ const navGroups = [
     ],
   },
   {
+    label: "Options Income",
+    items: [
+      { icon: TrendingDown, label: "Options Signals", href: "/options/signals" },
+      { icon: Activity,     label: "Positions",       href: "/options/positions" },
+      { icon: DollarSign,   label: "Income Tracker",  href: "/options/income" },
+    ],
+  },
+  {
     label: "My Portfolio",
     items: [
       { icon: Briefcase, label: "Portfolio",         href: "/portfolio" },
       { icon: Wand2,     label: "Portfolio Builder", href: "/portfolio/builder" },
+      { icon: Link2,     label: "Connect IBKR",      href: "/settings/ibkr" },
     ],
   },
 ];

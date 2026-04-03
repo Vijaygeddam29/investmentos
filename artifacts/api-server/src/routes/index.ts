@@ -14,12 +14,18 @@ import authRouter from "./auth";
 import intelligenceRouter from "./intelligence";
 import adminRouter from "./admin";
 import analyticsRouter from "./analytics";
+import ibkrRouter from "./ibkr";
+import optionsRouter from "./options";
+import premarketRouter from "./premarket";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(adminRouter);
 router.use(analyticsRouter);
+router.use(ibkrRouter);
+router.use(optionsRouter);
+router.use(premarketRouter);
 router.use(healthRouter);
 router.use(pipelineRouter);
 router.use(companiesRouter);

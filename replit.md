@@ -2,7 +2,15 @@
 
 ## Overview
 
-Investment Operating System (Investment OS) — a hedge-fund-grade stock research platform. pnpm workspace monorepo using TypeScript.
+Investment Operating System (MIOS) — a hedge-fund-grade stock research + AI options income platform. pnpm workspace monorepo using TypeScript.
+
+### New Platform Features (AI Options Engine + Pre-Market Intelligence)
+- **Options Income Engine**: Regime-aware wheel candidate screener (Fortress>0.55, IV percentile, earnings clearance), strike/expiry selection, Claude AI rationale
+- **IBKR Live Trading**: OAuth 2.0 PKCE flow, review-and-confirm order placement, position monitoring
+- **Pre-Market Intelligence**: 14 macro instruments (BTC, Gold, VIX, DXY, etc.) via Yahoo Finance, news scan, Claude-generated briefing, 05:00 UTC email delivery Mon–Fri
+- **Per-User Risk Profiles**: profit target %, stop loss multiplier, delta preference, DTE range, max positions, margin cap, monthly income target
+- **Frontend Pages**: Options Signals, Positions Monitor, Income Tracker, Pre-Market Intelligence, IBKR Settings
+- **Dashboard Widget**: Today's Intelligence banner linking to pre-market page
 
 ## Stack
 

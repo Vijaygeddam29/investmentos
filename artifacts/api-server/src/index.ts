@@ -1,7 +1,8 @@
 import app from "./app";
 import cron from "node-cron";
 import { runPipeline, isPipelineRunning, getPipelineStatus } from "./lib/pipeline";
-import { sendPipelineReport, sendSignalAlert } from "./lib/mailer";
+import { sendPipelineReport, sendSignalAlert, sendPremarketBriefingEmail } from "./lib/mailer";
+import { runPremarketPipeline } from "./lib/premarket-intelligence";
 import { getNextSundayAt2AM } from "./lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
@@ -176,6 +177,20 @@ app.listen(port, () => {
     scheduledPipelineRun().catch(console.error);
   }, { timezone: "UTC" });
   console.log(`[Scheduler] Weekly pipeline cron registered — next run: ${getNextSundayAt2AM().toISOString()}`);
+
+  // Pre-market intelligence: run Mon–Fri at 06:00 UK time (UTC+1 BST / UTC+0 GMT)
+  // Using 05:00 UTC which covers both BST and GMT
+  cron.schedule("0 5 * * 1-5", () => {
+    console.log("[Scheduler] Pre-market intelligence pipeline starting...");
+    runPremarketPipeline()
+      .then(async (briefing) => {
+        console.log("[Scheduler] Pre-market pipeline complete. Sending email...");
+        await sendPremarketBriefingEmail(briefing).catch(console.error);
+        await setSetting("last_premarket_run", new Date().toISOString());
+      })
+      .catch((err) => console.error("[Scheduler] Pre-market pipeline failed:", err));
+  }, { timezone: "UTC" });
+  console.log("[Scheduler] Pre-market cron registered — Mon–Fri 06:00 UK time");
 
   setTimeout(async () => {
     try {

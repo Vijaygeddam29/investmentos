@@ -14,4 +14,6 @@ export * from "./users";
 export * from "./otp-codes";
 export * from "./settings";
 export * from "./analytics";
+export * from "./options";
+export * from "./premarket";
 export type { RiskAlert } from "./signals";

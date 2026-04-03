@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout/Layout";
+import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompanyTable } from "@/components/dashboard/CompanyTable";
 import { TopMovers } from "@/components/dashboard/TopMovers";
 import { useListScores, useGetMarketRegime, useListAlerts, ListScoresEngine, ListScoresCapTier } from "@workspace/api-client-react";
 import { CompanyDrawer } from "@/components/company/CompanyDrawer";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell, ChevronDown } from "lucide-react";
+import { Shield, Rocket, Waves, TrendingUp, TrendingDown, Minus, RefreshCw, Bell, ChevronDown, Sunrise, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
 
 const CAP_OPTIONS: { value: ListScoresCapTier | "all"; label: string }[] = [
   { value: "all",   label: "All Caps" },
@@ -40,6 +42,17 @@ export default function Dashboard() {
   const countryParam = market !== "All" ? market : undefined;
   const capParam = capTier === "all" ? undefined : capTier as ListScoresCapTier;
 
+  const { data: premarketData } = useQuery({
+    queryKey: ["premarket-today"],
+    queryFn: async () => {
+      const r = await fetch("/api/intelligence/premarket/today", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: fortressData, isLoading: fLoading } = useListScores({ engine: ListScoresEngine.fortress, minScore: 0.6, cap_tier: capParam, country: countryParam });
   const { data: rocketData,  isLoading: rLoading } = useListScores({ engine: ListScoresEngine.rocket,  minScore: 0.6, cap_tier: capParam, country: countryParam });
   const { data: waveData,    isLoading: wLoading } = useListScores({ engine: ListScoresEngine.wave,    minScore: 0.5, cap_tier: capParam, country: countryParam });
@@ -50,6 +63,14 @@ export default function Dashboard() {
   const regimeCfg = REGIME_CONFIG[regime] ?? REGIME_CONFIG.NEUTRAL;
   const RegimeIcon = regimeCfg.icon;
   const alerts = alertsData?.alerts ?? [];
+  const briefing = premarketData?.briefing;
+
+  const riskBannerStyle: Record<string, string> = {
+    low:      "border-emerald-500/30 bg-emerald-500/5 text-emerald-400",
+    moderate: "border-blue-500/30 bg-blue-500/5 text-blue-400",
+    elevated: "border-amber-500/30 bg-amber-500/5 text-amber-400",
+    high:     "border-red-500/30 bg-red-500/5 text-red-400",
+  };
 
   function emptyMsg(engine: "fortress" | "rocket" | "wave"): { title: string; hint: string } {
     if (capTier === "small") {
@@ -124,6 +145,33 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground mt-1">{regimeCfg.desc}</p>
           </div>
         </div>
+
+        {/* ── Pre-Market Intelligence Banner ── */}
+        {briefing && (
+          <Link href="/intelligence">
+            <div className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity ${riskBannerStyle[briefing.riskLevel] ?? riskBannerStyle.moderate}`}>
+              <Sunrise className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-sm">Today's Intelligence</span>
+                  <Badge variant="outline" className="border-current font-mono text-[11px] capitalize">
+                    {briefing.riskLevel} risk
+                  </Badge>
+                  {briefing.positionSizeMultiplier < 0.95 && (
+                    <Badge variant="outline" className="border-current font-mono text-[11px]">
+                      Size at {Math.round(briefing.positionSizeMultiplier * 100)}%
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{briefing.macroMood}</p>
+                {briefing.optionsImplications && (
+                  <p className="text-xs mt-0.5 line-clamp-1 opacity-80">{briefing.optionsImplications}</p>
+                )}
+              </div>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 opacity-60" />
+            </div>
+          </Link>
+        )}
 
         <Tabs defaultValue="fortress" className="w-full">
           <TabsList className="bg-secondary/50 border border-border p-1 rounded-xl h-14 mb-6 inline-flex">
