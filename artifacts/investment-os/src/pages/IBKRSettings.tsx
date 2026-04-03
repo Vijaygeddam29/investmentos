@@ -269,21 +269,88 @@ export default function IBKRSettings() {
             </div>
 
             {/* DTE range */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm text-white">Days to Expiry (DTE) Range</Label>
-                <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">{dmin}–{dmax} days</Badge>
+                <Label className="text-sm text-white">Option Expiry Window</Label>
+                <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">{dmin}–{dmax} DTE</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Minimum</Label>
-                  <Slider value={[dmin]} onValueChange={([v]) => setDteMin(v)} min={7} max={60} step={1} className="mt-2" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Maximum</Label>
-                  <Slider value={[dmax]} onValueChange={([v]) => setDteMax(v)} min={14} max={90} step={1} className="mt-2" />
-                </div>
+              {/* Preset windows */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {
+                    label: "Weekly",
+                    sub: "5–7 days",
+                    desc: "Fast income, but requires constant attention. Best when IV is very high.",
+                    dteMin: 5, dteMax: 7,
+                    activeClass: "border-amber-500 bg-amber-500/10",
+                  },
+                  {
+                    label: "Bi-weekly",
+                    sub: "10–15 days",
+                    desc: "Good for active traders. Higher premium yield, but less time to recover if it goes against you.",
+                    dteMin: 10, dteMax: 15,
+                    activeClass: "border-orange-500 bg-orange-500/10",
+                  },
+                  {
+                    label: "Monthly",
+                    sub: "21–35 days",
+                    desc: "The sweet spot — theta decay accelerates, enough time buffer, manageable attention required. Most recommended.",
+                    dteMin: 21, dteMax: 35,
+                    activeClass: "border-emerald-500 bg-emerald-500/10",
+                    recommended: true,
+                  },
+                  {
+                    label: "45-Day Standard",
+                    sub: "38–50 days",
+                    desc: "Classic hedge-fund approach. Gives more time for the trade to work. Best for higher-volatility names.",
+                    dteMin: 38, dteMax: 50,
+                    activeClass: "border-violet-500 bg-violet-500/10",
+                  },
+                ].map((preset) => {
+                  const active = dmin === preset.dteMin && dmax === preset.dteMax;
+                  return (
+                    <button
+                      key={preset.label}
+                      onClick={() => { setDteMin(preset.dteMin); setDteMax(preset.dteMax); }}
+                      className={`p-3 rounded-lg border text-left transition-colors ${
+                        active ? preset.activeClass : "border-slate-700 bg-slate-800/40 hover:border-slate-600"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-white">{preset.label}</span>
+                        {preset.recommended && (
+                          <Badge className="text-[10px] px-1 py-0 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                            recommended
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">{preset.sub}</div>
+                      <div className="text-[11px] text-slate-400 mt-1 leading-tight">{preset.desc}</div>
+                    </button>
+                  );
+                })}
               </div>
+              {/* Fine-tune sliders */}
+              <details className="group">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-white transition-colors">
+                  Fine-tune manually (currently {dmin}–{dmax} days)
+                </summary>
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Minimum DTE</Label>
+                    <Slider value={[dmin]} onValueChange={([v]) => setDteMin(v)} min={3} max={60} step={1} className="mt-2" />
+                    <p className="text-[11px] text-muted-foreground mt-1">{dmin} days minimum</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Maximum DTE</Label>
+                    <Slider value={[dmax]} onValueChange={([v]) => setDteMax(v)} min={7} max={90} step={1} className="mt-2" />
+                    <p className="text-[11px] text-muted-foreground mt-1">{dmax} days maximum</p>
+                  </div>
+                </div>
+              </details>
+              <p className="text-xs text-muted-foreground">
+                The AI will only recommend options expiring within this window. Shorter = more trades to manage; longer = fewer, larger positions.
+              </p>
             </div>
 
             {/* Max positions */}

@@ -31,6 +31,7 @@ import { requireAuth, type AuthPayload } from "../middleware/auth";
 import { generateSignals, generateRollRationale } from "../lib/options-engine";
 import { ibkrApiCall } from "./ibkr";
 import { getTodaysBriefing } from "../lib/premarket-intelligence";
+import { syncIbkrPositions } from "../lib/ibkr-sync";
 
 const router: IRouter = Router();
 
@@ -733,6 +734,22 @@ router.get("/options/covered-calls", requireAuth, async (req, res) => {
     res.json({ connected: true, positions: suggestions });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch covered call opportunities" });
+  }
+});
+
+// ─── Manual IBKR Position Sync ───────────────────────────────────────────────
+
+router.post("/options/positions/sync", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  try {
+    const result = await syncIbkrPositions(user.userId);
+    res.json({
+      success: true,
+      summary: `Sync complete: ${result.matched} positions matched, ${result.autoClosed} auto-closed (not in IBKR), ${result.added} new positions added from IBKR.`,
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Sync failed", detail: (err as Error).message });
   }
 });
 

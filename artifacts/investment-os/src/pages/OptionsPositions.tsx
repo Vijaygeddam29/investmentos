@@ -77,6 +77,23 @@ export default function OptionsPositions() {
     refetchInterval: 60_000,
   });
 
+  const [syncResult, setSyncResult] = useState<{ summary: string; autoClosed: number; added: number } | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/options/positions/sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    onSuccess: (data) => {
+      setSyncResult(data);
+      qc.invalidateQueries({ queryKey: ["options-trades"] });
+      qc.invalidateQueries({ queryKey: ["options-performance"] });
+    },
+  });
+
   const { data: coveredCallsData } = useQuery({
     queryKey: ["covered-calls"],
     queryFn: async () => {
@@ -163,15 +180,50 @@ export default function OptionsPositions() {
               {profitOpportunities > 0 && <span className="text-emerald-400 ml-2">· {profitOpportunities} approaching profit target</span>}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => setShowStats((s) => !s)}>
               <BarChart2 className="w-4 h-4 mr-2" /> {showStats ? "Hide" : "Show"} track record
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+              {syncMutation.isPending ? "Syncing with IBKR..." : "Sync with IBKR"}
             </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" /> Refresh
             </Button>
           </div>
         </div>
+
+        {/* Sync result */}
+        {syncResult && (
+          <div className={`flex items-start gap-3 p-3 rounded-lg border ${
+            (syncResult.autoClosed > 0 || syncResult.added > 0)
+              ? "bg-blue-500/10 border-blue-500/30"
+              : "bg-emerald-500/10 border-emerald-500/30"
+          }`}>
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-white">{syncResult.summary}</p>
+              {syncResult.autoClosed > 0 && (
+                <p className="text-xs text-blue-300 mt-1">
+                  {syncResult.autoClosed} position{syncResult.autoClosed > 1 ? "s" : ""} were in your records but not in IBKR — automatically marked as closed.
+                </p>
+              )}
+              {syncResult.added > 0 && (
+                <p className="text-xs text-blue-300 mt-0.5">
+                  {syncResult.added} position{syncResult.added > 1 ? "s" : ""} found in IBKR that weren't in your records — added automatically.
+                </p>
+              )}
+            </div>
+            <button onClick={() => setSyncResult(null)} className="text-muted-foreground hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Philosophy banner */}
         <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">

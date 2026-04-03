@@ -3,6 +3,7 @@ import cron from "node-cron";
 import { runPipeline, isPipelineRunning, getPipelineStatus } from "./lib/pipeline";
 import { sendPipelineReport, sendSignalAlert, sendPremarketBriefingEmail } from "./lib/mailer";
 import { runPremarketPipeline } from "./lib/premarket-intelligence";
+import { syncAllUsers } from "./lib/ibkr-sync";
 import { getNextSundayAt2AM } from "./lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
@@ -191,6 +192,17 @@ app.listen(port, () => {
       .catch((err) => console.error("[Scheduler] Pre-market pipeline failed:", err));
   }, { timezone: "UTC" });
   console.log("[Scheduler] Pre-market cron registered — Mon–Fri 06:00 UK time");
+
+  // IBKR position sync: Mon–Fri at 08:00 UTC (market open)
+  // Reconciles our DB with live IBKR positions so any manual trades or
+  // external changes are automatically picked up
+  cron.schedule("0 8 * * 1-5", () => {
+    console.log("[Scheduler] IBKR position sync starting...");
+    syncAllUsers()
+      .then(() => console.log("[Scheduler] IBKR position sync complete"))
+      .catch((err) => console.error("[Scheduler] IBKR position sync failed:", err));
+  }, { timezone: "UTC" });
+  console.log("[Scheduler] IBKR position sync cron registered — Mon–Fri 08:00 UTC (market open)");
 
   setTimeout(async () => {
     try {
