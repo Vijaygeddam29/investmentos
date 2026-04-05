@@ -439,6 +439,7 @@ export default function OptionsSignals() {
       setOrderResult(data);
       qc.invalidateQueries({ queryKey: ["options-signals"] });
       qc.invalidateQueries({ queryKey: ["options-queue"] });
+      qc.invalidateQueries({ queryKey: ["options-risk-dashboard"] });
     },
   });
 

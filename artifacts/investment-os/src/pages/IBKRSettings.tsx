@@ -70,7 +70,18 @@ export default function IBKRSettings() {
     staleTime: 30 * 60 * 1000,
   });
 
-  const profile: RiskProfile = riskData?.profile ?? {
+  // The API returns profile fields directly (not nested). Normalize to frontend shape here.
+  const profile: RiskProfile = riskData ? {
+    profitTarget:       riskData.profitTargetPct       ?? 50,
+    maxLossMultiple:    riskData.maxLossMultiple        ?? 2,
+    deltaPref:          riskData.deltaPreference        ?? "moderate",
+    dteMin:             riskData.dteMin                 ?? 21,
+    dteMax:             riskData.dteMax                 ?? 35,
+    maxOpenPositions:   riskData.maxPositions           ?? 5,
+    marginCapPct:       riskData.marginCapPct           ?? 25,
+    accountSizeUsd:     riskData.accountSizeUsd         ?? null,
+    monthlyIncomeTarget: riskData.monthlyIncomeTarget   ?? null,
+  } : {
     profitTarget: 50,
     maxLossMultiple: 2,
     deltaPref: "moderate",

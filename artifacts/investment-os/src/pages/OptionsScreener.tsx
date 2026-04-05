@@ -520,6 +520,7 @@ function ChainView() {
       setQueueResult(result);
       setSelectedCell(null);
       qc.invalidateQueries({ queryKey: ["options-queue"] });
+      qc.invalidateQueries({ queryKey: ["options-risk-dashboard"] });
     },
   });
 
@@ -1050,6 +1051,7 @@ export default function OptionsScreener() {
       }
       setQueuedId(signalId);
       qc.invalidateQueries({ queryKey: ["options-queue"] });
+      qc.invalidateQueries({ queryKey: ["options-risk-dashboard"] });
     },
   });
 
