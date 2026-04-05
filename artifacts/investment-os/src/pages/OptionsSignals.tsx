@@ -13,8 +13,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingDown, TrendingUp, RefreshCw, Zap, CheckCircle, XCircle,
   AlertTriangle, Info, BarChart2, Search, SlidersHorizontal,
-  Shield, BookOpen, HelpCircle, X,
+  Shield, BookOpen, HelpCircle, X, GitCompare, Award,
 } from "lucide-react";
+import { ScenarioCompareModal } from "@/components/options/ScenarioCompareModal";
 import {
   LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis,
 } from "recharts";
@@ -310,6 +311,36 @@ function RegimeExplainer({ regime }: { regime: string }) {
   );
 }
 
+// ─── Track Record Badge ───────────────────────────────────────────────────────
+
+function TrackRecordBadge({ ticker, strategy }: { ticker: string; strategy: string }) {
+  const { data } = useQuery({
+    queryKey: ["track-record", ticker, strategy],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/options/signals/track-record/${ticker}?strategy=${encodeURIComponent(strategy)}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` } },
+      );
+      return r.json();
+    },
+    staleTime: 60 * 60 * 1000, // 1 hour — doesn't change often
+  });
+
+  if (!data || (data.wins === 0 && data.losses === 0 && data.assignments === 0)) return null;
+  const total = data.wins + data.losses;
+  const winPct = total > 0 ? Math.round((data.wins / total) * 100) : null;
+
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <Award className="w-3 h-3 text-amber-400 shrink-0" />
+      <span className="text-white font-medium">{data.wins}W / {data.losses}L</span>
+      {data.assignments > 0 && <span>· {data.assignments} assigned</span>}
+      {winPct != null && <span className={`font-medium ${winPct >= 70 ? "text-emerald-400" : winPct >= 50 ? "text-amber-400" : "text-red-400"}`}>({winPct}%)</span>}
+      <span>on this system</span>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function OptionsSignals() {
@@ -322,6 +353,7 @@ export default function OptionsSignals() {
   const [showFilters, setShowFilters] = useState(false);
   const [showExplainer, setShowExplainer] = useState(false);
   const [chartSignal, setChartSignal] = useState<Signal | null>(null);
+  const [scenarioSignal, setScenarioSignal] = useState<Signal | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["options-signals"],
@@ -698,14 +730,26 @@ export default function OptionsSignals() {
                       </p>
                     )}
 
+                    {/* Track record */}
+                    <TrackRecordBadge ticker={s.ticker} strategy={s.strategy} />
+
                     {/* Actions */}
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1 flex-wrap">
                       <Button
                         size="sm"
                         className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                         onClick={() => { setConfirmSignal({ signal: s, company: c }); setProfitTargetPct(0.5); }}
                       >
                         <CheckCircle className="w-4 h-4 mr-1.5" /> Review & Place Order
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="border border-violet-700/60 text-violet-400 hover:text-violet-300 hover:border-violet-500"
+                        onClick={() => setScenarioSignal({ signal: s, company: c })}
+                        title="Compare 3 DTE/premium scenarios"
+                      >
+                        <GitCompare className="w-4 h-4 mr-1.5" /> Compare
                       </Button>
                       <Button
                         size="sm"
@@ -908,6 +952,15 @@ export default function OptionsSignals() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+      {/* ─── Scenario Compare Modal ─────────────────────────────────────── */}
+      {scenarioSignal && (
+        <ScenarioCompareModal
+          open
+          onClose={() => setScenarioSignal(null)}
+          ticker={scenarioSignal.signal.ticker}
+          strategy={scenarioSignal.signal.strategy}
+        />
       )}
     </Layout>
   );

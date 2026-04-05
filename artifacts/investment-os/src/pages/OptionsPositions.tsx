@@ -14,6 +14,7 @@ import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { TradeStoryPanel } from "@/components/options/TradeStoryPanel";
 
 interface Trade {
   id: number;
@@ -519,6 +520,9 @@ export default function OptionsPositions() {
                           "Expired" = option expired worthless, you keep all income. "Assigned" = you were obligated to buy/sell shares.
                           "Close position" = you bought back the option early.
                         </p>
+
+                        {/* Trade Story */}
+                        <TradeStoryPanel tradeId={t.id} ticker={t.ticker} status={t.status} />
                       </div>
                     )}
                   </CardContent>

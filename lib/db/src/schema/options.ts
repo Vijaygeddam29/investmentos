@@ -120,7 +120,41 @@ export const optionsTradesTable = pgTable("options_trades", {
   monthlyBucket:    text("monthly_bucket"),
   ibkrOrderId:      text("ibkr_order_id"),
   notes:            text("notes"),
+  strategy:         text("strategy"),
+  regime:           text("regime"),
   status:           text("status").default("open").notNull(),
   createdAt:        timestamp("created_at").defaultNow().notNull(),
 });
 export type OptionsTrade = typeof optionsTradesTable.$inferSelect;
+
+// Daily mark-to-market P&L snapshots for open trades
+export const optionsTradeSnapshotsTable = pgTable("options_trade_snapshots", {
+  id:            serial("id").primaryKey(),
+  tradeId:       integer("trade_id").notNull().references(() => optionsTradesTable.id),
+  date:          text("date").notNull(),              // "YYYY-MM-DD"
+  midPrice:      real("mid_price"),                   // current option mid (per share)
+  markPnl:       real("mark_pnl"),                    // unrealised P&L (per contract)
+  theoreticalPnl: real("theoretical_pnl"),             // based on theta decay model
+  daysElapsed:   integer("days_elapsed"),
+  dteRemaining:  integer("dte_remaining"),
+  createdAt:     timestamp("created_at").defaultNow().notNull(),
+});
+export type OptionsTradeSnapshot = typeof optionsTradeSnapshotsTable.$inferSelect;
+
+// Aggregate signal quality stats per (ticker, strategy, regime)
+export const signalQualityStatsTable = pgTable("signal_quality_stats", {
+  id:             serial("id").primaryKey(),
+  ticker:         text("ticker").notNull().references(() => companiesTable.ticker),
+  strategy:       text("strategy").notNull(),
+  regime:         text("regime").notNull(),
+  totalTrades:    integer("total_trades").notNull().default(0),
+  wins:           integer("wins").notNull().default(0),             // closed at profit
+  losses:         integer("losses").notNull().default(0),           // closed at loss
+  assignments:    integer("assignments").notNull().default(0),      // assigned/exercised
+  avgProfitPct:   real("avg_profit_pct"),                          // avg % of premium kept
+  avgDaysHeld:    real("avg_days_held"),
+  winRate:        real("win_rate"),                                  // wins / (wins+losses)
+  assignmentRate: real("assignment_rate"),                          // assignments / total
+  updatedAt:      timestamp("updated_at").defaultNow().notNull(),
+});
+export type SignalQualityStat = typeof signalQualityStatsTable.$inferSelect;

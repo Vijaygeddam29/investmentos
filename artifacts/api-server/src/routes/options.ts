@@ -39,6 +39,11 @@ import {
 import { ibkrApiCall } from "./ibkr";
 import { getTodaysBriefing } from "../lib/premarket-intelligence";
 import { syncIbkrPositions } from "../lib/ibkr-sync";
+import {
+  buildScenariosResult,
+  buildTradeStory,
+  getTrackRecord,
+} from "../lib/trade-intelligence";
 
 const router: IRouter = Router();
 
@@ -1179,6 +1184,146 @@ router.get("/options/chain/:ticker/earnings", requireAuth, async (req, res) => {
     res.json(info);
   } catch (err) {
     res.status(500).json({ error: "Failed to check earnings" });
+  }
+});
+
+// ─── Trade Intelligence: Scenario Comparison ─────────────────────────────────
+
+// GET /api/options/scenarios/:ticker?compareBy=dte|premium&side=put|call
+// Returns 3 pre-trade scenarios for comparison (theta decay curves + metrics table)
+router.get("/options/scenarios/:ticker", requireAuth, async (req, res) => {
+  const { ticker } = req.params;
+  const compareBy = (req.query.compareBy as string) === "premium" ? "premium" : "dte";
+  const side = (req.query.side as string) === "call" ? "call" : "put";
+
+  try {
+    const result = await buildScenariosResult(ticker.toUpperCase(), compareBy, side);
+    if (!result) {
+      res.status(404).json({ error: "Could not build scenarios — no options data available for this ticker" });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    console.error("[Options] Scenario comparison error:", err);
+    res.status(500).json({ error: "Failed to build scenario comparison" });
+  }
+});
+
+// ─── Trade Intelligence: Trade Story ─────────────────────────────────────────
+
+// GET /api/options/trades/:id/story
+// Returns daily P&L snapshots, theta decay overlay, and what-if projections for closed trades
+router.get("/options/trades/:id/story", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  const tradeId = Number(req.params.id);
+  if (isNaN(tradeId)) { res.status(400).json({ error: "Invalid trade id" }); return; }
+
+  try {
+    const story = await buildTradeStory(tradeId, user.userId);
+    if (!story) {
+      res.status(404).json({ error: "Trade not found or not owned by this user" });
+      return;
+    }
+    res.json(story);
+  } catch (err) {
+    console.error("[Options] Trade story error:", err);
+    res.status(500).json({ error: "Failed to build trade story" });
+  }
+});
+
+// ─── Trade Intelligence: Signal Track Record ──────────────────────────────────
+
+// GET /api/options/signals/track-record/:ticker?strategy=SELL_PUT
+// Returns win/loss/assignment counts for the "Track record" badge
+router.get("/options/signals/track-record/:ticker", requireAuth, async (req, res) => {
+  const { ticker } = req.params;
+  const strategy = req.query.strategy as string | undefined;
+  try {
+    const record = await getTrackRecord(ticker.toUpperCase(), strategy);
+    res.json(record ?? { wins: 0, losses: 0, assignments: 0, winRate: null, avgProfitPct: null, assignmentRate: null });
+  } catch (err) {
+    console.error("[Options] Track record error:", err);
+    res.status(500).json({ error: "Failed to fetch track record" });
+  }
+});
+
+// ─── Income Tracker: Current-month forecast ───────────────────────────────────
+
+// GET /api/options/income/forecast
+// Returns monthly income history + current-month forecast from open trades' remaining theta
+router.get("/options/income/forecast", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+
+  try {
+    // Monthly actuals
+    const rows = await db
+      .select({
+        bucket:       optionsTradesTable.monthlyBucket,
+        totalPremium: sql<number>`sum(coalesce(${optionsTradesTable.premiumCollected}, 0))`,
+        realisedPnl:  sql<number>`sum(coalesce(${optionsTradesTable.realisedPnl}, 0))`,
+        tradeCount:   sql<number>`count(*)`,
+        assignments:  sql<number>`sum(case when ${optionsTradesTable.isAssigned} then 1 else 0 end)`,
+      })
+      .from(optionsTradesTable)
+      .where(and(
+        eq(optionsTradesTable.userId, user.userId),
+        ne(optionsTradesTable.monthlyBucket, ""),
+      ))
+      .groupBy(optionsTradesTable.monthlyBucket)
+      .orderBy(optionsTradesTable.monthlyBucket);
+
+    // Open trades for forecast
+    const openTrades = await db
+      .select()
+      .from(optionsTradesTable)
+      .where(and(
+        eq(optionsTradesTable.userId, user.userId),
+        eq(optionsTradesTable.status, "open"),
+      ));
+
+    // Forecast = sum of remaining theta for open trades
+    // remaining_value ≈ premium × sqrt(remaining_dte / initial_dte)
+    // theta collected so far = premium - remaining_value
+    // remaining theta = remaining_value (the part not yet decayed)
+    let forecastPremium = 0;
+    for (const t of openTrades) {
+      const premium = t.premiumCollected ?? 0;
+      const initialDte = Math.max(1, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - new Date(t.openedAt).getTime()) / 86400000,
+      ));
+      const dteRemaining = Math.max(0, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - Date.now()) / 86400000,
+      ));
+      const remainingValue = premium * Math.sqrt(dteRemaining / initialDte);
+      forecastPremium += remainingValue; // this is what we stand to gain from theta decay
+    }
+
+    // 3-month moving average
+    const monthly = rows.map((r) => ({
+      bucket: r.bucket ?? "",
+      totalPremium: Number(r.totalPremium ?? 0),
+      realisedPnl: Number(r.realisedPnl ?? 0),
+      tradeCount: Number(r.tradeCount ?? 0),
+      assignments: Number(r.assignments ?? 0),
+    }));
+
+    const withMa = monthly.map((m, i) => {
+      const slice = monthly.slice(Math.max(0, i - 2), i + 1);
+      const ma3 = slice.reduce((s, x) => s + x.totalPremium, 0) / slice.length;
+      return { ...m, ma3: Math.round(ma3) };
+    });
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+
+    res.json({
+      monthly: withMa,
+      forecastPremium: Math.round(forecastPremium),
+      currentMonth,
+      openTradeCount: openTrades.length,
+    });
+  } catch (err) {
+    console.error("[Options] Income forecast error:", err);
+    res.status(500).json({ error: "Failed to build income forecast" });
   }
 });
 

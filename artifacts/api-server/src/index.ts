@@ -5,6 +5,7 @@ import { sendPipelineReport, sendSignalAlert, sendPremarketBriefingEmail } from 
 import { runPremarketPipeline } from "./lib/premarket-intelligence";
 import { syncAllUsers } from "./lib/ibkr-sync";
 import { refreshIvAndEarningsForAllTickers } from "./lib/options-engine";
+import { takeDailyTradeSnapshots, updateSignalQualityStats } from "./lib/trade-intelligence";
 import { getNextSundayAt2AM } from "./lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
@@ -213,6 +214,24 @@ app.listen(port, () => {
       .catch((err) => console.error("[Scheduler] IBKR position sync failed:", err));
   }, { timezone: "UTC" });
   console.log("[Scheduler] IBKR position sync cron registered — Mon–Fri 08:00 UTC (market open)");
+
+  // Daily trade P&L snapshots: Mon–Fri at 21:30 UTC (30min after IV refresh)
+  cron.schedule("30 21 * * 1-5", () => {
+    console.log("[Scheduler] Daily trade P&L snapshots starting...");
+    takeDailyTradeSnapshots()
+      .then(() => console.log("[Scheduler] Daily trade P&L snapshots complete"))
+      .catch((err) => console.error("[Scheduler] Daily trade snapshots failed:", err));
+  }, { timezone: "UTC" });
+  console.log("[Scheduler] Daily trade P&L snapshot cron registered — Mon–Fri 21:30 UTC");
+
+  // Signal quality stats update: Mon–Fri at 22:00 UTC
+  cron.schedule("0 22 * * 1-5", () => {
+    console.log("[Scheduler] Signal quality stats update starting...");
+    updateSignalQualityStats()
+      .then(() => console.log("[Scheduler] Signal quality stats update complete"))
+      .catch((err) => console.error("[Scheduler] Signal quality stats update failed:", err));
+  }, { timezone: "UTC" });
+  console.log("[Scheduler] Signal quality stats cron registered — Mon–Fri 22:00 UTC");
 
   setTimeout(async () => {
     try {
