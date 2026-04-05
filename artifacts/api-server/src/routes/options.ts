@@ -26,8 +26,9 @@ import {
   ibkrConnectionsTable,
   companiesTable,
   scoresTable,
+  signalQualityStatsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, sql, ne } from "drizzle-orm";
+import { eq, desc, and, gte, sql, ne, inArray } from "drizzle-orm";
 import { requireAuth, type AuthPayload } from "../middleware/auth";
 import {
   generateSignals,
@@ -857,7 +858,17 @@ router.get("/options/screener", requireAuth, async (req, res) => {
       } catch (_) { /* IBKR not reachable — continue without holdings tier */ }
     }
 
-    // 3. Enrich each signal
+    // 3. Fetch historical track record stats for outcome-driven confidence adjustment
+    const signalTickers = rows.map((r) => r.signal.ticker);
+    const qualityRows = signalTickers.length
+      ? await db.select().from(signalQualityStatsTable).where(inArray(signalQualityStatsTable.ticker, signalTickers))
+      : [];
+    const qualityMap = new Map<string, typeof qualityRows[0]>();
+    for (const qr of qualityRows) {
+      qualityMap.set(`${qr.ticker}:${qr.strategy}:${qr.regime}`, qr);
+    }
+
+    // 4. Enrich each signal
     const enriched = rows.map(({ signal, company, score }) => {
       const fortress = score?.fortressScore ?? signal.fortressScore ?? 0.5;
       const isHolding = holdingTickers.has(signal.ticker) && signal.strategy === "SELL_CALL";
@@ -879,7 +890,15 @@ router.get("/options/screener", requireAuth, async (req, res) => {
       // Composite confidence: 40% fortress, 30% IV percentile, 30% probability of profit
       const ivNorm   = Math.min((signal.ivPercentile ?? 0) / 100, 1);
       const probProf = signal.probabilityProfit ?? 0.65;
-      const confidenceScore = Math.round((fortress * 0.4 + ivNorm * 0.3 + probProf * 0.3) * 100);
+      const baseConf = Math.round((fortress * 0.4 + ivNorm * 0.3 + probProf * 0.3) * 100);
+
+      // Outcome-driven adjustment from historical track record (min 3 trades to apply)
+      const qr = qualityMap.get(`${signal.ticker}:${signal.strategy}:${signal.regime}`);
+      const totalTrades = (qr?.wins ?? 0) + (qr?.losses ?? 0);
+      const confAdj = (qr && totalTrades >= 3)
+        ? Math.round(Math.max(-7, Math.min(7, ((qr.winRate ?? 0.55) - 0.55) * (14 / 0.3))))
+        : 0;
+      const confidenceScore = Math.min(100, Math.max(0, baseConf + confAdj));
 
       // Tier: holdings first, then safe (high fortress), then high_confidence
       let assignedTier: "holdings" | "safe" | "high_confidence" = "high_confidence";

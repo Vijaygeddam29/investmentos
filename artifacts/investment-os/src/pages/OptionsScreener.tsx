@@ -14,7 +14,7 @@ import {
   TrendingDown, TrendingUp, RefreshCw, SlidersHorizontal, CheckCircle,
   AlertTriangle, Info, Star, Shield, DollarSign, BarChart2, ChevronDown,
   ChevronUp, Zap, BookOpen, X, Search, Grid3X3, Calendar,
-  AlertCircle, ArrowRight, GitCompare,
+  AlertCircle, ArrowRight, GitCompare, Award,
 } from "lucide-react";
 import { ScenarioCompareModal } from "@/components/options/ScenarioCompareModal";
 
@@ -201,6 +201,39 @@ function EarningsWarning({ earnings, ticker, dte }: { earnings: EarningsInfo | n
           )}
         </p>
       </div>
+    </div>
+  );
+}
+
+// ─── Track Record Badge ───────────────────────────────────────────────────────
+
+function TrackRecordBadge({ ticker, strategy }: { ticker: string; strategy: string }) {
+  const { data } = useQuery({
+    queryKey: ["track-record", ticker, strategy],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/options/signals/track-record/${ticker}?strategy=${encodeURIComponent(strategy)}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` } },
+      );
+      return r.json();
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  if (!data || (data.wins === 0 && data.losses === 0 && data.assignments === 0)) return null;
+  const total = data.wins + data.losses;
+  const winPct = total > 0 ? Math.round((data.wins / total) * 100) : null;
+
+  return (
+    <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+      <Award className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+      <span className="text-white font-medium">{data.wins}W / {data.losses}L</span>
+      {winPct != null && (
+        <span className={`font-medium ${winPct >= 70 ? "text-emerald-400" : winPct >= 50 ? "text-amber-400" : "text-red-400"}`}>
+          ({winPct}%)
+        </span>
+      )}
+      <span>on this system</span>
     </div>
   );
 }
@@ -1271,6 +1304,7 @@ export default function OptionsScreener() {
                               <span className="text-[10px] text-slate-500">{formatMarketCap(signal.marketCap)}</span>
                             )}
                           </div>
+                          <TrackRecordBadge ticker={signal.ticker} strategy={signal.strategy} />
                         </div>
 
                         <div className="space-y-1">

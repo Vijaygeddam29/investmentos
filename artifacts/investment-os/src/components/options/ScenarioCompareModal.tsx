@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend,
+  ResponsiveContainer, ReferenceLine, ReferenceDot, Legend,
 } from "recharts";
 import { TrendingDown, DollarSign, RefreshCw } from "lucide-react";
 
@@ -231,10 +231,27 @@ export function ScenarioCompareModal({ open, onClose, ticker, strategy }: Props)
                         connectNulls={false}
                       />
                     ))}
+                    {/* 50% profit target dots — filled circle at day75% of DTE */}
+                    {scenarios.map((s) => {
+                      const day50 = Math.round(s.dte * 0.75);
+                      const pnl50 = Math.round(s.premiumPerContract * 0.5);
+                      return (
+                        <ReferenceDot
+                          key={`dot50-${s.label}`}
+                          x={day50}
+                          y={pnl50}
+                          r={5}
+                          fill={s.color}
+                          stroke="#0f1420"
+                          strokeWidth={1.5}
+                          label={{ value: "50%", position: "top", fill: s.color, fontSize: 9 }}
+                        />
+                      );
+                    })}
                   </LineChart>
                 </ResponsiveContainer>
                 <p className="text-[10px] text-muted-foreground mt-1 text-center">
-                  Dashed lines = 50% profit target per scenario · Theta decay modelled with square-root-of-time approximation
+                  Dots = 50% profit target · Red dashed = max-loss stop · Theta decay: square-root-of-time model
                 </p>
               </div>
 
