@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link2, CheckCircle, XCircle, AlertTriangle, Shield, Settings, RefreshCw, PieChart, TrendingUp } from "lucide-react";
+import { Link2, CheckCircle, XCircle, AlertTriangle, Shield, Settings, RefreshCw, PieChart, TrendingUp, PlusCircle, Trash2, Briefcase, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface RiskProfile {
@@ -102,8 +102,11 @@ export default function IBKRSettings() {
   const [marginCap, setMarginCap]                     = useState<number | null>(null);
   const [accountSize, setAccountSize]                 = useState<string>("");
   const [accountSizeTouched, setAccountSizeTouched]   = useState(false);
+  const [cashAvailable, setCashAvailable]             = useState<string>("");
+  const [cashAvailableTouched, setCashAvailableTouched] = useState(false);
   const [incomeTarget, setIncomeTarget]               = useState<string>("");
   const [incomeTargetTouched, setIncomeTargetTouched] = useState(false);
+  const [newHolding, setNewHolding] = useState({ ticker: "", quantity: "", avgCostBasis: "" });
 
   const pt   = profitTarget  ?? profile.profitTarget;
   const ml   = maxLoss       ?? profile.maxLossMultiple;
@@ -119,6 +122,10 @@ export default function IBKRSettings() {
   const as_  = accountSizeTouched
     ? (accountSize === "" ? null : parseFloat(accountSize))
     : savedAccountSize;
+  const savedCashAvailable = riskData?.cashAvailableUsd ?? null;
+  const ca_  = cashAvailableTouched
+    ? (cashAvailable === "" ? null : parseFloat(cashAvailable))
+    : savedCashAvailable;
 
   const updateRiskMutation = useMutation({
     mutationFn: async () => {
@@ -140,6 +147,7 @@ export default function IBKRSettings() {
           maxPositions: mp,
           marginCapPct: mc,
           accountSizeUsd: as_,
+          cashAvailableUsd: ca_,
           monthlyIncomeTarget: it,
         }),
       });
@@ -148,8 +156,54 @@ export default function IBKRSettings() {
     onSuccess: () => {
       toast({ title: "Risk profile saved", description: "Your preferences have been updated." });
       qc.invalidateQueries({ queryKey: ["risk-profile"] });
+      qc.invalidateQueries({ queryKey: ["options-risk-dashboard"] });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  // ── Holdings ─────────────────────────────────────────────────────────────────
+  const { data: holdingsData, isLoading: holdingsLoading } = useQuery<{ holdings: Array<{ id: number; ticker: string; quantity: number; avgCostBasis: number | null; notes: string | null }> }>({
+    queryKey: ["broker-holdings"],
+    queryFn: async () => {
+      const r = await fetch("/api/broker/holdings", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+  });
+  const holdings = holdingsData?.holdings ?? [];
+
+  const addHoldingMutation = useMutation({
+    mutationFn: async (body: { ticker: string; quantity: number; avgCostBasis?: number }) => {
+      const r = await fetch("/api/broker/holdings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Failed to add holding");
+      return d;
+    },
+    onSuccess: () => {
+      setNewHolding({ ticker: "", quantity: "", avgCostBasis: "" });
+      qc.invalidateQueries({ queryKey: ["broker-holdings"] });
+      qc.invalidateQueries({ queryKey: ["covered-calls"] });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const deleteHoldingMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/broker/holdings/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["broker-holdings"] });
+      qc.invalidateQueries({ queryKey: ["covered-calls"] });
+    },
   });
 
   const disconnectMutation = useMutation({
@@ -411,22 +465,49 @@ export default function IBKRSettings() {
             {/* Account size — used for risk metrics when IBKR is not connected */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm text-white">Account Size</Label>
+                <Label className="text-sm text-white">Total Account Size (NLV)</Label>
                 {as_ && <Badge variant="outline" className="text-xs border-emerald-600/50 text-emerald-400">${as_.toLocaleString()}</Badge>}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground text-sm">$</span>
                 <Input
                   type="number"
-                  placeholder={savedAccountSize?.toString() ?? "e.g. 200000"}
+                  placeholder={savedAccountSize?.toString() ?? "e.g. 250000"}
                   value={accountSizeTouched ? accountSize : (savedAccountSize?.toString() ?? "")}
                   onChange={(e) => { setAccountSize(e.target.value); setAccountSizeTouched(true); }}
                   className="bg-slate-800/50 border-slate-600 text-white"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Used for risk calculations when IBKR account value is not available. Set to your total deployable capital.
+                Your total portfolio value (cash + stock holdings). Used as the NLV denominator for all risk calculations when IBKR is not connected.
               </p>
+            </div>
+
+            {/* Cash available for selling puts */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm text-white flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  Cash Available for Options
+                </Label>
+                {ca_ && <Badge variant="outline" className="text-xs border-emerald-600/50 text-emerald-400">${ca_.toLocaleString()}</Badge>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  placeholder={savedCashAvailable?.toString() ?? "e.g. 150000"}
+                  value={cashAvailableTouched ? cashAvailable : (savedCashAvailable?.toString() ?? "")}
+                  onChange={(e) => { setCashAvailable(e.target.value); setCashAvailableTouched(true); }}
+                  className="bg-slate-800/50 border-slate-600 text-white"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cash set aside for cash-secured puts — separate from capital tied up in stock holdings. The risk engine uses this as your available buying power.
+              </p>
+              {as_ && ca_ && ca_ > as_ && (
+                <p className="text-xs text-amber-400">⚠️ Cash available exceeds account size — please verify</p>
+              )}
             </div>
 
             {/* Margin cap */}
@@ -548,6 +629,154 @@ export default function IBKRSettings() {
                 </p>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ── Stock Holdings ─────────────────────────────────────────────────── */}
+        <Card className="bg-[#1a1f2e] border-slate-700">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-indigo-400" />
+                Stock Holdings
+              </CardTitle>
+              <span className="text-xs text-slate-400">
+                {holdings.length} position{holdings.length !== 1 ? "s" : ""}
+                {holdings.filter((h) => h.quantity >= 100).length > 0 && (
+                  <span className="ml-2 text-emerald-400">
+                    · {holdings.filter((h) => h.quantity >= 100).length} eligible for covered calls
+                  </span>
+                )}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Add your existing stock positions. Holdings with 100+ shares unlock covered call suggestions on the Positions page.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Existing holdings table */}
+            {holdingsLoading ? (
+              <div className="space-y-2">
+                {[1,2].map((i) => <div key={i} className="h-10 rounded-lg bg-slate-800/40 animate-pulse" />)}
+              </div>
+            ) : holdings.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No holdings added yet. Add your stock positions below.
+              </p>
+            ) : (
+              <div className="rounded-lg border border-slate-700 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700 bg-slate-800/40">
+                      <th className="text-left px-3 py-2 text-xs text-slate-400 font-medium">Ticker</th>
+                      <th className="text-right px-3 py-2 text-xs text-slate-400 font-medium">Shares</th>
+                      <th className="text-right px-3 py-2 text-xs text-slate-400 font-medium">Avg Cost</th>
+                      <th className="text-right px-3 py-2 text-xs text-slate-400 font-medium">Contracts</th>
+                      <th className="px-2 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {holdings.map((h) => {
+                      const contracts = Math.floor(h.quantity / 100);
+                      const eligible = h.quantity >= 100;
+                      return (
+                        <tr key={h.id} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-800/20">
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white">{h.ticker}</span>
+                              {eligible && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                                  CC eligible
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-white tabular-nums">{h.quantity.toLocaleString()}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-300 tabular-nums">
+                            {h.avgCostBasis != null ? `$${h.avgCostBasis.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">
+                            <span className={eligible ? "text-emerald-400 font-medium" : "text-slate-500"}>
+                              {contracts > 0 ? contracts : "<1"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2.5 text-right">
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-7 w-7 p-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => deleteHoldingMutation.mutate(h.id)}
+                              disabled={deleteHoldingMutation.isPending}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Add new holding form */}
+            <div className="pt-2">
+              <p className="text-xs text-slate-400 font-medium mb-2">Add a holding</p>
+              <div className="flex gap-2 flex-wrap">
+                <Input
+                  placeholder="Ticker (e.g. AAPL)"
+                  value={newHolding.ticker}
+                  onChange={(e) => setNewHolding((h) => ({ ...h, ticker: e.target.value.toUpperCase() }))}
+                  className="bg-slate-800/50 border-slate-600 text-white w-32 uppercase placeholder:normal-case placeholder:text-slate-500"
+                />
+                <Input
+                  type="number"
+                  placeholder="Shares"
+                  value={newHolding.quantity}
+                  onChange={(e) => setNewHolding((h) => ({ ...h, quantity: e.target.value }))}
+                  className="bg-slate-800/50 border-slate-600 text-white w-28"
+                  min="1"
+                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <Input
+                    type="number"
+                    placeholder="Avg cost (opt.)"
+                    value={newHolding.avgCostBasis}
+                    onChange={(e) => setNewHolding((h) => ({ ...h, avgCostBasis: e.target.value }))}
+                    className="bg-slate-800/50 border-slate-600 text-white pl-7 w-40"
+                    min="0.01"
+                    step="0.01"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                  disabled={!newHolding.ticker || !newHolding.quantity || addHoldingMutation.isPending}
+                  onClick={() => {
+                    const qty = parseInt(newHolding.quantity, 10);
+                    const avgCost = newHolding.avgCostBasis ? parseFloat(newHolding.avgCostBasis) : undefined;
+                    addHoldingMutation.mutate({
+                      ticker: newHolding.ticker,
+                      quantity: qty,
+                      avgCostBasis: avgCost,
+                    });
+                  }}
+                >
+                  <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
+                  {addHoldingMutation.isPending ? "Adding…" : "Add"}
+                </Button>
+              </div>
+              {newHolding.quantity && parseInt(newHolding.quantity, 10) >= 100 && (
+                <p className="text-xs text-emerald-400 mt-1.5">
+                  ✓ {Math.floor(parseInt(newHolding.quantity, 10) / 100)} covered call contract{Math.floor(parseInt(newHolding.quantity, 10) / 100) !== 1 ? "s" : ""} available
+                </p>
+              )}
+              {newHolding.quantity && parseInt(newHolding.quantity, 10) > 0 && parseInt(newHolding.quantity, 10) < 100 && (
+                <p className="text-xs text-amber-400 mt-1.5">
+                  ⚠️ Need 100 shares for a covered call. {100 - parseInt(newHolding.quantity, 10)} more shares needed.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -27,6 +27,7 @@ import {
   companiesTable,
   scoresTable,
   signalQualityStatsTable,
+  brokerHoldingsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql, ne, inArray } from "drizzle-orm";
 import { requireAuth, type AuthPayload } from "../middleware/auth";
@@ -106,6 +107,7 @@ router.put("/user/risk-profile", requireAuth, async (req, res) => {
         maxCapitalPerTradePct: body.maxCapitalPerTradePct ?? 10,
         marginCapPct,
         accountSizeUsd:        body.accountSizeUsd != null ? Number(body.accountSizeUsd) : null,
+        cashAvailableUsd:      body.cashAvailableUsd != null ? Number(body.cashAvailableUsd) : null,
         ivPercentileMin:       body.ivPercentileMin ?? 30,
         monthlyIncomeTarget:   body.monthlyIncomeTarget ?? null,
         updatedAt:             new Date(),
@@ -123,6 +125,7 @@ router.put("/user/risk-profile", requireAuth, async (req, res) => {
           maxCapitalPerTradePct: body.maxCapitalPerTradePct ?? 10,
           marginCapPct,
           accountSizeUsd:        body.accountSizeUsd != null ? Number(body.accountSizeUsd) : null,
+          cashAvailableUsd:      body.cashAvailableUsd != null ? Number(body.cashAvailableUsd) : null,
           ivPercentileMin:       body.ivPercentileMin ?? 30,
           monthlyIncomeTarget:   body.monthlyIncomeTarget ?? null,
           updatedAt:             new Date(),
@@ -679,6 +682,69 @@ router.post("/options/trades/manual", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Broker Holdings (manual stock positions for covered call / NLV) ─────────
+// GET  /api/broker/holdings    → list user's manually-entered stock holdings
+// POST /api/broker/holdings    → add a holding
+// DELETE /api/broker/holdings/:id → remove a holding
+
+router.get("/broker/holdings", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  try {
+    const holdings = await db
+      .select()
+      .from(brokerHoldingsTable)
+      .where(eq(brokerHoldingsTable.userId, user.userId))
+      .orderBy(brokerHoldingsTable.ticker);
+    res.json({ holdings });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch holdings" });
+  }
+});
+
+router.post("/broker/holdings", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  try {
+    const { ticker, quantity, avgCostBasis, notes } = req.body;
+    if (!ticker || !quantity) {
+      return res.status(400).json({ error: "ticker and quantity are required" });
+    }
+    if (isNaN(Number(quantity)) || Number(quantity) < 1) {
+      return res.status(400).json({ error: "quantity must be a positive integer" });
+    }
+    const [holding] = await db
+      .insert(brokerHoldingsTable)
+      .values({
+        userId:       user.userId,
+        ticker:       ticker.toUpperCase().trim(),
+        quantity:     Math.round(Number(quantity)),
+        avgCostBasis: avgCostBasis != null ? Number(avgCostBasis) : null,
+        notes:        notes ?? null,
+      })
+      .returning();
+    res.json({ holding });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to add holding" });
+  }
+});
+
+router.delete("/broker/holdings/:id", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    // Ensure ownership
+    const existing = await db.select().from(brokerHoldingsTable)
+      .where(and(eq(brokerHoldingsTable.id, id), eq(brokerHoldingsTable.userId, user.userId)))
+      .limit(1);
+    if (!existing.length) return res.status(404).json({ error: "Holding not found" });
+    await db.delete(brokerHoldingsTable)
+      .where(and(eq(brokerHoldingsTable.id, id), eq(brokerHoldingsTable.userId, user.userId)));
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete holding" });
+  }
+});
+
 // ─── Trade History + Income ───────────────────────────────────────────────────
 
 router.get("/options/trades", requireAuth, async (req, res) => {
@@ -922,8 +988,57 @@ router.get("/options/covered-calls", requireAuth, async (req, res) => {
       .where(eq(ibkrConnectionsTable.userId, user.userId))
       .limit(1);
 
-    if (!conn.length || !conn[0].accessToken || !conn[0].accountId) {
-      res.json({ connected: false, positions: [], message: "Connect your IBKR account to see covered call opportunities on your existing shares." });
+    const ibkrConnected = conn.length > 0 && !!conn[0].accessToken && !!conn[0].accountId;
+
+    // ── Fallback: use manually-entered holdings if IBKR is not connected ──────
+    if (!ibkrConnected) {
+      const manualHoldings = await db
+        .select()
+        .from(brokerHoldingsTable)
+        .where(eq(brokerHoldingsTable.userId, user.userId))
+        .orderBy(brokerHoldingsTable.ticker);
+
+      if (!manualHoldings.length) {
+        res.json({
+          connected: false,
+          source: "manual",
+          positions: [],
+          message: "Add your stock holdings in Settings → Connect IBKR to see covered call opportunities.",
+        });
+        return;
+      }
+
+      const profile = await db.select().from(userRiskProfilesTable)
+        .where(eq(userRiskProfilesTable.userId, user.userId))
+        .limit(1);
+      const { dteMax = 35 } = profile[0] ?? {};
+
+      const suggestions = manualHoldings
+        .filter((h) => h.quantity >= 100)
+        .map((h) => {
+          const contracts = Math.floor(h.quantity / 100);
+          const basePrice = h.avgCostBasis ?? 100;
+          const callStrike = Math.ceil(basePrice * 1.06 / 5) * 5;
+          const estPremium = parseFloat((callStrike * 0.008).toFixed(2));
+          const estIncome  = parseFloat((estPremium * 100 * contracts).toFixed(0));
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + dteMax);
+          return {
+            ticker: h.ticker,
+            sharesOwned: h.quantity,
+            contracts,
+            avgCost: h.avgCostBasis ?? null,
+            suggestedStrike: callStrike,
+            suggestedExpiry: expiry.toISOString().slice(0, 10),
+            dte: dteMax,
+            estPremiumPerContract: estPremium,
+            estTotalIncome: estIncome,
+            source: "manual",
+            notes: h.quantity < 100 ? "Need 100+ shares for covered call" : undefined,
+          };
+        });
+
+      res.json({ connected: false, source: "manual", positions: suggestions });
       return;
     }
 

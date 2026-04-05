@@ -32,11 +32,25 @@ export const userRiskProfilesTable = pgTable("user_risk_profiles", {
   maxCapitalPerTradePct: real("max_capital_per_trade_pct").default(10).notNull(),
   marginCapPct:          real("margin_cap_pct").default(25).notNull(),
   accountSizeUsd:        real("account_size_usd"),
+  cashAvailableUsd:      real("cash_available_usd"),   // cash set aside for selling puts
   ivPercentileMin:       real("iv_percentile_min").default(30).notNull(),
   monthlyIncomeTarget:   real("monthly_income_target"),
   updatedAt:             timestamp("updated_at").defaultNow().notNull(),
 });
 export type UserRiskProfile = typeof userRiskProfilesTable.$inferSelect;
+
+// Manual stock holdings — used for covered call suggestions before IBKR is connected
+export const brokerHoldingsTable = pgTable("broker_holdings", {
+  id:           serial("id").primaryKey(),
+  userId:       integer("user_id").notNull().references(() => usersTable.id),
+  ticker:       text("ticker").notNull(),
+  quantity:     integer("quantity").notNull(),       // shares owned
+  avgCostBasis: real("avg_cost_basis"),              // avg cost per share (optional)
+  notes:        text("notes"),
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  updatedAt:    timestamp("updated_at").defaultNow().notNull(),
+});
+export type BrokerHolding = typeof brokerHoldingsTable.$inferSelect;
 
 export const optionsIvHistoryTable = pgTable("options_iv_history", {
   id:              serial("id").primaryKey(),
