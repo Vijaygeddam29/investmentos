@@ -920,6 +920,7 @@ export default function OptionsScreener() {
   const [showFilters, setShowFilters]       = useState(false);
   const [selectedSignal, setSelectedSignal] = useState<ScreenerSignal | null>(null);
   const [queuedId, setQueuedId]             = useState<number | null>(null);
+  const [screenerScenario, setScreenerScenario] = useState<{ ticker: string; strategy: string } | null>(null);
 
   const params = new URLSearchParams({
     strategy:   activeStrategy,
@@ -1324,6 +1325,14 @@ export default function OptionsScreener() {
                             <Info className="w-3.5 h-3.5" />
                           </Button>
                           <Button
+                            variant="ghost" size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-sky-400"
+                            title="Compare scenarios"
+                            onClick={() => setScreenerScenario({ ticker: signal.ticker, strategy: signal.strategy })}
+                          >
+                            <GitCompare className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
                             size="sm"
                             className={`h-7 text-xs ${addedToQueue ? "bg-emerald-600 hover:bg-emerald-700" : "bg-violet-600 hover:bg-violet-700"}`}
                             onClick={() => !addedToQueue && addToQueueMutation.mutate(signal.id)}
@@ -1396,6 +1405,15 @@ export default function OptionsScreener() {
 
       {selectedSignal && (
         <RationaleModal signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
+      )}
+
+      {screenerScenario && (
+        <ScenarioCompareModal
+          open={!!screenerScenario}
+          onClose={() => setScreenerScenario(null)}
+          ticker={screenerScenario.ticker}
+          strategy={screenerScenario.strategy as "SELL_PUT" | "SELL_CALL"}
+        />
       )}
     </Layout>
   );

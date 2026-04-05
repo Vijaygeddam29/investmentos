@@ -461,6 +461,8 @@ router.post("/options/queue/:id/approve", requireAuth, async (req, res) => {
       status:           "open",
       monthlyBucket,
       ibkrOrderId,
+      strategy:         t.strategy,
+      regime:           t.regime,
     });
 
     res.json({ status: "approved", orderStatus, ibkrOrderId });

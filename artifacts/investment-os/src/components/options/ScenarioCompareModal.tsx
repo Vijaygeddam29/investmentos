@@ -200,16 +200,26 @@ export function ScenarioCompareModal({ open, onClose, ticker, strategy }: Props)
                     <Legend
                       wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
                     />
-                    {/* 50% profit reference */}
+                    {/* 50% profit target reference */}
                     {scenarios.map((s) => (
                       <ReferenceLine
-                        key={`ref-${s.label}`}
+                        key={`ref50-${s.label}`}
                         y={Math.round(s.premiumPerContract * 0.5)}
                         stroke={s.color}
                         strokeDasharray="4 4"
                         strokeOpacity={0.4}
                       />
                     ))}
+                    {/* Max-loss stop (lose 1× premium = net -premium) */}
+                    {scenarios.length > 0 && (
+                      <ReferenceLine
+                        y={-Math.round(scenarios[0].premiumPerContract)}
+                        stroke="#ef4444"
+                        strokeDasharray="3 3"
+                        strokeOpacity={0.7}
+                        label={{ value: "Max loss stop", position: "insideTopLeft", fill: "#ef4444", fontSize: 10 }}
+                      />
+                    )}
                     {scenarios.map((s) => (
                       <Line
                         key={s.label}

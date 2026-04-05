@@ -366,14 +366,14 @@ export async function buildTradeStory(tradeId: number, userId: number): Promise<
       heldToExpiry.push({ day: d, pnl: Math.round(theoreticalPnlAtDay(premium, initialDte, d) * 100) / 100 });
     }
 
-    // Path 2: Closed at 50% profit
-    const target50 = premium * 0.5;
-    const dayAt50 = Math.round(initialDte * (1 - (target50 / premium) ** 2));
-    const closed50: { day: number; pnl: number }[] = [];
-    for (let d = 0; d <= dayAt50; d++) {
-      closed50.push({ day: d, pnl: Math.round(theoreticalPnlAtDay(premium, initialDte, d) * 100) / 100 });
+    // Path 2: Closed at 25% profit
+    const target25 = premium * 0.25;
+    const dayAt25 = Math.round(initialDte * (1 - (target25 / premium) ** 2));
+    const closed25: { day: number; pnl: number }[] = [];
+    for (let d = 0; d <= dayAt25; d++) {
+      closed25.push({ day: d, pnl: Math.round(theoreticalPnlAtDay(premium, initialDte, d) * 100) / 100 });
     }
-    closed50.push({ day: dayAt50, pnl: target50 }); // flat after close
+    closed25.push({ day: dayAt25, pnl: target25 }); // flat after close
 
     // Path 3: Rolled at 21 DTE
     const rollDay = Math.max(0, initialDte - 21);
@@ -397,10 +397,10 @@ export async function buildTradeStory(tradeId: number, userId: number): Promise<
         description: `Full premium kept ($${premium.toFixed(0)}) but maximum time exposure`,
       },
       {
-        label: "Closed at 50%",
-        points: closed50,
-        finalPnl: target50,
-        description: `$${target50.toFixed(0)} profit at day ${dayAt50} — frees up capital for next trade`,
+        label: "Closed at 25%",
+        points: closed25,
+        finalPnl: target25,
+        description: `$${target25.toFixed(0)} profit at day ${dayAt25} — quick exit, frees up capital fastest`,
       },
       {
         label: "Rolled at 21 DTE",
@@ -474,14 +474,15 @@ export async function takeDailyTradeSnapshots(): Promise<void> {
 
             if (expiryDate) {
               const expiryChain = await yf.options(trade.ticker, { date: expiryDate }, { validateResult: false });
-              const contracts: any[] = trade.right === "P"
+              const isPut = trade.right === "PUT" || trade.right === "P";
+              const contracts: Record<string, unknown>[] = isPut
                 ? (expiryChain?.options?.[0]?.puts ?? [])
                 : (expiryChain?.options?.[0]?.calls ?? []);
 
-              const matching = contracts.find((c) => Math.abs(c.strike - trade.strike) < 0.5);
+              const matching = contracts.find((c) => Math.abs((c.strike as number) - trade.strike) < 0.5);
               if (matching) {
-                const bid = matching.bid ?? 0;
-                const ask = matching.ask ?? 0;
+                const bid = (matching.bid as number | null) ?? 0;
+                const ask = (matching.ask as number | null) ?? 0;
                 midPrice = (bid + ask) / 2;
               }
             }

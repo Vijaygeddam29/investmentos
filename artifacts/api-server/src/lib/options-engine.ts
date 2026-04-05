@@ -21,6 +21,7 @@ import {
   userRiskProfilesTable,
   financialMetricsTable,
   ibkrConnectionsTable,
+  signalQualityStatsTable,
   type UserRiskProfile,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -332,6 +333,7 @@ export async function generateAiRationale(opts: {
   fortressScore: number | null;
   rocketScore: number | null;
   macroContext?: string;
+  trackRecord?: string;
 }): Promise<string> {
   const stratLabel = opts.strategy === "SELL_PUT" ? "cash-secured put" : opts.strategy === "SELL_CALL" ? "covered call" : "wheel";
   const prompt = `You are an expert options analyst. Write a 2–3 sentence plain-English rationale for this options trade signal. Be specific, professional, and concise. No markdown, no bullet points.
@@ -342,6 +344,7 @@ Probability of profit: ${opts.probabilityProfit}%
 Ticker regime: ${opts.regime} | Market regime: ${opts.macroRegime}
 IV percentile: ${opts.ivPercentile != null ? `${opts.ivPercentile}th percentile (${opts.ivPercentile > 50 ? "elevated — good time to sell" : "moderate"})` : "unknown"}
 MIOS Fortress score: ${opts.fortressScore != null ? (opts.fortressScore * 100).toFixed(0) : "N/A"}/100
+${opts.trackRecord ? `Historical track record on this system: ${opts.trackRecord}` : ""}
 ${opts.macroContext ? `Today's macro context: ${opts.macroContext}` : ""}
 
 Write the rationale now:`;
@@ -560,6 +563,25 @@ export async function generateSignals(
 
       const ivPct = c.ivData.ivPercentile90d ?? c.ivData.ivPercentile30d;
 
+      // Fetch historical track record for this (ticker, strategy, regime) combination
+      const qualityRows = await db
+        .select()
+        .from(signalQualityStatsTable)
+        .where(
+          and(
+            eq(signalQualityStatsTable.ticker, c.ticker),
+            eq(signalQualityStatsTable.strategy, c.strategy),
+            eq(signalQualityStatsTable.regime, c.regime),
+          ),
+        )
+        .limit(1);
+
+      const qr = qualityRows[0];
+      const totalTrades = (qr?.wins ?? 0) + (qr?.losses ?? 0);
+      const trackRecord = totalTrades >= 3
+        ? `${qr.wins} wins / ${qr.losses} losses (${(qr.winRate * 100).toFixed(0)}% win rate, ${(qr.assignmentRate * 100).toFixed(0)}% assignment rate) in ${c.regime} regime`
+        : undefined;
+
       const rationale = await generateAiRationale({
         ticker:           c.ticker,
         companyName:      c.companyName,
@@ -576,6 +598,7 @@ export async function generateSignals(
         fortressScore:    c.fortressScore,
         rocketScore:      c.rocketScore,
         macroContext,
+        trackRecord,
       });
 
       await db.insert(optionsSignalsTable).values({

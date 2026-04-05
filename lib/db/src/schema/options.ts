@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, integer, text, real, boolean, timestamp, jsonb
+  pgTable, serial, integer, text, real, boolean, timestamp, jsonb, uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
@@ -138,7 +138,9 @@ export const optionsTradeSnapshotsTable = pgTable("options_trade_snapshots", {
   daysElapsed:   integer("days_elapsed"),
   dteRemaining:  integer("dte_remaining"),
   createdAt:     timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("options_trade_snapshots_trade_date_idx").on(table.tradeId, table.date),
+]);
 export type OptionsTradeSnapshot = typeof optionsTradeSnapshotsTable.$inferSelect;
 
 // Aggregate signal quality stats per (ticker, strategy, regime)
