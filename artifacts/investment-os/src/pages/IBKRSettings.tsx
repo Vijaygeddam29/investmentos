@@ -18,6 +18,7 @@ interface RiskProfile {
   dteMax: number;
   maxOpenPositions: number;
   marginCapPct: number;
+  accountSizeUsd: number | null;
   monthlyIncomeTarget: number | null;
 }
 
@@ -77,6 +78,7 @@ export default function IBKRSettings() {
     dteMax: 35,
     maxOpenPositions: 5,
     marginCapPct: 25,
+    accountSizeUsd: null,
     monthlyIncomeTarget: null,
   };
 
@@ -87,6 +89,8 @@ export default function IBKRSettings() {
   const [dteMax, setDteMax]                           = useState<number | null>(null);
   const [maxPositions, setMaxPositions]               = useState<number | null>(null);
   const [marginCap, setMarginCap]                     = useState<number | null>(null);
+  const [accountSize, setAccountSize]                 = useState<string>("");
+  const [accountSizeTouched, setAccountSizeTouched]   = useState(false);
   const [incomeTarget, setIncomeTarget]               = useState<string>("");
   const [incomeTargetTouched, setIncomeTargetTouched] = useState(false);
 
@@ -100,6 +104,10 @@ export default function IBKRSettings() {
   const it   = incomeTargetTouched
     ? (incomeTarget === "" ? null : parseFloat(incomeTarget))
     : profile.monthlyIncomeTarget;
+  const savedAccountSize = riskData?.accountSizeUsd ?? null;
+  const as_  = accountSizeTouched
+    ? (accountSize === "" ? null : parseFloat(accountSize))
+    : savedAccountSize;
 
   const updateRiskMutation = useMutation({
     mutationFn: async () => {
@@ -111,12 +119,16 @@ export default function IBKRSettings() {
         },
         body: JSON.stringify({
           profitTarget: pt,
+          profitTargetPct: pt,
           maxLossMultiple: ml,
           deltaPref: dp,
+          deltaPreference: dp,
           dteMin: dmin,
           dteMax: dmax,
           maxOpenPositions: mp,
+          maxPositions: mp,
           marginCapPct: mc,
+          accountSizeUsd: as_,
           monthlyIncomeTarget: it,
         }),
       });
@@ -383,6 +395,27 @@ export default function IBKRSettings() {
                 min={1} max={20} step={1}
                 className="w-full"
               />
+            </div>
+
+            {/* Account size — used for risk metrics when IBKR is not connected */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm text-white">Account Size</Label>
+                {as_ && <Badge variant="outline" className="text-xs border-emerald-600/50 text-emerald-400">${as_.toLocaleString()}</Badge>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  placeholder={savedAccountSize?.toString() ?? "e.g. 200000"}
+                  value={accountSizeTouched ? accountSize : (savedAccountSize?.toString() ?? "")}
+                  onChange={(e) => { setAccountSize(e.target.value); setAccountSizeTouched(true); }}
+                  className="bg-slate-800/50 border-slate-600 text-white"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Used for risk calculations when IBKR account value is not available. Set to your total deployable capital.
+              </p>
             </div>
 
             {/* Margin cap */}

@@ -31,6 +31,7 @@ export const userRiskProfilesTable = pgTable("user_risk_profiles", {
   maxPositions:          integer("max_positions").default(5).notNull(),
   maxCapitalPerTradePct: real("max_capital_per_trade_pct").default(10).notNull(),
   marginCapPct:          real("margin_cap_pct").default(25).notNull(),
+  accountSizeUsd:        real("account_size_usd"),
   ivPercentileMin:       real("iv_percentile_min").default(30).notNull(),
   monthlyIncomeTarget:   real("monthly_income_target"),
   updatedAt:             timestamp("updated_at").defaultNow().notNull(),

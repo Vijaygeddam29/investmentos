@@ -105,6 +105,7 @@ router.put("/user/risk-profile", requireAuth, async (req, res) => {
         maxPositions:          body.maxPositions ?? 5,
         maxCapitalPerTradePct: body.maxCapitalPerTradePct ?? 10,
         marginCapPct,
+        accountSizeUsd:        body.accountSizeUsd != null ? Number(body.accountSizeUsd) : null,
         ivPercentileMin:       body.ivPercentileMin ?? 30,
         monthlyIncomeTarget:   body.monthlyIncomeTarget ?? null,
         updatedAt:             new Date(),
@@ -121,6 +122,7 @@ router.put("/user/risk-profile", requireAuth, async (req, res) => {
           maxPositions:          body.maxPositions ?? 5,
           maxCapitalPerTradePct: body.maxCapitalPerTradePct ?? 10,
           marginCapPct,
+          accountSizeUsd:        body.accountSizeUsd != null ? Number(body.accountSizeUsd) : null,
           ivPercentileMin:       body.ivPercentileMin ?? 30,
           monthlyIncomeTarget:   body.monthlyIncomeTarget ?? null,
           updatedAt:             new Date(),
@@ -249,7 +251,8 @@ router.post("/options/queue", requireAuth, async (req, res) => {
       .limit(1);
 
     const profile = riskProfile[0];
-    const accountNlv = ibkrConn[0]?.netLiquidation ?? null;
+    // Use IBKR NLV if available, else fall back to user-configured account size
+    const accountNlv: number | null = ibkrConn[0]?.netLiquidation ?? profile?.accountSizeUsd ?? null;
 
     const riskNotes: string[] = [];
     let riskChecksPassed = true;
@@ -343,19 +346,25 @@ router.post("/options/queue", requireAuth, async (req, res) => {
         return;
       }
 
-      // Ticker concentration — 20% limit, always enforced (no floor)
+      // Ticker concentration — 20% of account NLV, always enforced
+      // Denominator is accountNlv (not projected portfolio total) so first trades
+      // aren't auto-blocked just because they're the only position.
       const tickerCollateral = openPositions
         .filter((t) => t.ticker === s.ticker)
         .reduce((sum, t) => sum + (t.strike * 100 * (t.quantity ?? 1)), 0);
       const tickerProjected = tickerCollateral + collateral;
-      const tickerPct = projectedTotal > 0 ? (tickerProjected / projectedTotal) * 100 : 0;
+      const tickerPct = accountNlv > 0 ? (tickerProjected / accountNlv) * 100 : 0;
       if (tickerPct > 20) {
+        const maxTickerCapital = Math.round(accountNlv * 0.20);
+        const tickerHeadroom = Math.max(0, maxTickerCapital - tickerCollateral);
         res.status(422).json({
           blocked: true,
           breachType: "ticker_concentration",
-          reason: `${s.ticker} would represent ${tickerPct.toFixed(1)}% of your total options capital. The limit is 20% per ticker to stay diversified.`,
-          headroom: 0,
-          suggestion: "Diversify across different tickers, or use a spread to reduce the capital required.",
+          reason: `${s.ticker} would represent ${tickerPct.toFixed(1)}% of your account (${(tickerProjected / 1000).toFixed(1)}k / ${(accountNlv / 1000).toFixed(0)}k). The limit is 20% per ticker.`,
+          headroom: tickerHeadroom,
+          suggestion: tickerHeadroom < collateral
+            ? "Consider a spread to reduce capital, or trade a different ticker."
+            : "Diversify across tickers or reduce contract count.",
         });
         return;
       }
@@ -1476,13 +1485,15 @@ router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
       .from(ibkrConnectionsTable)
       .where(eq(ibkrConnectionsTable.userId, userId))
       .limit(1);
-    const nlv = ibkrConn[0]?.netLiquidation ?? null;
-
     const profileRows = await db.select()
       .from(userRiskProfilesTable)
       .where(eq(userRiskProfilesTable.userId, userId))
       .limit(1);
     const marginCapPct = profileRows[0]?.marginCapPct ?? 25;
+    // IBKR NLV preferred; fall back to user-configured account size for risk metrics when IBKR is not live
+    const ibkrNlv = ibkrConn[0]?.netLiquidation ?? null;
+    const nlv: number | null = ibkrNlv ?? profileRows[0]?.accountSizeUsd ?? null;
+    const nlvSource: "ibkr" | "configured" | null = ibkrNlv != null ? "ibkr" : profileRows[0]?.accountSizeUsd != null ? "configured" : null;
 
     const openTrades = await db.select()
       .from(optionsTradesTable)
@@ -1557,6 +1568,7 @@ router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
       totalCollateral:    Math.round(totalCollateral),
       totalPositions:     openTrades.length,
       nlv:                nlv ?? null,
+      nlvSource,
       marginPct:          marginPct,
       marginCapPct,
       marginStatus,
