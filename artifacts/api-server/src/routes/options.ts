@@ -446,9 +446,19 @@ router.post("/options/queue/:id/approve", requireAuth, async (req, res) => {
       .set({ status: "approved", reviewedAt: new Date(), ibkrOrderId })
       .where(eq(tradeReviewQueueTable.id, id));
 
-    // Log the trade
+    // Log the trade — resolve regime from the originating signal (trade_review_queue has no regime column)
     const today = new Date();
     const monthlyBucket = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+    let resolvedRegime: string | null = null;
+    if (t.signalId) {
+      const sigRows = await db
+        .select({ regime: optionsSignalsTable.regime })
+        .from(optionsSignalsTable)
+        .where(eq(optionsSignalsTable.id, t.signalId))
+        .limit(1);
+      resolvedRegime = sigRows[0]?.regime ?? null;
+    }
 
     await db.insert(optionsTradesTable).values({
       userId:           user.userId,
@@ -463,7 +473,7 @@ router.post("/options/queue/:id/approve", requireAuth, async (req, res) => {
       monthlyBucket,
       ibkrOrderId,
       strategy:         t.strategy,
-      regime:           t.regime,
+      regime:           resolvedRegime,
     });
 
     res.json({ status: "approved", orderStatus, ibkrOrderId });
