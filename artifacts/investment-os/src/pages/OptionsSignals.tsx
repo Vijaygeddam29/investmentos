@@ -13,9 +13,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingDown, TrendingUp, RefreshCw, Zap, CheckCircle, XCircle,
   AlertTriangle, Info, BarChart2, Search, SlidersHorizontal,
-  Shield, BookOpen, HelpCircle, X, GitCompare, Award,
+  Shield, BookOpen, HelpCircle, X, GitCompare, Award, Layers,
+  ArrowRightLeft, Lock,
 } from "lucide-react";
 import { ScenarioCompareModal } from "@/components/options/ScenarioCompareModal";
+import { SpreadAlternativeModal } from "@/components/options/SpreadAlternativeModal";
 import {
   LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis,
 } from "recharts";
@@ -354,6 +356,7 @@ export default function OptionsSignals() {
   const [showExplainer, setShowExplainer] = useState(false);
   const [chartSignal, setChartSignal] = useState<Signal | null>(null);
   const [scenarioSignal, setScenarioSignal] = useState<Signal | null>(null);
+  const [spreadSignal, setSpreadSignal] = useState<Signal | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["options-signals"],
@@ -751,6 +754,17 @@ export default function OptionsSignals() {
                       >
                         <GitCompare className="w-4 h-4 mr-1.5" /> Compare
                       </Button>
+                      {(s.strategy === "SELL_PUT" || s.strategy === "WHEEL") && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="border border-slate-600 text-slate-400 hover:text-violet-300 hover:border-violet-500/50"
+                          onClick={() => setSpreadSignal({ signal: s, company: c })}
+                          title="View spread alternative (capped risk)"
+                        >
+                          <Layers className="w-4 h-4 mr-1" /> Spread
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -934,21 +948,52 @@ export default function OptionsSignals() {
           <DialogContent className="bg-[#1a1f2e] border-slate-700 max-w-sm">
             <DialogHeader>
               <DialogTitle className="text-white">
-                {orderResult.status === "approved" ? "✓ Order placed successfully" : "Saved to your queue"}
+                {orderResult.blocked
+                  ? "Trade blocked by risk gate"
+                  : orderResult.status === "approved"
+                  ? "✓ Order placed successfully"
+                  : "Saved to your queue"}
               </DialogTitle>
             </DialogHeader>
-            <div className={`p-4 rounded-lg ${(orderResult.riskChecksPassed as boolean) === false ? "bg-amber-500/10 border border-amber-500/30" : "bg-emerald-500/10 border border-emerald-500/30"}`}>
-              <p className="text-sm text-white">{(orderResult.message as string) ?? "Your trade has been approved."}</p>
-              {Array.isArray(orderResult.riskNotes) && (orderResult.riskNotes as string[]).length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {(orderResult.riskNotes as string[]).map((n, i) => (
-                    <li key={i} className="text-xs text-amber-300">• {n}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            {orderResult.blocked ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-300">
+                      {orderResult.breachType === "margin_cap" ? "Margin cap exceeded" : "Concentration limit exceeded"}
+                    </p>
+                    <p className="text-xs text-red-400 mt-1">{orderResult.reason as string}</p>
+                  </div>
+                </div>
+                {orderResult.suggestion && (
+                  <div className="flex items-start gap-2 p-3 bg-violet-500/10 border border-violet-500/20 rounded-lg">
+                    <Layers className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-violet-300">{orderResult.suggestion as string}</p>
+                  </div>
+                )}
+                {(orderResult.headroom as number) > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Margin headroom remaining: <span className="text-white font-mono">${(orderResult.headroom as number).toLocaleString()}</span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className={`p-4 rounded-lg ${(orderResult.riskChecksPassed as boolean) === false ? "bg-amber-500/10 border border-amber-500/30" : "bg-emerald-500/10 border border-emerald-500/30"}`}>
+                <p className="text-sm text-white">{(orderResult.message as string) ?? "Your trade has been approved."}</p>
+                {Array.isArray(orderResult.riskNotes) && (orderResult.riskNotes as string[]).length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {(orderResult.riskNotes as string[]).map((n, i) => (
+                      <li key={i} className="text-xs text-amber-300">• {n}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <DialogFooter>
-              <Button onClick={() => setOrderResult(null)} className="w-full">Done</Button>
+              <Button onClick={() => setOrderResult(null)} className="w-full">
+                {orderResult.blocked ? "Understood" : "Done"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -960,6 +1005,14 @@ export default function OptionsSignals() {
           onClose={() => setScenarioSignal(null)}
           ticker={scenarioSignal.signal.ticker}
           strategy={scenarioSignal.signal.strategy}
+        />
+      )}
+      {/* ─── Spread Alternative Modal ────────────────────────────────────── */}
+      {spreadSignal && (
+        <SpreadAlternativeModal
+          signalId={spreadSignal.signal.id}
+          ticker={spreadSignal.signal.ticker}
+          onClose={() => setSpreadSignal(null)}
         />
       )}
     </Layout>

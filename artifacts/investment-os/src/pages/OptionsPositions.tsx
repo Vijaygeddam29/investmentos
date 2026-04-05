@@ -8,8 +8,187 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, TrendingDown, TrendingUp, AlertTriangle, CheckCircle,
   ChevronDown, ChevronUp, RotateCcw, X, Info, BarChart2, Shield,
-  DollarSign, BookOpen,
+  DollarSign, BookOpen, Activity,
 } from "lucide-react";
+
+// ─── Risk Dashboard Panel ─────────────────────────────────────────────────────
+
+interface RiskDashboard {
+  totalCollateral: number;
+  totalPositions: number;
+  nlv: number | null;
+  marginPct: number | null;
+  marginCapPct: number;
+  marginStatus: "ok" | "elevated" | "breach" | "unknown";
+  perTickerExposure: { ticker: string; collateral: number; pct: number }[];
+  drawdownPct: number | null;
+  currentMonthIncome: number;
+  peakMonthIncome: number | null;
+  estimatedOpenPnl: number;
+}
+
+function MarginDonut({ pct, cap, status }: { pct: number; cap: number; status: string }) {
+  const clamped = Math.min(pct, cap);
+  const overflowPct = Math.max(0, pct - cap);
+  const stroke = status === "breach" ? "#ef4444" : status === "elevated" ? "#f59e0b" : "#10b981";
+  const r = 26;
+  const circ = 2 * Math.PI * r;
+  const filledFrac = Math.min(clamped / 100, 1);
+  return (
+    <svg width="72" height="72" viewBox="0 0 72 72" className="shrink-0">
+      <circle cx="36" cy="36" r={r} fill="none" stroke="#1e293b" strokeWidth="8" />
+      <circle
+        cx="36" cy="36" r={r} fill="none"
+        stroke={stroke} strokeWidth="8"
+        strokeDasharray={`${filledFrac * circ} ${circ}`}
+        strokeLinecap="round"
+        transform="rotate(-90 36 36)"
+        style={{ transition: "stroke-dasharray 0.5s ease" }}
+      />
+      {overflowPct > 0 && (
+        <circle cx="36" cy="36" r={r} fill="none"
+          stroke="#ef4444" strokeWidth="4" strokeDasharray={`${Math.min(overflowPct / 100, 1) * circ} ${circ}`}
+          strokeLinecap="round" transform="rotate(-90 36 36)"
+        />
+      )}
+      <text x="36" y="40" textAnchor="middle" fill={stroke} fontSize="12" fontWeight="700">
+        {pct.toFixed(0)}%
+      </text>
+    </svg>
+  );
+}
+
+function RiskDashboardPanel() {
+  const { data, isLoading } = useQuery<RiskDashboard>({
+    queryKey: ["options-risk-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/options/risk-dashboard", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  if (isLoading) return <div className="h-20 rounded-xl bg-slate-800/40 animate-pulse" />;
+  if (!data) return null;
+
+  const statusColor = {
+    ok:       "border-emerald-500/30 bg-emerald-500/5",
+    elevated: "border-amber-500/30 bg-amber-500/5",
+    breach:   "border-red-500/40 bg-red-500/10",
+    unknown:  "border-slate-700 bg-slate-800/30",
+  }[data.marginStatus];
+
+  const statusText = {
+    ok:       "Margin within limits",
+    elevated: "Margin approaching limit",
+    breach:   "Margin limit breached",
+    unknown:  "Connect IBKR to see margin",
+  }[data.marginStatus];
+
+  return (
+    <div className={`rounded-xl border p-4 ${statusColor}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <Activity className="w-4 h-4 text-blue-400" />
+        <span className="text-sm font-semibold text-white">Portfolio Risk Dashboard</span>
+        {data.marginStatus === "breach" && (
+          <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-400 bg-red-500/10 ml-auto">
+            MARGIN BREACH
+          </Badge>
+        )}
+        {data.marginStatus === "elevated" && (
+          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400 bg-amber-500/10 ml-auto">
+            ELEVATED
+          </Badge>
+        )}
+      </div>
+
+      <div className="flex items-start gap-4 flex-wrap">
+        {/* Margin meter */}
+        {data.marginPct != null ? (
+          <div className="flex items-center gap-3">
+            <MarginDonut pct={data.marginPct} cap={data.marginCapPct} status={data.marginStatus} />
+            <div>
+              <p className="text-xs font-medium text-white">{statusText}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {data.marginPct.toFixed(1)}% of {data.marginCapPct}% cap used
+              </p>
+              {data.nlv && (
+                <p className="text-[11px] text-muted-foreground">
+                  ${data.totalCollateral.toLocaleString()} of ${Math.round(data.nlv * data.marginCapPct / 100).toLocaleString()} available
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Shield className="w-4 h-4 text-slate-500" />
+            <span>Connect IBKR to see margin utilization</span>
+          </div>
+        )}
+
+        {/* Stats grid */}
+        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0">
+          <div className="bg-slate-800/50 rounded-lg p-2.5">
+            <p className="text-[10px] text-muted-foreground">Capital deployed</p>
+            <p className="text-sm font-bold text-white">${data.totalCollateral.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">{data.totalPositions} position{data.totalPositions !== 1 ? "s" : ""}</p>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-2.5">
+            <p className="text-[10px] text-muted-foreground">Estimated P&L (open)</p>
+            <p className={`text-sm font-bold ${data.estimatedOpenPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {data.estimatedOpenPnl >= 0 ? "+" : ""}${data.estimatedOpenPnl.toLocaleString()}
+            </p>
+            <p className="text-[10px] text-muted-foreground">theta-decay model</p>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-2.5">
+            <p className="text-[10px] text-muted-foreground">This month's income</p>
+            <p className="text-sm font-bold text-emerald-400">${data.currentMonthIncome.toLocaleString()}</p>
+            {data.peakMonthIncome && <p className="text-[10px] text-muted-foreground">Peak: ${data.peakMonthIncome.toLocaleString()}</p>}
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-2.5">
+            <p className="text-[10px] text-muted-foreground">Monthly drawdown</p>
+            {data.drawdownPct != null ? (
+              <p className={`text-sm font-bold ${data.drawdownPct <= 10 ? "text-emerald-400" : data.drawdownPct <= 30 ? "text-amber-400" : "text-red-400"}`}>
+                {data.drawdownPct > 0 ? `−${data.drawdownPct}%` : "On track"}
+              </p>
+            ) : (
+              <p className="text-sm font-bold text-slate-400">–</p>
+            )}
+            <p className="text-[10px] text-muted-foreground">vs 3-month peak</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-ticker exposure */}
+      {data.perTickerExposure.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-slate-700/50">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Capital concentration</p>
+          <div className="flex flex-wrap gap-2">
+            {data.perTickerExposure.slice(0, 6).map((t) => (
+              <div key={t.ticker} className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-white">{t.ticker}</span>
+                <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${t.pct > 20 ? "bg-red-500" : t.pct > 15 ? "bg-amber-500" : "bg-blue-500"}`}
+                    style={{ width: `${Math.min(t.pct, 100)}%` }}
+                  />
+                </div>
+                <span className={`text-[11px] font-mono ${t.pct > 20 ? "text-red-400" : "text-muted-foreground"}`}>{t.pct.toFixed(0)}%</span>
+                {t.pct > 20 && <AlertTriangle className="w-3 h-3 text-red-400" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -225,6 +404,9 @@ export default function OptionsPositions() {
             </button>
           </div>
         )}
+
+        {/* Risk Dashboard */}
+        <RiskDashboardPanel />
 
         {/* Philosophy banner */}
         <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">

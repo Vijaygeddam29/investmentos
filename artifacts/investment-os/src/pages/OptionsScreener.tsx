@@ -14,9 +14,10 @@ import {
   TrendingDown, TrendingUp, RefreshCw, SlidersHorizontal, CheckCircle,
   AlertTriangle, Info, Star, Shield, DollarSign, BarChart2, ChevronDown,
   ChevronUp, Zap, BookOpen, X, Search, Grid3X3, Calendar,
-  AlertCircle, ArrowRight, GitCompare, Award,
+  AlertCircle, ArrowRight, GitCompare, Award, Layers, Lock, ArrowUpDown,
 } from "lucide-react";
 import { ScenarioCompareModal } from "@/components/options/ScenarioCompareModal";
+import { SpreadAlternativeModal } from "@/components/options/SpreadAlternativeModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -954,6 +955,10 @@ export default function OptionsScreener() {
   const [selectedSignal, setSelectedSignal] = useState<ScreenerSignal | null>(null);
   const [queuedId, setQueuedId]             = useState<number | null>(null);
   const [screenerScenario, setScreenerScenario] = useState<{ ticker: string; strategy: string } | null>(null);
+  const [spreadScreenerSignal, setSpreadScreenerSignal] = useState<ScreenerSignal | null>(null);
+  const [localSortCol, setLocalSortCol] = useState<string | null>(null);
+  const [localSortDir, setLocalSortDir] = useState<"asc" | "desc">("desc");
+  const [blockedResult, setBlockedResult] = useState<Record<string, unknown> | null>(null);
 
   const params = new URLSearchParams({
     strategy:   activeStrategy,
@@ -981,6 +986,39 @@ export default function OptionsScreener() {
   const signals    = data?.signals ?? [];
   const allSectors = data?.sectors ?? [];
 
+  const displaySignals = useMemo(() => {
+    if (!localSortCol) return signals;
+    return [...signals].sort((a, b) => {
+      let va = 0, vb = 0;
+      switch (localSortCol) {
+        case "premium":       va = a.premium; vb = b.premium; break;
+        case "roc":           va = a.annualizedROC ?? 0; vb = b.annualizedROC ?? 0; break;
+        case "capital":       va = a.capitalRequired ?? 0; vb = b.capitalRequired ?? 0; break;
+        case "confidence":    va = a.confidenceScore ?? 0; vb = b.confidenceScore ?? 0; break;
+        case "dte":           va = a.dte ?? 0; vb = b.dte ?? 0; break;
+        case "strike":        va = a.strike ?? 0; vb = b.strike ?? 0; break;
+        default: return 0;
+      }
+      return localSortDir === "desc" ? vb - va : va - vb;
+    });
+  }, [signals, localSortCol, localSortDir]);
+
+  function handleSortClick(col: string) {
+    if (localSortCol === col) {
+      setLocalSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setLocalSortCol(col);
+      setLocalSortDir("desc");
+    }
+  }
+
+  function SortIcon({ col }: { col: string }) {
+    if (localSortCol !== col) return <ArrowUpDown className="w-3 h-3 ml-0.5 opacity-40" />;
+    return localSortDir === "desc"
+      ? <ChevronDown className="w-3 h-3 ml-0.5 text-violet-400" />
+      : <ChevronUp className="w-3 h-3 ml-0.5 text-violet-400" />;
+  }
+
   const addToQueueMutation = useMutation({
     mutationFn: async (signalId: number) => {
       const r = await fetch("/api/options/queue", {
@@ -993,7 +1031,11 @@ export default function OptionsScreener() {
       });
       return r.json();
     },
-    onSuccess: (_, signalId) => {
+    onSuccess: (data, signalId) => {
+      if (data?.blocked) {
+        setBlockedResult(data);
+        return;
+      }
       setQueuedId(signalId);
       qc.invalidateQueries({ queryKey: ["options-queue"] });
     },
@@ -1270,15 +1312,30 @@ export default function OptionsScreener() {
                 <div className="hidden md:grid grid-cols-[1.8fr_1.2fr_0.8fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                   <span>Company</span>
                   <span>Strategy / Tier</span>
-                  <span>Strike / DTE</span>
-                  <span>Premium</span>
-                  <span className="text-emerald-400">Annual ROC</span>
-                  <span>Capital needed</span>
-                  <span>Confidence</span>
+                  <button
+                    className="flex items-center hover:text-white transition-colors text-left"
+                    onClick={() => handleSortClick("strike")}
+                  >Strike / DTE <SortIcon col="strike" /></button>
+                  <button
+                    className="flex items-center hover:text-white transition-colors text-left"
+                    onClick={() => handleSortClick("premium")}
+                  >Premium <SortIcon col="premium" /></button>
+                  <button
+                    className="flex items-center hover:text-white transition-colors text-left text-emerald-400"
+                    onClick={() => handleSortClick("roc")}
+                  >Annual ROC <SortIcon col="roc" /></button>
+                  <button
+                    className="flex items-center hover:text-white transition-colors text-left"
+                    onClick={() => handleSortClick("capital")}
+                  >Capital needed <SortIcon col="capital" /></button>
+                  <button
+                    className="flex items-center hover:text-white transition-colors text-left"
+                    onClick={() => handleSortClick("confidence")}
+                  >Confidence <SortIcon col="confidence" /></button>
                   <span></span>
                 </div>
 
-                {signals.map((signal) => {
+                {displaySignals.map((signal) => {
                   const strat = strategyBadge(signal.strategy, signal.tier);
                   const tier  = tierBadge(signal.tier);
                   const addedToQueue = queuedId === signal.id;
@@ -1366,6 +1423,16 @@ export default function OptionsScreener() {
                           >
                             <GitCompare className="w-3.5 h-3.5" />
                           </Button>
+                          {(signal.strategy === "SELL_PUT" || signal.strategy === "WHEEL") && (
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-7 px-2 text-[11px] text-slate-400 hover:text-violet-300 border border-slate-700/50 hover:border-violet-500/40"
+                              title="View spread alternative"
+                              onClick={() => setSpreadScreenerSignal(signal)}
+                            >
+                              <Layers className="w-3 h-3 mr-1" />Spread
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             className={`h-7 text-xs ${addedToQueue ? "bg-emerald-600 hover:bg-emerald-700" : "bg-violet-600 hover:bg-violet-700"}`}
@@ -1448,6 +1515,46 @@ export default function OptionsScreener() {
           ticker={screenerScenario.ticker}
           strategy={screenerScenario.strategy as "SELL_PUT" | "SELL_CALL"}
         />
+      )}
+
+      {/* ─── Spread Alternative Modal ──────────────────────────────────────── */}
+      {spreadScreenerSignal && (
+        <SpreadAlternativeModal
+          signalId={spreadScreenerSignal.id}
+          ticker={spreadScreenerSignal.ticker}
+          onClose={() => setSpreadScreenerSignal(null)}
+        />
+      )}
+
+      {/* ─── Blocked by risk gate dialog ───────────────────────────────────── */}
+      {blockedResult && (
+        <Dialog open onOpenChange={(o) => !o && setBlockedResult(null)}>
+          <DialogContent className="bg-[#1a1f2e] border-slate-700 max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-white">Trade blocked by risk gate</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-300">
+                    {blockedResult.breachType === "margin_cap" ? "Margin cap exceeded" : "Concentration limit exceeded"}
+                  </p>
+                  <p className="text-xs text-red-400 mt-1">{blockedResult.reason as string}</p>
+                </div>
+              </div>
+              {blockedResult.suggestion && (
+                <div className="flex items-start gap-2 p-3 bg-violet-500/10 border border-violet-500/20 rounded-lg">
+                  <Layers className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-violet-300">{blockedResult.suggestion as string}</p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setBlockedResult(null)} className="w-full">Understood</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </Layout>
   );

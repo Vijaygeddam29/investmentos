@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link2, CheckCircle, XCircle, AlertTriangle, Shield, Settings, RefreshCw } from "lucide-react";
+import { Link2, CheckCircle, XCircle, AlertTriangle, Shield, Settings, RefreshCw, PieChart, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface RiskProfile {
@@ -49,6 +49,24 @@ export default function IBKRSettings() {
       });
       return r.json();
     },
+  });
+
+  const { data: regimeGuidance } = useQuery<{
+    regime: string;
+    headline: string;
+    cashPct: number;
+    sharesPct: number;
+    optionsPct: number;
+    notes: string[];
+  }>({
+    queryKey: ["regime-guidance"],
+    queryFn: async () => {
+      const r = await fetch("/api/options/regime-guidance", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 30 * 60 * 1000,
   });
 
   const profile: RiskProfile = riskData?.profile ?? {
@@ -406,6 +424,86 @@ export default function IBKRSettings() {
               <Settings className="w-4 h-4 mr-2" />
               {updateRiskMutation.isPending ? "Saving..." : "Save Risk Profile"}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* ── Capital Allocation Guidance ────────────────────────────────────── */}
+        <Card className="bg-[#1a1f2e] border-slate-700">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-white flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-blue-400" />
+              Capital Allocation Guidance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!regimeGuidance ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => <div key={i} className="h-10 rounded-lg bg-slate-800/40 animate-pulse" />)}
+              </div>
+            ) : (
+              <>
+                {/* Regime badge + headline */}
+                <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-white">{regimeGuidance.regime} regime</span>
+                    </div>
+                    <p className="text-xs text-blue-300 mt-0.5">{regimeGuidance.headline}</p>
+                  </div>
+                </div>
+
+                {/* Allocation bars */}
+                <div className="space-y-3">
+                  {[
+                    { label: "Cash / dry powder", pct: regimeGuidance.cashPct, color: "bg-slate-400" },
+                    { label: "Shares / equities",  pct: regimeGuidance.sharesPct, color: "bg-blue-500" },
+                    { label: "Options income",      pct: regimeGuidance.optionsPct, color: "bg-emerald-500" },
+                  ].map(({ label, pct, color }) => (
+                    <div key={label}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-slate-300">{label}</span>
+                        <span className="text-xs font-bold text-white tabular-nums">{pct}%</span>
+                      </div>
+                      <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${color} transition-all duration-700`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick summary grid */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {[
+                    { label: "Cash", value: `${regimeGuidance.cashPct}%`, color: "text-slate-300" },
+                    { label: "Shares", value: `${regimeGuidance.sharesPct}%`, color: "text-blue-400" },
+                    { label: "Options", value: `${regimeGuidance.optionsPct}%`, color: "text-emerald-400" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-slate-800/50 rounded-lg p-2.5 text-center">
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                      <p className={`text-base font-bold ${color}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-1.5">
+                  {regimeGuidance.notes.map((note, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
+                      <p className="text-xs text-slate-300 leading-relaxed">{note}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[10px] text-muted-foreground text-center pt-1">
+                  Based on current market regime · Updates with each signal generation run
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -37,6 +37,7 @@ import {
   fetchOptionsChainData,
   checkEarningsProximity,
 } from "../lib/options-engine";
+import YahooFinanceClass from "yahoo-finance2";
 import { ibkrApiCall } from "./ibkr";
 import { getTodaysBriefing } from "../lib/premarket-intelligence";
 import { syncIbkrPositions } from "../lib/ibkr-sync";
@@ -305,6 +306,52 @@ router.post("/options/queue", requireAuth, async (req, res) => {
       }
     } catch {
       // Non-fatal — earnings check failure should not block queueing
+    }
+
+    // ── Hard risk gates (hard-block before insert) ─────────────────────────
+    if (accountNlv) {
+      const openPositions = await db
+        .select({ ticker: optionsTradesTable.ticker, strike: optionsTradesTable.strike, quantity: optionsTradesTable.quantity })
+        .from(optionsTradesTable)
+        .where(and(eq(optionsTradesTable.userId, user.userId), eq(optionsTradesTable.status, "open")));
+
+      const totalCurrentCollateral = openPositions.reduce(
+        (sum, t) => sum + (t.strike * 100 * (t.quantity ?? 1)), 0,
+      );
+      const projectedTotal = totalCurrentCollateral + collateral;
+      const marginCapPct = profile?.marginCapPct ?? 25;
+
+      if (projectedTotal > accountNlv * (marginCapPct / 100)) {
+        const headroom = Math.max(0, accountNlv * (marginCapPct / 100) - totalCurrentCollateral);
+        res.status(422).json({
+          blocked: true,
+          breachType: "margin_cap",
+          reason: `Adding this trade would push your total margin to ${((projectedTotal / accountNlv) * 100).toFixed(1)}%, exceeding your ${marginCapPct}% cap.`,
+          headroom: Math.round(headroom),
+          suggestion: headroom < collateral
+            ? `You only have $${Math.round(headroom).toLocaleString()} of margin headroom. A spread would only require $500 of capital instead.`
+            : undefined,
+        });
+        return;
+      }
+
+      if (projectedTotal > 5000) {
+        const tickerCollateral = openPositions
+          .filter((t) => t.ticker === s.ticker)
+          .reduce((sum, t) => sum + (t.strike * 100 * (t.quantity ?? 1)), 0);
+        const tickerProjected = tickerCollateral + collateral;
+        const tickerPct = (tickerProjected / projectedTotal) * 100;
+        if (tickerPct > 20) {
+          res.status(422).json({
+            blocked: true,
+            breachType: "ticker_concentration",
+            reason: `${s.ticker} would represent ${tickerPct.toFixed(1)}% of your total options capital. The limit is 20% per ticker to stay diversified.`,
+            headroom: 0,
+            suggestion: "Diversify across different tickers, or use a spread to reduce the capital required.",
+          });
+          return;
+        }
+      }
     }
 
     const queueItem = await db
@@ -1362,6 +1409,270 @@ router.get("/options/income/forecast", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[Options] Income forecast error:", err);
     res.status(500).json({ error: "Failed to build income forecast" });
+  }
+});
+
+// ─── Risk Dashboard ───────────────────────────────────────────────────────────
+
+const riskDashboardCache = new Map<number, { data: unknown; ts: number }>();
+const RISK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  const userId = user.userId;
+
+  const cached = riskDashboardCache.get(userId);
+  if (cached && Date.now() - cached.ts < RISK_CACHE_TTL) {
+    res.json(cached.data);
+    return;
+  }
+
+  try {
+    const ibkrConn = await db.select()
+      .from(ibkrConnectionsTable)
+      .where(eq(ibkrConnectionsTable.userId, userId))
+      .limit(1);
+    const nlv = ibkrConn[0]?.netLiquidation ?? null;
+
+    const profileRows = await db.select()
+      .from(userRiskProfilesTable)
+      .where(eq(userRiskProfilesTable.userId, userId))
+      .limit(1);
+    const marginCapPct = profileRows[0]?.marginCapPct ?? 25;
+
+    const openTrades = await db.select()
+      .from(optionsTradesTable)
+      .where(and(
+        eq(optionsTradesTable.userId, userId),
+        eq(optionsTradesTable.status, "open"),
+      ));
+
+    const tradeWithCollateral = openTrades.map((t) => ({
+      ...t,
+      collateral: t.strike * 100 * (t.quantity ?? 1),
+    }));
+    const totalCollateral = tradeWithCollateral.reduce((s, t) => s + t.collateral, 0);
+
+    const tickerMap: Record<string, number> = {};
+    for (const t of tradeWithCollateral) {
+      tickerMap[t.ticker] = (tickerMap[t.ticker] ?? 0) + t.collateral;
+    }
+    const perTickerExposure = Object.entries(tickerMap)
+      .map(([ticker, collateral]) => ({
+        ticker,
+        collateral,
+        pct: totalCollateral > 0 ? Math.round((collateral / totalCollateral) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.pct - a.pct);
+
+    const marginPct = nlv && nlv > 0 ? Math.round((totalCollateral / nlv) * 1000) / 10 : null;
+    const marginStatus =
+      marginPct == null         ? "unknown"
+      : marginPct >= marginCapPct          ? "breach"
+      : marginPct >= marginCapPct * 0.8   ? "elevated"
+      : "ok";
+
+    const monthlyRows = await db
+      .select({
+        bucket:       optionsTradesTable.monthlyBucket,
+        totalPremium: sql<number>`sum(coalesce(${optionsTradesTable.premiumCollected}, 0))`,
+      })
+      .from(optionsTradesTable)
+      .where(and(
+        eq(optionsTradesTable.userId, userId),
+        ne(optionsTradesTable.monthlyBucket, ""),
+      ))
+      .groupBy(optionsTradesTable.monthlyBucket)
+      .orderBy(desc(optionsTradesTable.monthlyBucket))
+      .limit(7);
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentMonthIncome = Number(monthlyRows.find((r) => r.bucket === currentMonth)?.totalPremium ?? 0);
+    const pastMonths = monthlyRows.filter((r) => r.bucket !== currentMonth).slice(0, 3);
+    const peakIncome = pastMonths.length > 0
+      ? Math.max(...pastMonths.map((r) => Number(r.totalPremium ?? 0)))
+      : null;
+    const drawdownPct = peakIncome && peakIncome > 0
+      ? Math.min(100, Math.round(((peakIncome - currentMonthIncome) / peakIncome) * 100))
+      : null;
+
+    let estimatedOpenPnl = 0;
+    for (const t of openTrades) {
+      const premium = t.premiumCollected ?? 0;
+      const initialDte = Math.max(1, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - new Date(t.openedAt).getTime()) / 86400000,
+      ));
+      const dteRemaining = Math.max(0, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - Date.now()) / 86400000,
+      ));
+      const remainingValue = premium * Math.sqrt(dteRemaining / initialDte);
+      estimatedOpenPnl += (premium - remainingValue) * (t.quantity ?? 1);
+    }
+
+    const result = {
+      totalCollateral:    Math.round(totalCollateral),
+      totalPositions:     openTrades.length,
+      nlv:                nlv ?? null,
+      marginPct:          marginPct,
+      marginCapPct,
+      marginStatus,
+      perTickerExposure,
+      drawdownPct,
+      currentMonthIncome: Math.round(currentMonthIncome),
+      peakMonthIncome:    peakIncome != null ? Math.round(peakIncome) : null,
+      estimatedOpenPnl:   Math.round(estimatedOpenPnl),
+      generatedAt:        new Date().toISOString(),
+    };
+
+    riskDashboardCache.set(userId, { data: result, ts: Date.now() });
+    res.json(result);
+  } catch (err) {
+    console.error("[Options] Risk dashboard error:", err);
+    res.status(500).json({ error: "Failed to compute risk dashboard" });
+  }
+});
+
+// ─── Spread Alternative ───────────────────────────────────────────────────────
+
+router.get("/options/signals/:id/spread-alternative", requireAuth, async (req, res) => {
+  const signalId = parseInt(req.params.id);
+  if (isNaN(signalId)) { res.status(400).json({ error: "Invalid signal ID" }); return; }
+
+  try {
+    const signalRows = await db.select()
+      .from(optionsSignalsTable)
+      .where(eq(optionsSignalsTable.id, signalId))
+      .limit(1);
+    if (!signalRows.length) { res.status(404).json({ error: "Signal not found" }); return; }
+
+    const s = signalRows[0];
+    const isSellPut = s.strategy !== "SELL_CALL";
+    const spreadWidth = 5;
+    const shortStrike = s.strike;
+    const longStrike = isSellPut ? shortStrike - spreadWidth : shortStrike + spreadWidth;
+
+    let longPremium: number | null = null;
+    try {
+      const yf = YahooFinanceClass as any;
+      const expiryDate = new Date(s.expiry + "T16:00:00");
+      const chain = await yf.options(s.ticker, { date: expiryDate });
+      const contracts = isSellPut
+        ? (chain?.options?.[0]?.puts ?? [])
+        : (chain?.options?.[0]?.calls ?? []);
+      const sorted = [...contracts].sort((a: any, b: any) =>
+        Math.abs((a.strike ?? 0) - longStrike) - Math.abs((b.strike ?? 0) - longStrike),
+      );
+      const best = sorted[0] as any;
+      if (best?.bid != null && best?.ask != null) {
+        longPremium = (best.bid + best.ask) / 2;
+      }
+    } catch {
+      // Fallback to estimate
+    }
+
+    const shortPremium = s.premium;
+    const estimatedLongPremium = longPremium ?? (shortPremium * 0.40);
+    const netCredit = Math.max(0.01, shortPremium - estimatedLongPremium);
+    const capital = spreadWidth * 100;
+    const maxProfit = Math.round(netCredit * 100);
+    const maxLoss = Math.round((spreadWidth - netCredit) * 100);
+    const returnOnCapital = Math.round((netCredit / spreadWidth) * 1000) / 10;
+
+    res.json({
+      signalId,
+      ticker: s.ticker,
+      strategy: isSellPut ? "BULL_PUT_SPREAD" : "BEAR_CALL_SPREAD",
+      shortStrike,
+      longStrike,
+      spreadWidth,
+      shortPremium:        Math.round(shortPremium * 100) / 100,
+      longPremium:         Math.round(estimatedLongPremium * 100) / 100,
+      netCredit:           Math.round(netCredit * 100) / 100,
+      netCreditPerContract: maxProfit,
+      maxProfit,
+      maxLoss,
+      capital,
+      returnOnCapital,
+      expiry:  s.expiry,
+      dte:     s.dte,
+      liveData: longPremium != null,
+      description: isSellPut
+        ? `Sell $${shortStrike} put, buy $${longStrike} put. Collect $${netCredit.toFixed(2)}/sh net. Max profit $${maxProfit} if stock stays above $${shortStrike}. Max loss capped at $${maxLoss} — vs $${Math.round(shortStrike * 100)} for a naked put.`
+        : `Sell $${shortStrike} call, buy $${longStrike} call. Collect $${netCredit.toFixed(2)}/sh net. Max profit $${maxProfit} if stock stays below $${shortStrike}. Max loss capped at $${maxLoss}.`,
+    });
+  } catch (err) {
+    console.error("[Options] Spread alternative error:", err);
+    res.status(500).json({ error: "Failed to compute spread alternative" });
+  }
+});
+
+// ─── Regime-based Capital Allocation Guidance ─────────────────────────────────
+
+router.get("/options/regime-guidance", requireAuth, async (req, res) => {
+  try {
+    const recentSignals = await db.select({ regime: optionsSignalsTable.regime })
+      .from(optionsSignalsTable)
+      .where(eq(optionsSignalsTable.status, "active"))
+      .orderBy(desc(optionsSignalsTable.generatedAt))
+      .limit(5);
+
+    const regime = recentSignals[0]?.regime ?? "UNKNOWN";
+
+    const guidance: Record<string, {
+      headline: string; cashPct: number; sharesPct: number; optionsPct: number; notes: string[];
+    }> = {
+      BULL: {
+        headline: "Rising market — good time for puts + covered calls",
+        cashPct: 20, sharesPct: 40, optionsPct: 40,
+        notes: [
+          "Strong environment for selling cash-secured puts on Fortress stocks.",
+          "Sell covered calls on shares you own to boost income.",
+          "Keep 20% in cash as a buffer if puts are assigned.",
+        ],
+      },
+      BEAR: {
+        headline: "Falling market — preserve capital, reduce puts",
+        cashPct: 50, sharesPct: 20, optionsPct: 30,
+        notes: [
+          "Reduce put selling — stocks can fall sharply and you may be assigned at a loss.",
+          "If you own shares, selling covered calls is the safer income strategy.",
+          "Hold at least 50% cash to take advantage of lower prices later.",
+        ],
+      },
+      SIDEWAYS: {
+        headline: "Sideways market — ideal wheel conditions",
+        cashPct: 25, sharesPct: 25, optionsPct: 50,
+        notes: [
+          "Best environment for the wheel — theta decay is your friend.",
+          "Sell puts just below support, calls just above resistance.",
+          "Aim for 50% options deployment across 4–6 positions.",
+        ],
+      },
+      RECOVERY: {
+        headline: "Recovering market — cautious puts on Fortress names",
+        cashPct: 40, sharesPct: 25, optionsPct: 35,
+        notes: [
+          "Market is bouncing back but not fully confirmed — stay cautious.",
+          "Focus on Fortress-tier stocks with strong balance sheets.",
+          "Keep position sizes small — 5–7% capital per trade.",
+        ],
+      },
+      UNKNOWN: {
+        headline: "Market direction unclear — stay conservative",
+        cashPct: 40, sharesPct: 30, optionsPct: 30,
+        notes: [
+          "When direction is uncertain, reduce position sizes.",
+          "Stick to the highest-quality Fortress stocks only.",
+          "Wait for a clearer regime signal before increasing exposure.",
+        ],
+      },
+    };
+
+    const guide = guidance[regime.toUpperCase()] ?? guidance.UNKNOWN;
+    res.json({ regime, ...guide });
+  } catch (err) {
+    console.error("[Options] Regime guidance error:", err);
+    res.status(500).json({ error: "Failed to fetch regime guidance" });
   }
 });
 
