@@ -328,6 +328,27 @@ router.post("/options/queue/:id/approve", requireAuth, async (req, res) => {
       return;
     }
 
+    // ── Earnings hard block at approval time ──────────────────────────────────
+    // If riskChecksPassed=false AND the risk note is an earnings-within-7-days flag,
+    // we refuse to place the order unless the caller explicitly passes override=true.
+    // This prevents the approval path from silently executing earnings-risk trades.
+    if (!t.riskChecksPassed) {
+      const isEarningsBlock = t.riskCheckNotes?.startsWith("EARNINGS RISK:");
+      const override = req.body?.override === true;
+
+      if (isEarningsBlock && !override) {
+        res.status(409).json({
+          error:           "earnings_risk_block",
+          message:         `This trade cannot be approved automatically: ${t.ticker} has earnings within 7 days. ` +
+                           "Trading through earnings dramatically increases risk due to IV crush or large price gaps. " +
+                           "If you understand and accept this risk, resend your approval with { override: true }.",
+          riskCheckNotes:  t.riskCheckNotes,
+          canOverride:     true,
+        });
+        return;
+      }
+    }
+
     // Check IBKR connection
     const conn = await db
       .select()
@@ -1096,9 +1117,10 @@ router.get("/options/chain/:ticker/expiries", requireAuth, async (req, res) => {
 router.get("/options/chain/:ticker", requireAuth, async (req, res) => {
   const { ticker } = req.params;
   const expiry = (req.query.expiry as string) || undefined;
+  const user = (req as any).user as AuthPayload;
 
   try {
-    const chain = await fetchOptionsChainData(ticker.toUpperCase(), expiry);
+    const chain = await fetchOptionsChainData(ticker.toUpperCase(), expiry, user.userId);
     if (!chain) {
       res.status(404).json({ error: "No options chain data available for this ticker. It may not have listed options or there was a data issue." });
       return;

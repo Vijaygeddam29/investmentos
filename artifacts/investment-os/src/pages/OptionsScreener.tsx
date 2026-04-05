@@ -90,6 +90,7 @@ interface OptionsChainResult {
   iv: number | null;
   earnings: EarningsInfo;
   cachedAt: string;
+  dataSource: "ibkr_live" | "yahoo_finance";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -298,12 +299,19 @@ interface ContractDetailPanel {
   onClose: () => void;
 }
 
+type MetricRow = {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  style?: string;
+};
+
 function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte, onAddToQueue, onClose }: ContractDetailPanel) {
   const isOtm = side === "put" ? contract.strike < currentPrice : contract.strike > currentPrice;
   const pctFromMoney = Math.abs((contract.strike - currentPrice) / currentPrice * 100);
   const thetaPerContract = contract.theta != null ? (contract.theta * 100).toFixed(2) : null;
 
-  const metrics = [
+  const metrics: MetricRow[] = [
     { label: "Bid",             value: contract.bid != null ? `$${contract.bid.toFixed(2)}` : "–" },
     { label: "Ask",             value: contract.ask != null ? `$${contract.ask.toFixed(2)}` : "–" },
     { label: "Mid (premium)",   value: contract.mid != null ? `$${contract.mid.toFixed(2)}/sh` : "–", highlight: true },
@@ -314,7 +322,6 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
     {
       label: "Theta (daily decay)",
       value: thetaPerContract != null ? `$${thetaPerContract}/contract` : "–",
-      tip: "How much premium erodes per day — positive for the seller",
       style: "text-amber-400",
     },
     {
@@ -342,7 +349,7 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
         {metrics.map((m) => (
           <div key={m.label} className="bg-slate-800/50 rounded-lg p-2 space-y-0.5">
             <p className="text-[10px] text-muted-foreground">{m.label}</p>
-            <p className={`text-xs font-semibold ${(m as any).highlight ? "text-emerald-400" : (m as any).style ?? "text-white"}`}>
+            <p className={`text-xs font-semibold ${m.highlight ? "text-emerald-400" : m.style ?? "text-white"}`}>
               {m.value}
             </p>
           </div>
@@ -791,7 +798,12 @@ function ChainView() {
               </table>
 
               <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                Click any cell to see full metrics and add to your review queue · ITM = in the money (shaded) · Data cached 15 min from Yahoo Finance
+                Click any cell to see full metrics and add to your review queue · ITM = in the money (shaded) ·{" "}
+                {chain?.dataSource === "ibkr_live" ? (
+                  <span className="text-emerald-400 font-medium">Live data via IBKR</span>
+                ) : (
+                  <span>Data cached 15 min from Yahoo Finance</span>
+                )}
               </p>
             </div>
           )}

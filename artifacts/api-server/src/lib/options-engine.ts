@@ -20,6 +20,7 @@ import {
   optionsSignalsTable,
   userRiskProfilesTable,
   financialMetricsTable,
+  ibkrConnectionsTable,
   type UserRiskProfile,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -785,6 +786,7 @@ export interface OptionsChainResult {
   iv:               number | null;
   earnings:         EarningsInfo;
   cachedAt:         string;
+  dataSource:       "ibkr_live" | "yahoo_finance";
 }
 
 function enrichContract(
@@ -842,11 +844,141 @@ function enrichContract(
 // Simple 15-minute in-memory cache
 const chainCache = new Map<string, { data: OptionsChainResult; expiresAt: number }>();
 
+// ── IBKR live chain override ────────────────────────────────────────────────
+// When a user has a live IBKR connection, try to fetch real-time chain data
+// from IBKR's Client Portal API first. Falls back to Yahoo Finance on any error.
+async function tryIbkrChainData(
+  userId: number,
+  ticker: string,
+  expiryDate: Date,
+  currentPrice: number,
+  dte: number,
+): Promise<{ calls: ChainContract[]; puts: ChainContract[] } | null> {
+  try {
+    const conn = await db
+      .select()
+      .from(ibkrConnectionsTable)
+      .where(eq(ibkrConnectionsTable.userId, userId))
+      .limit(1);
+
+    if (!conn.length || !conn[0].accessToken) return null;
+
+    const { accessToken } = conn[0];
+    const IBKR_BASE = "https://api.ibkr.com/v1/api";
+
+    // Step 1: resolve the underlying stock contract ID
+    const searchResp = await fetch(
+      `${IBKR_BASE}/iserver/secdef/search?symbol=${encodeURIComponent(ticker)}&secType=OPT`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!searchResp.ok) return null;
+
+    const searchData = await searchResp.json() as any;
+    // IBKR returns { contracts: [{ conid, companyName, ... }] }
+    const conid: number | undefined = searchData?.[0]?.conid ?? searchData?.contracts?.[0]?.conid;
+    if (!conid) return null;
+
+    // Step 2: fetch option strikes for the expiry
+    const expiryStr = expiryDate.toISOString().split("T")[0].replace(/-/g, "");
+    const strikesResp = await fetch(
+      `${IBKR_BASE}/iserver/secdef/strikes?conid=${conid}&sectype=OPT&expiry=${expiryStr}`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!strikesResp.ok) return null;
+
+    const strikesData = await strikesResp.json() as { call?: number[]; put?: number[] };
+    const callStrikes = strikesData?.call ?? [];
+    const putStrikes  = strikesData?.put  ?? [];
+
+    // Step 3: request market data snapshot for each conid
+    // IBKR has a limit so we keep fetching in batches. For each strike+side we need the conid.
+    // Use /iserver/secdef to resolve option conids by strike+right+expiry
+    const resolveConids = async (strikes: number[], right: "C" | "P"): Promise<ChainContract[]> => {
+      const resolved: ChainContract[] = [];
+      const BATCH = 20;
+      for (let i = 0; i < strikes.length; i += BATCH) {
+        const batch = strikes.slice(i, i + BATCH);
+        const params = batch.map((s) =>
+          `conid=${conid}&sectype=OPT&expiry=${expiryStr}&strike=${s}&right=${right}`
+        ).join("&");
+        const defResp = await fetch(`${IBKR_BASE}/trsrv/secdef?${params}`,
+          { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, signal: AbortSignal.timeout(10000) },
+        );
+        if (!defResp.ok) continue;
+        const defData = await defResp.json() as any;
+        const contracts: any[] = defData?.secdef ?? defData ?? [];
+
+        // Get market data for these contracts
+        const optConids = contracts.map((c: any) => c.conid).filter(Boolean).join(",");
+        if (!optConids) continue;
+
+        const mdResp = await fetch(
+          `${IBKR_BASE}/iserver/marketdata/snapshot?conids=${optConids}&fields=84,86,88,85,7087,7088,8022,8023`,
+          { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
+        );
+        if (!mdResp.ok) continue;
+        const mdData = await mdResp.json() as any[];
+
+        for (const md of (mdData ?? [])) {
+          const matchedContract = contracts.find((c: any) => c.conid === md.conid);
+          const strike = matchedContract?.strike ?? 0;
+          const bid = md["84"] != null ? parseFloat(md["84"]) : null;
+          const ask = md["86"] != null ? parseFloat(md["86"]) : null;
+          const last = md["31"] != null ? parseFloat(md["31"]) : null;
+          const mid = bid != null && ask != null ? (bid + ask) / 2 : last;
+          const ivRaw = md["7087"] != null ? parseFloat(md["7087"]) : null;
+          const ivPct = ivRaw != null ? Math.round(ivRaw * 100) : null;
+          const delta = md["7088"] != null ? parseFloat(md["7088"]) : null;
+          const oi = md["8022"] != null ? parseInt(md["8022"]) : null;
+          const vol = md["8023"] != null ? parseInt(md["8023"]) : null;
+          const itm = right === "C" ? (currentPrice > strike) : (currentPrice < strike);
+
+          let annualizedROC: number | null = null;
+          if (mid != null && mid > 0 && dte > 0 && strike > 0) {
+            const yieldPct = right === "P" ? (mid / strike) * 100 : (mid / currentPrice) * 100;
+            annualizedROC = Math.round((yieldPct * (365 / dte)) * 100) / 100;
+          }
+
+          const probabilityProfit = delta != null ? Math.round((1 - Math.abs(delta)) * 100) : null;
+          const premiumQuality = ivPct == null ? null : ivPct >= 40 ? "high" : ivPct >= 25 ? "moderate" : "low";
+
+          resolved.push({
+            strike, bid, ask, last, mid, iv: ivPct, delta,
+            theta: null, // IBKR snapshot field not always available; null is honest
+            openInterest: oi, volume: vol,
+            inTheMoney: itm, annualizedROC, probabilityProfit,
+            capitalRequired: right === "P" ? strike * 100 : currentPrice * 100,
+            premiumQuality,
+          });
+        }
+      }
+      return resolved;
+    };
+
+    const [calls, puts] = await Promise.all([
+      resolveConids(callStrikes, "C"),
+      resolveConids(putStrikes, "P"),
+    ]);
+
+    if (calls.length === 0 && puts.length === 0) return null;
+
+    calls.sort((a, b) => b.strike - a.strike);
+    puts.sort((a, b) => b.strike - a.strike);
+
+    console.log(`[OptionsEngine] ${ticker} chain loaded from IBKR live: ${calls.length} calls, ${puts.length} puts`);
+    return { calls, puts };
+  } catch (err) {
+    console.warn(`[OptionsEngine] IBKR chain fetch failed for ${ticker}, falling back to Yahoo: ${(err as Error).message}`);
+    return null;
+  }
+}
+
 export async function fetchOptionsChainData(
   ticker: string,
   expiry?: string,
+  userId?: number,
 ): Promise<OptionsChainResult | null> {
-  const cacheKey = `${ticker}::${expiry ?? "nearest"}`;
+  const cacheKey = `${ticker}::${expiry ?? "nearest"}::${userId ?? "anon"}`;
   const cached = chainCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
@@ -911,8 +1043,25 @@ export async function fetchOptionsChainData(
     // Earnings check
     const earnings = await checkEarningsProximity(ticker);
 
-    const calls = rawCalls.map((r) => enrichContract(r, currentPrice!, dte, "call"));
-    const puts  = rawPuts.map((r)  => enrichContract(r, currentPrice!, dte, "put"));
+    // ── Try IBKR live data first if user is connected ──────────────────────────
+    let calls: ChainContract[];
+    let puts: ChainContract[];
+    let dataSource: "ibkr_live" | "yahoo_finance" = "yahoo_finance";
+
+    if (userId != null) {
+      const ibkrChain = await tryIbkrChainData(userId, ticker, expiryDate as Date, currentPrice!, dte);
+      if (ibkrChain) {
+        calls = ibkrChain.calls;
+        puts  = ibkrChain.puts;
+        dataSource = "ibkr_live";
+      } else {
+        calls = rawCalls.map((r) => enrichContract(r, currentPrice!, dte, "call"));
+        puts  = rawPuts.map((r)  => enrichContract(r, currentPrice!, dte, "put"));
+      }
+    } else {
+      calls = rawCalls.map((r) => enrichContract(r, currentPrice!, dte, "call"));
+      puts  = rawPuts.map((r)  => enrichContract(r, currentPrice!, dte, "put"));
+    }
 
     // Return full chain — no strike range truncation.
     // Sort calls descending by strike, puts descending so the grid renders ATM near the middle.
@@ -932,6 +1081,7 @@ export async function fetchOptionsChainData(
       iv:         currentIv,
       earnings,
       cachedAt:   new Date().toISOString(),
+      dataSource,
     };
 
     chainCache.set(cacheKey, { data: result, expiresAt: Date.now() + 15 * 60 * 1000 });
