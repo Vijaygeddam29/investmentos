@@ -358,7 +358,7 @@ router.post("/options/queue/:id/approve", requireAuth, async (req, res) => {
     // we refuse to place the order unless the caller explicitly passes override=true.
     // This prevents the approval path from silently executing earnings-risk trades.
     if (!t.riskChecksPassed) {
-      const isEarningsBlock = t.riskCheckNotes?.startsWith("EARNINGS RISK:");
+      const isEarningsBlock = t.riskCheckNotes?.includes("EARNINGS RISK:");
       const override = req.body?.override === true;
 
       if (isEarningsBlock && !override) {
