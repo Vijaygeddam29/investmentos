@@ -124,6 +124,7 @@ export const optionsTradesTable = pgTable("options_trades", {
   strategy:         text("strategy"),
   regime:           text("regime"),
   status:           text("status").default("open").notNull(),
+  source:           text("source").default("system").notNull(),   // "system" | "manual" | "ibkr"
   createdAt:        timestamp("created_at").defaultNow().notNull(),
 });
 export type OptionsTrade = typeof optionsTradesTable.$inferSelect;

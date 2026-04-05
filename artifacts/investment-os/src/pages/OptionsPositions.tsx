@@ -8,10 +8,12 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TradeStoryPanel } from "@/components/options/TradeStoryPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   RefreshCw, TrendingDown, TrendingUp, AlertTriangle, CheckCircle,
   ChevronDown, ChevronUp, RotateCcw, X, Info, BarChart2, Shield,
-  DollarSign, BookOpen, Activity,
+  DollarSign, BookOpen, Activity, PlusCircle, Pencil,
 } from "lucide-react";
 
 // ─── Risk Dashboard Panel ─────────────────────────────────────────────────────
@@ -234,6 +236,8 @@ interface Trade {
   ibkrOrderId: string | null;
   realisedPnl?: number | null;
   notes?: string | null;
+  source?: string | null;   // "system" | "manual" | "ibkr"
+  strategy?: string | null;
 }
 
 interface CoveredCallSuggestion {
@@ -271,6 +275,18 @@ export default function OptionsPositions() {
   const [rollModal, setRollModal] = useState<{ trade: Trade; data: Record<string, unknown> } | null>(null);
   const [closeModal, setCloseModal] = useState<{ trade: Trade; buyBackPrice: string } | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [showAddPosition, setShowAddPosition] = useState(false);
+  const [addForm, setAddForm] = useState({
+    ticker: "",
+    strategy: "SELL_PUT",
+    strike: "",
+    expiry: "",
+    premiumPerShare: "",
+    quantity: "1",
+    openedAt: new Date().toISOString().slice(0, 10),
+    notes: "",
+  });
+  const [addError, setAddError] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["options-trades"],
@@ -360,6 +376,28 @@ export default function OptionsPositions() {
     },
   });
 
+  const addPositionMutation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const r = await fetch("/api/options/trades/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Failed to record position");
+      return d;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["options-trades"] });
+      qc.invalidateQueries({ queryKey: ["options-risk-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["options-performance"] });
+      setShowAddPosition(false);
+      setAddForm({ ticker: "", strategy: "SELL_PUT", strike: "", expiry: "", premiumPerShare: "", quantity: "1", openedAt: new Date().toISOString().slice(0, 10), notes: "" });
+      setAddError(null);
+    },
+    onError: (err: Error) => setAddError(err.message),
+  });
+
   const trades: Trade[] = (data?.trades ?? []).filter((t: Trade) => t.status === "open");
   const closedTrades: Trade[] = (data?.trades ?? []).filter((t: Trade) => t.status !== "open");
   const perf = perfData?.summary;
@@ -389,6 +427,13 @@ export default function OptionsPositions() {
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => setShowStats((s) => !s)}>
               <BarChart2 className="w-4 h-4 mr-2" /> {showStats ? "Hide" : "Show"} track record
+            </Button>
+            <Button
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white border-0"
+              onClick={() => { setShowAddPosition(true); setAddError(null); }}
+            >
+              <PlusCircle className="w-4 h-4 mr-2" /> Add Position
             </Button>
             <Button
               variant="outline" size="sm"
@@ -582,7 +627,18 @@ export default function OptionsPositions() {
           <div className="text-center py-16">
             <TrendingDown className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
             <p className="text-lg text-muted-foreground">No open positions</p>
-            <p className="text-sm text-muted-foreground mt-1">Approve a signal on the Signals page to open your first position</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-5">
+              Record positions from any broker, or approve a signal to open one through the platform
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white border-0"
+                onClick={() => { setShowAddPosition(true); setAddError(null); }}
+              >
+                <PlusCircle className="w-4 h-4 mr-2" /> Add Position Manually
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -691,9 +747,19 @@ export default function OptionsPositions() {
                         )}
 
                         {/* Opened info */}
-                        <div className="text-xs text-muted-foreground">
-                          Opened: {new Date(t.openedAt).toLocaleDateString("en-GB")}
-                          {t.ibkrOrderId && <span className="ml-4 font-mono">IBKR: {t.ibkrOrderId}</span>}
+                        <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                          <span>Opened: {new Date(t.openedAt).toLocaleDateString("en-GB")}</span>
+                          {t.source === "manual" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-[10px] font-medium">
+                              <Pencil className="w-2.5 h-2.5" /> Manual entry
+                            </span>
+                          )}
+                          {t.source === "ibkr" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-medium">
+                              IBKR sync
+                            </span>
+                          )}
+                          {t.ibkrOrderId && <span className="font-mono">Order: {t.ibkrOrderId}</span>}
                         </div>
 
                         {/* Action buttons */}
@@ -942,6 +1008,236 @@ export default function OptionsPositions() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ── Add Position Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={showAddPosition} onOpenChange={(o) => { setShowAddPosition(o); if (!o) setAddError(null); }}>
+        <DialogContent className="bg-slate-900 border-slate-700 max-w-lg w-full">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <PlusCircle className="w-5 h-5 text-indigo-400" />
+              Record Open Position
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Add a position opened on IBKR, Tastytrade, or any broker. It will appear in your positions monitor and income tracker immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            // Live-computed summary from form inputs
+            const premium = parseFloat(addForm.premiumPerShare) || 0;
+            const strike  = parseFloat(addForm.strike) || 0;
+            const qty     = parseInt(addForm.quantity, 10) || 1;
+            const totalPremium = premium * qty * 100;
+            const capitalAtRisk = addForm.strategy === "SELL_CALL" || addForm.strategy === "COVERED_CALL"
+              ? null
+              : strike * qty * 100;
+            const dteVal = addForm.expiry
+              ? Math.max(0, Math.round((new Date(addForm.expiry + "T00:00:00Z").getTime() - Date.now()) / 86400000))
+              : null;
+            const isCallStrategy = addForm.strategy === "SELL_CALL" || addForm.strategy === "COVERED_CALL";
+
+            return (
+              <div className="space-y-4 py-1">
+                {/* Row 1: Ticker + Strategy */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">Ticker *</Label>
+                    <Input
+                      placeholder="e.g. AAPL"
+                      value={addForm.ticker}
+                      onChange={(e) => setAddForm((f) => ({ ...f, ticker: e.target.value.toUpperCase() }))}
+                      className="bg-slate-800 border-slate-600 text-white uppercase placeholder:normal-case placeholder:text-slate-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">Strategy *</Label>
+                    <Select
+                      value={addForm.strategy}
+                      onValueChange={(v) => setAddForm((f) => ({ ...f, strategy: v }))}
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="SELL_PUT">Sell Put (cash-secured)</SelectItem>
+                        <SelectItem value="WHEEL">Wheel (sell put cycle)</SelectItem>
+                        <SelectItem value="SELL_CALL">Sell Call (naked)</SelectItem>
+                        <SelectItem value="COVERED_CALL">Covered Call</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Row 2: Strike + Expiry */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">
+                      Strike Price * <span className="text-slate-500">(e.g. 175.00)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="175.00"
+                      value={addForm.strike}
+                      onChange={(e) => setAddForm((f) => ({ ...f, strike: e.target.value }))}
+                      className="bg-slate-800 border-slate-600 text-white"
+                      step="0.50"
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">Expiry Date *</Label>
+                    <Input
+                      type="date"
+                      value={addForm.expiry}
+                      onChange={(e) => setAddForm((f) => ({ ...f, expiry: e.target.value }))}
+                      className="bg-slate-800 border-slate-600 text-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 3: Premium + Quantity */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">
+                      Premium per share * <span className="text-slate-500">(e.g. 2.50)</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                      <Input
+                        type="number"
+                        placeholder="2.50"
+                        value={addForm.premiumPerShare}
+                        onChange={(e) => setAddForm((f) => ({ ...f, premiumPerShare: e.target.value }))}
+                        className="bg-slate-800 border-slate-600 text-white pl-7"
+                        step="0.01"
+                        min="0.01"
+                      />
+                    </div>
+                    {premium > 0 && qty > 0 && (
+                      <p className="text-[11px] text-emerald-400">
+                        = ${totalPremium.toFixed(2)} total ({qty} contract{qty > 1 ? "s" : ""} × 100 shares)
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-300 text-xs">Contracts (qty)</Label>
+                    <Input
+                      type="number"
+                      placeholder="1"
+                      value={addForm.quantity}
+                      onChange={(e) => setAddForm((f) => ({ ...f, quantity: e.target.value }))}
+                      className="bg-slate-800 border-slate-600 text-white"
+                      min="1"
+                      max="100"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 4: Open date */}
+                <div className="space-y-1.5">
+                  <Label className="text-slate-300 text-xs">Date Opened</Label>
+                  <Input
+                    type="date"
+                    value={addForm.openedAt}
+                    onChange={(e) => setAddForm((f) => ({ ...f, openedAt: e.target.value }))}
+                    className="bg-slate-800 border-slate-600 text-white"
+                  />
+                </div>
+
+                {/* Row 5: Notes */}
+                <div className="space-y-1.5">
+                  <Label className="text-slate-300 text-xs">Notes <span className="text-slate-500">(optional)</span></Label>
+                  <Textarea
+                    placeholder="e.g. Opened during earnings IV spike. IV rank was 72."
+                    value={addForm.notes}
+                    onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))}
+                    className="bg-slate-800 border-slate-600 text-white resize-none text-sm"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Live trade summary */}
+                {totalPremium > 0 && strike > 0 && addForm.expiry && (
+                  <div className="p-3 bg-indigo-500/10 border border-indigo-500/25 rounded-lg space-y-1.5">
+                    <p className="text-xs font-semibold text-indigo-300 mb-2">Position summary</p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-[11px] text-slate-400">Premium collected</p>
+                        <p className="text-sm font-bold text-emerald-400">${totalPremium.toFixed(2)}</p>
+                      </div>
+                      {capitalAtRisk !== null && (
+                        <div>
+                          <p className="text-[11px] text-slate-400">Collateral required</p>
+                          <p className="text-sm font-bold text-white">${capitalAtRisk.toLocaleString()}</p>
+                        </div>
+                      )}
+                      {capitalAtRisk !== null && totalPremium > 0 && (
+                        <div>
+                          <p className="text-[11px] text-slate-400">ROC</p>
+                          <p className="text-sm font-bold text-blue-400">
+                            {((totalPremium / capitalAtRisk) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      )}
+                      {isCallStrategy && (
+                        <div>
+                          <p className="text-[11px] text-slate-400">Obligation type</p>
+                          <p className="text-sm font-bold text-amber-400">
+                            {addForm.strategy === "COVERED_CALL" ? "Covered" : "Naked call"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {dteVal !== null && (
+                      <p className="text-[11px] text-slate-400 text-center pt-1">
+                        {dteVal === 0
+                          ? "⚠️ Expires today"
+                          : dteVal < 0
+                          ? "⚠️ Already expired — check your date"
+                          : `${dteVal} days until expiry`}
+                      </p>
+                    )}
+                    {dteVal !== null && dteVal < 0 && (
+                      <p className="text-[11px] text-red-400 text-center">Expiry date is in the past — please verify</p>
+                    )}
+                  </div>
+                )}
+
+                {addError && (
+                  <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/25 rounded-lg px-3 py-2">
+                    {addError}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" className="text-slate-400" onClick={() => setShowAddPosition(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+              disabled={addPositionMutation.isPending || !addForm.ticker || !addForm.strike || !addForm.expiry || !addForm.premiumPerShare}
+              onClick={() => {
+                setAddError(null);
+                addPositionMutation.mutate({
+                  ticker:           addForm.ticker,
+                  strategy:         addForm.strategy,
+                  strike:           parseFloat(addForm.strike),
+                  expiry:           addForm.expiry,
+                  premiumCollected: parseFloat(addForm.premiumPerShare),
+                  quantity:         parseInt(addForm.quantity, 10) || 1,
+                  openedAt:         addForm.openedAt || undefined,
+                  notes:            addForm.notes || undefined,
+                });
+              }}
+            >
+              {addPositionMutation.isPending ? "Recording…" : "Record Position"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

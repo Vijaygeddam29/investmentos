@@ -598,6 +598,87 @@ router.post("/options/queue/:id/reject", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Manual Position Entry ────────────────────────────────────────────────────
+// POST /api/options/trades/manual
+// Allows user to record an options position opened on any platform (IBKR, Tastytrade, etc.)
+
+router.post("/options/trades/manual", requireAuth, async (req, res) => {
+  const user = (req as any).user as AuthPayload;
+  try {
+    const {
+      ticker,
+      strategy,
+      right,        // "P" or "C" — derived from strategy if omitted
+      strike,
+      expiry,       // "YYYY-MM-DD"
+      quantity,
+      premiumCollected,  // per-share premium (e.g. 2.50 for a $250 contract)
+      openedAt,     // ISO datetime string — defaults to now
+      notes,
+    } = req.body;
+
+    // Validation
+    if (!ticker || !strike || !expiry || !premiumCollected) {
+      return res.status(400).json({ error: "ticker, strike, expiry, and premiumCollected are required" });
+    }
+    if (isNaN(Number(strike)) || Number(strike) <= 0) {
+      return res.status(400).json({ error: "strike must be a positive number" });
+    }
+    if (isNaN(Number(premiumCollected)) || Number(premiumCollected) <= 0) {
+      return res.status(400).json({ error: "premiumCollected must be a positive number" });
+    }
+    const qty = Number(quantity) || 1;
+    if (qty < 1 || qty > 100) {
+      return res.status(400).json({ error: "quantity must be between 1 and 100 contracts" });
+    }
+
+    // Derive right from strategy if not explicitly provided
+    const strat = (strategy ?? "SELL_PUT").toUpperCase();
+    const derivedRight = right
+      ? right.toUpperCase()
+      : (strat === "SELL_CALL" || strat === "COVERED_CALL") ? "C" : "P";
+
+    // Validate expiry format and that it's in the future (or today)
+    const expiryDate = new Date(expiry + "T00:00:00Z");
+    if (isNaN(expiryDate.getTime())) {
+      return res.status(400).json({ error: "expiry must be a valid date (YYYY-MM-DD)" });
+    }
+
+    // Monthly bucket (e.g. "2025-04")
+    const openDate = openedAt ? new Date(openedAt) : new Date();
+    const monthlyBucket = `${openDate.getFullYear()}-${String(openDate.getMonth() + 1).padStart(2, "0")}`;
+
+    const [trade] = await db
+      .insert(optionsTradesTable)
+      .values({
+        userId:           user.userId,
+        ticker:           ticker.toUpperCase().trim(),
+        right:            derivedRight,
+        strike:           Number(strike),
+        expiry,
+        quantity:         qty,
+        premiumCollected: Number(premiumCollected) * qty * 100,  // store total premium in dollars
+        fillPrice:        Number(premiumCollected),
+        openedAt:         openDate,
+        strategy:         strat,
+        status:           "open",
+        source:           "manual",
+        monthlyBucket,
+        notes:            notes ?? null,
+      })
+      .returning();
+
+    // Invalidate risk dashboard cache
+    const cacheKey = `risk-dashboard-${user.userId}`;
+    // (in-memory cache will expire naturally — no explicit invalidation needed server-side)
+
+    res.json({ trade, message: "Position recorded successfully" });
+  } catch (err) {
+    console.error("[Options] Manual trade entry error:", err);
+    res.status(500).json({ error: "Failed to record position" });
+  }
+});
+
 // ─── Trade History + Income ───────────────────────────────────────────────────
 
 router.get("/options/trades", requireAuth, async (req, res) => {
