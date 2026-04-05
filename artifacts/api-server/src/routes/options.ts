@@ -1490,9 +1490,12 @@ router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
       .where(eq(userRiskProfilesTable.userId, userId))
       .limit(1);
     const marginCapPct = profileRows[0]?.marginCapPct ?? 25;
+    const maxCapitalPerTradePct = profileRows[0]?.maxCapitalPerTradePct ?? 10;
     // IBKR NLV preferred; fall back to user-configured account size for risk metrics when IBKR is not live
     const ibkrNlv = ibkrConn[0]?.netLiquidation ?? null;
     const nlv: number | null = ibkrNlv ?? profileRows[0]?.accountSizeUsd ?? null;
+    // Per-trade capital cap: the threshold above which the system suggests a spread
+    const perTradeCap: number | null = nlv != null ? Math.round(nlv * maxCapitalPerTradePct / 100) : null;
     const nlvSource: "ibkr" | "configured" | null = ibkrNlv != null ? "ibkr" : profileRows[0]?.accountSizeUsd != null ? "configured" : null;
 
     const openTrades = await db.select()
@@ -1512,11 +1515,14 @@ router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
     for (const t of tradeWithCollateral) {
       tickerMap[t.ticker] = (tickerMap[t.ticker] ?? 0) + t.collateral;
     }
+    // Per-ticker exposure expressed as % of account (nlv/accountSize), not % of deployed collateral.
+    // This aligns the dashboard display with the queue-gate which also checks vs accountNlv.
+    const exposureDenominator = nlv && nlv > 0 ? nlv : (totalCollateral || 1);
     const perTickerExposure = Object.entries(tickerMap)
       .map(([ticker, collateral]) => ({
         ticker,
         collateral,
-        pct: totalCollateral > 0 ? Math.round((collateral / totalCollateral) * 1000) / 10 : 0,
+        pct: Math.round((collateral / exposureDenominator) * 1000) / 10,
       }))
       .sort((a, b) => b.pct - a.pct);
 
@@ -1571,6 +1577,8 @@ router.get("/options/risk-dashboard", requireAuth, async (req, res) => {
       nlvSource,
       marginPct:          marginPct,
       marginCapPct,
+      maxCapitalPerTradePct,
+      perTradeCap,
       marginStatus,
       perTickerExposure,
       drawdownPct,

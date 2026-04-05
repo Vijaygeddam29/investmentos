@@ -983,6 +983,18 @@ export default function OptionsScreener() {
     enabled: activeView === "screener",
   });
 
+  const { data: riskDashboard } = useQuery<{ perTradeCap: number | null }>({
+    queryKey: ["options-risk-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/options/risk-dashboard", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const spreadThreshold = riskDashboard?.perTradeCap ?? 2000;
+
   const signals    = data?.signals ?? [];
   const allSectors = data?.sectors ?? [];
 
@@ -1423,7 +1435,7 @@ export default function OptionsScreener() {
                           >
                             <GitCompare className="w-3.5 h-3.5" />
                           </Button>
-                          {(signal.strategy === "SELL_PUT" || signal.strategy === "WHEEL") && signal.capitalRequired > 2000 && (
+                          {(signal.strategy === "SELL_PUT" || signal.strategy === "WHEEL") && signal.capitalRequired > spreadThreshold && (
                             <Button
                               variant="ghost" size="sm"
                               className="h-7 px-2 text-[11px] text-slate-400 hover:text-violet-300 border border-slate-700/50 hover:border-violet-500/40"

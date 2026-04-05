@@ -389,6 +389,18 @@ export default function OptionsSignals() {
     },
   });
 
+  const { data: riskDashboard } = useQuery<{ perTradeCap: number | null }>({
+    queryKey: ["options-risk-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/options/risk-dashboard", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const spreadThreshold = riskDashboard?.perTradeCap ?? 2000;
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       const r = await fetch(`/api/options/signals/generate`, {
@@ -754,7 +766,7 @@ export default function OptionsSignals() {
                       >
                         <GitCompare className="w-4 h-4 mr-1.5" /> Compare
                       </Button>
-                      {(s.strategy === "SELL_PUT" || s.strategy === "WHEEL") && s.capitalRequired > 2000 && (
+                      {(s.strategy === "SELL_PUT" || s.strategy === "WHEEL") && s.capitalRequired > spreadThreshold && (
                         <Button
                           size="sm"
                           variant="ghost"
