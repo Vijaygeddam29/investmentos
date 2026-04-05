@@ -22,7 +22,7 @@ import {
   financialMetricsTable,
   type UserRiskProfile,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { detectMarketRegime, type MarketRegime } from "./market-regime";
 
@@ -602,4 +602,381 @@ export async function generateSignals(
   }
 
   console.log("[OptionsEngine] Signal generation complete");
+}
+
+// ─── IV Rank (52-week) ────────────────────────────────────────────────────────
+
+async function computeIv52wBounds(ticker: string): Promise<{ high: number | null; low: number | null }> {
+  try {
+    const since = new Date();
+    since.setFullYear(since.getFullYear() - 1);
+
+    const rows = await db
+      .select({ iv: optionsIvHistoryTable.iv })
+      .from(optionsIvHistoryTable)
+      .where(and(
+        eq(optionsIvHistoryTable.ticker, ticker),
+        gte(optionsIvHistoryTable.timestamp, since),
+      ));
+
+    const vals = rows.map((r) => r.iv).filter((v): v is number => v != null && v > 0);
+    if (vals.length < 10) return { high: null, low: null };
+
+    return {
+      high: Math.max(...vals),
+      low:  Math.min(...vals),
+    };
+  } catch {
+    return { high: null, low: null };
+  }
+}
+
+export function computeIvRankFromBounds(currentIv: number, high: number | null, low: number | null): number | null {
+  if (high == null || low == null || high === low) return null;
+  return Math.round(((currentIv - low) / (high - low)) * 100);
+}
+
+// ─── Earnings Calendar ────────────────────────────────────────────────────────
+
+export interface EarningsInfo {
+  nextEarningsDate: string | null;
+  daysToEarnings: number | null;
+  earningsWithin7Days: boolean;
+  earningsWithin14Days: boolean;
+}
+
+export async function checkEarningsProximity(ticker: string): Promise<EarningsInfo> {
+  try {
+    // Check DB first (cached)
+    const row = await db
+      .select({ nextEarningsDate: companiesTable.nextEarningsDate })
+      .from(companiesTable)
+      .where(eq(companiesTable.ticker, ticker))
+      .limit(1);
+
+    const cached = row[0]?.nextEarningsDate;
+
+    let earningsDateStr: string | null = null;
+
+    if (cached) {
+      // If cached date is still in the future, use it
+      const cachedDate = new Date(cached);
+      const now = new Date();
+      if (cachedDate >= now) {
+        earningsDateStr = cached;
+      }
+    }
+
+    // Fetch fresh from Yahoo Finance if not cached or stale
+    if (!earningsDateStr) {
+      try {
+        const summary = await yf.quoteSummary(ticker, { modules: ["calendarEvents"] }, { validateResult: false });
+        const earnings = (summary as any)?.calendarEvents?.earnings;
+        const dates: Date[] = (earnings?.earningsDate ?? []).filter((d: any) => d instanceof Date);
+        const futureDate = dates.find((d) => d >= new Date());
+        if (futureDate) {
+          earningsDateStr = futureDate.toISOString().split("T")[0];
+          // Store in DB
+          await db.update(companiesTable)
+            .set({ nextEarningsDate: earningsDateStr })
+            .where(eq(companiesTable.ticker, ticker));
+        }
+      } catch {
+        // YF quoteSummary can fail — use cached even if stale
+        earningsDateStr = cached ?? null;
+      }
+    }
+
+    if (!earningsDateStr) {
+      return { nextEarningsDate: null, daysToEarnings: null, earningsWithin7Days: false, earningsWithin14Days: false };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const earningsDate = new Date(earningsDateStr);
+    const daysToEarnings = Math.ceil((earningsDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    return {
+      nextEarningsDate:    earningsDateStr,
+      daysToEarnings,
+      earningsWithin7Days:  daysToEarnings >= 0 && daysToEarnings <= 7,
+      earningsWithin14Days: daysToEarnings >= 0 && daysToEarnings <= 14,
+    };
+  } catch {
+    return { nextEarningsDate: null, daysToEarnings: null, earningsWithin7Days: false, earningsWithin14Days: false };
+  }
+}
+
+// ─── Available Expiries ───────────────────────────────────────────────────────
+
+export interface ExpiryInfo {
+  date: string;
+  dte: number;
+  label: string;
+  premiumQuality: "high" | "moderate" | "low" | null;
+}
+
+function labelExpiry(dte: number): string {
+  if (dte <= 7)  return "Weekly";
+  if (dte <= 15) return "Bi-Weekly";
+  if (dte <= 35) return "Monthly";
+  if (dte <= 50) return "45-Day";
+  return "LEAPS";
+}
+
+export async function getAvailableExpiries(ticker: string): Promise<ExpiryInfo[]> {
+  try {
+    const chain = await yf.options(ticker, {}, { validateResult: false });
+    if (!chain?.expirationDates?.length) return [];
+
+    const today = new Date();
+    const ivData = await getLatestIv(ticker);
+    const ivPct = ivData?.ivPercentile90d ?? ivData?.ivPercentile30d;
+
+    const expiries: ExpiryInfo[] = (chain.expirationDates as Date[])
+      .map((d) => {
+        const dte = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          date:           d.toISOString().split("T")[0],
+          dte,
+          label:          labelExpiry(dte),
+          premiumQuality: ivPct == null ? null : ivPct >= 60 ? "high" : ivPct >= 35 ? "moderate" : "low",
+        };
+      })
+      .filter((e) => e.dte >= 0 && e.dte <= 180)
+      .sort((a, b) => a.dte - b.dte);
+
+    return expiries;
+  } catch {
+    return [];
+  }
+}
+
+// ─── Full Options Chain ───────────────────────────────────────────────────────
+
+export interface ChainContract {
+  strike:             number;
+  bid:                number | null;
+  ask:                number | null;
+  last:               number | null;
+  mid:                number | null;
+  iv:                 number | null;
+  delta:              number | null;
+  openInterest:       number | null;
+  volume:             number | null;
+  inTheMoney:         boolean;
+  annualizedROC:      number | null;
+  probabilityProfit:  number | null;
+  capitalRequired:    number;
+  premiumQuality:     "high" | "moderate" | "low" | null;
+}
+
+export interface OptionsChainResult {
+  ticker:           string;
+  companyName:      string | null;
+  currentPrice:     number | null;
+  expiry:           string;
+  dte:              number;
+  calls:            ChainContract[];
+  puts:             ChainContract[];
+  ivRank:           number | null;
+  ivPercentile:     number | null;
+  iv:               number | null;
+  earnings:         EarningsInfo;
+  cachedAt:         string;
+}
+
+function enrichContract(
+  raw: any,
+  currentPrice: number,
+  dte: number,
+  side: "call" | "put",
+): ChainContract {
+  const strike = raw.strike ?? 0;
+  const bid    = raw.bid    ?? null;
+  const ask    = raw.ask    ?? null;
+  const last   = raw.lastPrice ?? null;
+  const iv     = raw.impliedVolatility ?? null;
+  const delta  = raw.delta ?? null;
+  const oi     = raw.openInterest ?? null;
+  const vol    = raw.volume ?? null;
+  const mid    = bid != null && ask != null ? (bid + ask) / 2 : (last ?? null);
+  const itm    = side === "call" ? (currentPrice > strike) : (currentPrice < strike);
+
+  let annualizedROC: number | null = null;
+  let probabilityProfit: number | null = null;
+  let capitalRequired = 0;
+
+  if (mid != null && mid > 0 && dte > 0) {
+    if (side === "put") {
+      capitalRequired = strike * 100;
+      const yield_pct = (mid / strike) * 100;
+      annualizedROC = Math.round((yield_pct * (365 / dte)) * 100) / 100;
+    } else {
+      capitalRequired = currentPrice * 100;
+      const yield_pct = (mid / currentPrice) * 100;
+      annualizedROC = Math.round((yield_pct * (365 / dte)) * 100) / 100;
+    }
+  }
+
+  if (delta != null) {
+    probabilityProfit = side === "put"
+      ? Math.round((1 - Math.abs(delta)) * 100)
+      : Math.round((1 - Math.abs(delta)) * 100);
+  }
+
+  const ivPct = iv != null ? Math.round(iv * 100) : null;
+  const premiumQuality = ivPct == null ? null : ivPct >= 40 ? "high" : ivPct >= 25 ? "moderate" : "low";
+
+  return {
+    strike, bid, ask, last, mid, iv: ivPct, delta, openInterest: oi, volume: vol,
+    inTheMoney: itm, annualizedROC, probabilityProfit, capitalRequired, premiumQuality,
+  };
+}
+
+// Simple 15-minute in-memory cache
+const chainCache = new Map<string, { data: OptionsChainResult; expiresAt: number }>();
+
+export async function fetchOptionsChainData(
+  ticker: string,
+  expiry?: string,
+): Promise<OptionsChainResult | null> {
+  const cacheKey = `${ticker}::${expiry ?? "nearest"}`;
+  const cached = chainCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  try {
+    // Get company name
+    const companyRow = await db
+      .select({ name: companiesTable.name })
+      .from(companiesTable)
+      .where(eq(companiesTable.ticker, ticker))
+      .limit(1);
+    const companyName = companyRow[0]?.name ?? null;
+
+    // Get current price
+    let currentPrice: number | null = null;
+    try {
+      const quote = await yf.quote(ticker, { validateResult: false } as any);
+      currentPrice = (quote as any)?.regularMarketPrice ?? null;
+    } catch { /* fall back to DB */ }
+
+    if (currentPrice == null) {
+      const priceRow = await db
+        .select({ close: priceHistoryTable.close })
+        .from(priceHistoryTable)
+        .where(eq(priceHistoryTable.ticker, ticker))
+        .orderBy(desc(priceHistoryTable.date))
+        .limit(1);
+      currentPrice = priceRow[0]?.close ?? null;
+    }
+
+    if (currentPrice == null) return null;
+
+    // Fetch chain
+    let expiryDate: Date | undefined;
+    const chain = await yf.options(ticker, {}, { validateResult: false });
+    if (!chain?.expirationDates?.length) return null;
+
+    const today = new Date();
+
+    if (expiry) {
+      expiryDate = new Date(expiry + "T00:00:00");
+    } else {
+      // Pick nearest expiry ≥ 7 DTE
+      const minDate = new Date(today.getTime() + 6 * 86400000);
+      expiryDate = (chain.expirationDates as Date[]).find((d) => d >= minDate) ?? chain.expirationDates[0];
+    }
+
+    const dte = Math.round(((expiryDate as Date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const expiryStr = (expiryDate as Date).toISOString().split("T")[0];
+
+    // Fetch chain for the specific expiry
+    const expiryChain = await yf.options(ticker, { date: expiryDate }, { validateResult: false });
+    const rawCalls: any[] = expiryChain?.options?.[0]?.calls ?? [];
+    const rawPuts: any[]  = expiryChain?.options?.[0]?.puts  ?? [];
+
+    // IV data for rank
+    const ivData = await getLatestIv(ticker);
+    const { high: iv52wHigh, low: iv52wLow } = await computeIv52wBounds(ticker);
+    const currentIv = ivData?.iv ?? null;
+    const ivRank = currentIv != null ? computeIvRankFromBounds(currentIv, iv52wHigh, iv52wLow) : null;
+    const ivPercentile = ivData?.ivPercentile90d ?? ivData?.ivPercentile30d ?? null;
+
+    // Earnings check
+    const earnings = await checkEarningsProximity(ticker);
+
+    const calls = rawCalls.map((r) => enrichContract(r, currentPrice!, dte, "call"));
+    const puts  = rawPuts.map((r)  => enrichContract(r, currentPrice!, dte, "put"));
+
+    // Filter to reasonable range: ±30% from ATM
+    const filterRange = (contracts: ChainContract[]) =>
+      contracts.filter((c) => c.strike >= currentPrice! * 0.70 && c.strike <= currentPrice! * 1.30);
+
+    const result: OptionsChainResult = {
+      ticker,
+      companyName,
+      currentPrice,
+      expiry:     expiryStr,
+      dte,
+      calls:      filterRange(calls),
+      puts:       filterRange(puts),
+      ivRank,
+      ivPercentile,
+      iv:         currentIv,
+      earnings,
+      cachedAt:   new Date().toISOString(),
+    };
+
+    chainCache.set(cacheKey, { data: result, expiresAt: Date.now() + 15 * 60 * 1000 });
+    return result;
+  } catch (err) {
+    console.error("[OptionsEngine] Chain fetch error:", (err as Error).message);
+    return null;
+  }
+}
+
+// ─── Nightly IV + Earnings refresh ───────────────────────────────────────────
+
+export async function refreshIvAndEarningsForAllTickers(): Promise<void> {
+  try {
+    const tickers = await db
+      .selectDistinct({ ticker: optionsIvHistoryTable.ticker })
+      .from(optionsIvHistoryTable);
+
+    console.log(`[OptionsEngine] Refreshing IV + earnings for ${tickers.length} tickers`);
+
+    const BATCH = 3;
+    for (let i = 0; i < tickers.length; i += BATCH) {
+      const batch = tickers.slice(i, i + BATCH);
+      await Promise.allSettled(batch.map(async ({ ticker }) => {
+        try {
+          const { iv } = await fetchCurrentIv(ticker);
+          if (iv == null) return;
+
+          const ivPercentile30d = await computeIvPercentile(ticker, iv, 30);
+          const ivPercentile90d = await computeIvPercentile(ticker, iv, 90);
+          const { high: iv52wHigh, low: iv52wLow } = await computeIv52wBounds(ticker);
+          const ivRank = computeIvRankFromBounds(iv, iv52wHigh, iv52wLow);
+
+          await db.insert(optionsIvHistoryTable).values({
+            ticker, iv, ivPercentile30d, ivPercentile90d,
+            iv52wHigh, iv52wLow, ivRank,
+            source: "yahoo", timestamp: new Date(),
+          }).catch(() => {});
+
+          // Also refresh earnings
+          await checkEarningsProximity(ticker);
+        } catch { /* skip failed tickers */ }
+      }));
+
+      if (i + BATCH < tickers.length) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    console.log("[OptionsEngine] IV + earnings refresh complete");
+  } catch (err) {
+    console.error("[OptionsEngine] Refresh error:", (err as Error).message);
+  }
 }

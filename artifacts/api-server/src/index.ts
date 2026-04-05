@@ -4,6 +4,7 @@ import { runPipeline, isPipelineRunning, getPipelineStatus } from "./lib/pipelin
 import { sendPipelineReport, sendSignalAlert, sendPremarketBriefingEmail } from "./lib/mailer";
 import { runPremarketPipeline } from "./lib/premarket-intelligence";
 import { syncAllUsers } from "./lib/ibkr-sync";
+import { refreshIvAndEarningsForAllTickers } from "./lib/options-engine";
 import { getNextSundayAt2AM } from "./lib/scheduler-utils";
 import { db } from "@workspace/db";
 import { settingsTable, scoresTable, companiesTable, opportunityAlertsTable, riskAlertsTable } from "@workspace/db/schema";
@@ -192,6 +193,15 @@ app.listen(port, () => {
       .catch((err) => console.error("[Scheduler] Pre-market pipeline failed:", err));
   }, { timezone: "UTC" });
   console.log("[Scheduler] Pre-market cron registered — Mon–Fri 06:00 UK time");
+
+  // Nightly IV + earnings date refresh at 21:00 UTC (after US market close)
+  cron.schedule("0 21 * * 1-5", () => {
+    console.log("[Scheduler] IV + earnings refresh starting...");
+    refreshIvAndEarningsForAllTickers()
+      .then(() => console.log("[Scheduler] IV + earnings refresh complete"))
+      .catch((err) => console.error("[Scheduler] IV refresh failed:", err));
+  }, { timezone: "UTC" });
+  console.log("[Scheduler] IV + earnings nightly refresh cron registered — Mon–Fri 21:00 UTC");
 
   // IBKR position sync: Mon–Fri at 08:00 UTC (market open)
   // Reconciles our DB with live IBKR positions so any manual trades or

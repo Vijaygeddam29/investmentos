@@ -11,6 +11,7 @@ export const companiesTable = pgTable("companies", {
   exchange: text("exchange"),
   currency: text("currency"),
   marketCap: real("market_cap"),
+  nextEarningsDate: text("next_earnings_date"),
   source: text("source").default("seed"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

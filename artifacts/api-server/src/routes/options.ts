@@ -29,7 +29,13 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql, ne } from "drizzle-orm";
 import { requireAuth, type AuthPayload } from "../middleware/auth";
-import { generateSignals, generateRollRationale } from "../lib/options-engine";
+import {
+  generateSignals,
+  generateRollRationale,
+  getAvailableExpiries,
+  fetchOptionsChainData,
+  checkEarningsProximity,
+} from "../lib/options-engine";
 import { ibkrApiCall } from "./ibkr";
 import { getTodaysBriefing } from "../lib/premarket-intelligence";
 import { syncIbkrPositions } from "../lib/ibkr-sync";
@@ -970,6 +976,52 @@ router.get("/options/performance", requireAuth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch performance" });
+  }
+});
+
+// ─── Options Chain View ───────────────────────────────────────────────────────
+
+// GET /api/options/chain/:ticker/expiries
+// Returns all available expiry dates labelled for the chain view expiry selector
+router.get("/options/chain/:ticker/expiries", requireAuth, async (req, res) => {
+  const { ticker } = req.params;
+  try {
+    const expiries = await getAvailableExpiries(ticker.toUpperCase());
+    res.json({ expiries });
+  } catch (err) {
+    console.error("[Options] Chain expiries error:", err);
+    res.status(500).json({ error: "Failed to fetch expiries" });
+  }
+});
+
+// GET /api/options/chain/:ticker?expiry=YYYY-MM-DD
+// Returns full call + put chain for a ticker at a given expiry (or nearest if omitted)
+router.get("/options/chain/:ticker", requireAuth, async (req, res) => {
+  const { ticker } = req.params;
+  const expiry = (req.query.expiry as string) || undefined;
+
+  try {
+    const chain = await fetchOptionsChainData(ticker.toUpperCase(), expiry);
+    if (!chain) {
+      res.status(404).json({ error: "No options chain data available for this ticker. It may not have listed options or there was a data issue." });
+      return;
+    }
+    res.json(chain);
+  } catch (err) {
+    console.error("[Options] Chain fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch options chain" });
+  }
+});
+
+// GET /api/options/chain/:ticker/earnings
+// Quick earnings check — used by signals page to show earnings warnings
+router.get("/options/chain/:ticker/earnings", requireAuth, async (req, res) => {
+  const { ticker } = req.params;
+  try {
+    const info = await checkEarningsProximity(ticker.toUpperCase());
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to check earnings" });
   }
 });
 

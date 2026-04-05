@@ -75,6 +75,58 @@ function PremiumQualityBar({ pct }: { pct: number | null }) {
   );
 }
 
+// ─── Earnings Warning ─────────────────────────────────────────────────────────
+
+interface EarningsProximityInfo {
+  nextEarningsDate: string | null;
+  daysToEarnings: number | null;
+  earningsWithin7Days: boolean;
+  earningsWithin14Days: boolean;
+}
+
+function EarningsWarningBadge({ ticker, dte }: { ticker: string; dte: number }) {
+  const { data } = useQuery<EarningsProximityInfo>({
+    queryKey: ["options-earnings", ticker],
+    queryFn: async () => {
+      const r = await fetch(`/api/options/chain/${ticker}/earnings`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("ios_jwt")}` },
+      });
+      return r.json();
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  if (!data?.earningsWithin14Days) return null;
+  const days = data.daysToEarnings ?? 0;
+  const within7 = data.earningsWithin7Days;
+  const overlapsDte = days < dte;
+
+  return (
+    <div className={`flex items-start gap-2 p-2.5 rounded-lg border text-xs ${
+      within7
+        ? "bg-red-500/10 border-red-500/30 text-red-300"
+        : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+    }`}>
+      <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${within7 ? "text-red-400" : "text-amber-400"}`} />
+      <div className="space-y-0.5">
+        <p className="font-medium">
+          Earnings {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}
+          {data.nextEarningsDate ? ` (${data.nextEarningsDate})` : ""}
+        </p>
+        <p className="text-[11px] opacity-90 leading-snug">
+          {within7
+            ? "IV is likely inflated — you collect more premium but the stock can gap sharply after the report."
+            : "Earnings fall within your option's expiry window. Consider waiting until after the announcement for more stable pricing."
+          }
+          {overlapsDte && (
+            <span className="font-medium"> Your contract expires after earnings — plan accordingly.</span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Mini spark chart for the signal card
 function SparkChart({ ticker }: { ticker: string }) {
   const { data } = useQuery({
@@ -559,6 +611,9 @@ export default function OptionsSignals() {
                         Falling market: be extra cautious selling puts. Consider skipping this one.
                       </div>
                     )}
+
+                    {/* Earnings proximity warning */}
+                    <EarningsWarningBadge ticker={s.ticker} dte={s.dte} />
 
                     {/* Top row: ticker + income */}
                     <div className="flex items-start justify-between gap-2">
