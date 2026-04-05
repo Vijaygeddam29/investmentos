@@ -60,6 +60,7 @@ interface ChainContract {
   mid: number | null;
   iv: number | null;
   delta: number | null;
+  theta: number | null;
   openInterest: number | null;
   volume: number | null;
   inTheMoney: boolean;
@@ -300,12 +301,36 @@ interface ContractDetailPanel {
 function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte, onAddToQueue, onClose }: ContractDetailPanel) {
   const isOtm = side === "put" ? contract.strike < currentPrice : contract.strike > currentPrice;
   const pctFromMoney = Math.abs((contract.strike - currentPrice) / currentPrice * 100);
+  const thetaPerContract = contract.theta != null ? (contract.theta * 100).toFixed(2) : null;
+
+  const metrics = [
+    { label: "Bid",             value: contract.bid != null ? `$${contract.bid.toFixed(2)}` : "–" },
+    { label: "Ask",             value: contract.ask != null ? `$${contract.ask.toFixed(2)}` : "–" },
+    { label: "Mid (premium)",   value: contract.mid != null ? `$${contract.mid.toFixed(2)}/sh` : "–", highlight: true },
+    { label: "Open interest",   value: contract.openInterest != null ? contract.openInterest.toLocaleString() : "–" },
+    { label: "Volume",          value: contract.volume != null ? contract.volume.toLocaleString() : "–" },
+    { label: "IV",              value: contract.iv != null ? `${contract.iv}%` : "–" },
+    { label: "Delta",           value: contract.delta != null ? contract.delta.toFixed(2) : "–" },
+    {
+      label: "Theta (daily decay)",
+      value: thetaPerContract != null ? `$${thetaPerContract}/contract` : "–",
+      tip: "How much premium erodes per day — positive for the seller",
+      style: "text-amber-400",
+    },
+    {
+      label: isOtm ? "OTM by" : "ITM by",
+      value: `${pctFromMoney.toFixed(1)}%`,
+      style: isOtm ? "text-emerald-400" : "text-red-400",
+    },
+  ];
 
   return (
-    <div className="absolute z-50 top-0 right-0 w-72 bg-[#0f1420] border border-slate-600 rounded-xl shadow-2xl p-4 space-y-3">
+    <div className="absolute z-50 top-0 right-0 w-80 bg-[#0f1420] border border-slate-600 rounded-xl shadow-2xl p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-sm font-bold text-white">{ticker} ${contract.strike} {side === "put" ? "Put" : "Call"}</span>
+          <span className="text-sm font-bold text-white">
+            {ticker} ${contract.strike} {side === "put" ? "Put" : "Call"}
+          </span>
           <p className="text-[11px] text-muted-foreground mt-0.5">Expiry: {expiry} ({dte} DTE)</p>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-white">
@@ -314,22 +339,12 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {[
-          { label: "Bid",           value: contract.bid != null ? `$${contract.bid.toFixed(2)}` : "–" },
-          { label: "Ask",           value: contract.ask != null ? `$${contract.ask.toFixed(2)}` : "–" },
-          { label: "Mid (premium)", value: contract.mid != null ? `$${contract.mid.toFixed(2)}/share` : "–", highlight: true },
-          { label: "Open interest", value: contract.openInterest != null ? contract.openInterest.toLocaleString() : "–" },
-          { label: "Volume",        value: contract.volume != null ? contract.volume.toLocaleString() : "–" },
-          { label: "IV",            value: contract.iv != null ? `${contract.iv}%` : "–" },
-          { label: "Delta",         value: contract.delta != null ? contract.delta.toFixed(2) : "–" },
-          { label: side === "put" ? "OTM by" : "OTM by",
-            value: `${pctFromMoney.toFixed(1)}% ${isOtm ? "(OTM)" : "(ITM)"}`,
-            style: isOtm ? "text-emerald-400" : "text-red-400"
-          },
-        ].map((m) => (
+        {metrics.map((m) => (
           <div key={m.label} className="bg-slate-800/50 rounded-lg p-2 space-y-0.5">
             <p className="text-[10px] text-muted-foreground">{m.label}</p>
-            <p className={`text-xs font-semibold ${(m as any).highlight ? "text-emerald-400" : (m as any).style ?? "text-white"}`}>{m.value}</p>
+            <p className={`text-xs font-semibold ${(m as any).highlight ? "text-emerald-400" : (m as any).style ?? "text-white"}`}>
+              {m.value}
+            </p>
           </div>
         ))}
       </div>
@@ -344,7 +359,7 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
             <p className="text-[11px] text-muted-foreground">{contract.probabilityProfit}% probability of profit</p>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Capital: ${contract.capitalRequired.toLocaleString()} · Max profit: ${contract.mid != null ? (contract.mid * 100).toFixed(0) : "–"}
+            Capital: ${contract.capitalRequired.toLocaleString()} · Max income: ${contract.mid != null ? (contract.mid * 100).toFixed(0) : "–"}
           </p>
         </div>
       )}
@@ -363,13 +378,21 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
 
 // ─── Chain View ───────────────────────────────────────────────────────────────
 
+interface QueueResult {
+  success: boolean;
+  queueId: number;
+  riskChecksPassed: boolean;
+  riskNotes: string[];
+  message: string;
+}
+
 function ChainView() {
   const qc = useQueryClient();
   const [ticker, setTicker] = useState("");
   const [inputTicker, setInputTicker] = useState("");
   const [selectedExpiry, setSelectedExpiry] = useState<string>("");
   const [selectedCell, setSelectedCell] = useState<{ strike: number; side: "call" | "put" } | null>(null);
-  const [addedToQueue, setAddedToQueue] = useState<string | null>(null);
+  const [queueResult, setQueueResult] = useState<QueueResult | null>(null);
 
   const { data: expiries, isLoading: expiriesLoading } = useQuery<{ expiries: ExpiryInfo[] }>({
     queryKey: ["options-expiries", ticker],
@@ -407,12 +430,38 @@ function ChainView() {
     if (t) { setTicker(t); setSelectedExpiry(""); setSelectedCell(null); }
   };
 
-  const handleAddToQueue = (contract: ChainContract, side: "call" | "put") => {
-    if (!chain) return;
-    const key = `${contract.strike}-${side}`;
-    setAddedToQueue(key);
-    setTimeout(() => setAddedToQueue(null), 3000);
-  };
+  const addToQueueMutation = useMutation({
+    mutationFn: async ({ contract, side }: { contract: ChainContract; side: "call" | "put" }) => {
+      if (!chain) throw new Error("No chain loaded");
+      const r = await fetch("/api/options/queue/from-chain", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("ios_jwt")}`,
+        },
+        body: JSON.stringify({
+          ticker:       chain.ticker,
+          side,
+          strike:       contract.strike,
+          expiry:       chain.expiry,
+          dte:          chain.dte,
+          mid:          contract.mid,
+          iv:           contract.iv,
+          delta:        contract.delta,
+          theta:        contract.theta,
+          openInterest: contract.openInterest,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed to queue trade");
+      return data as QueueResult;
+    },
+    onSuccess: (result) => {
+      setQueueResult(result);
+      setSelectedCell(null);
+      qc.invalidateQueries({ queryKey: ["options-queue"] });
+    },
+  });
 
   const allStrikes = useMemo(() => {
     if (!chain) return [];
@@ -588,7 +637,7 @@ function ChainView() {
             <div className="relative overflow-x-auto">
               {/* Selected contract panel */}
               {selectedCell && contractForCell && (
-                <div className="relative mb-3">
+                <div className="relative mb-3 min-h-[200px]">
                   <ContractDetailPanel
                     contract={contractForCell}
                     side={selectedCell.side}
@@ -596,7 +645,7 @@ function ChainView() {
                     currentPrice={chain.currentPrice ?? 0}
                     expiry={chain.expiry}
                     dte={chain.dte}
-                    onAddToQueue={() => handleAddToQueue(contractForCell, selectedCell.side)}
+                    onAddToQueue={() => addToQueueMutation.mutate({ contract: contractForCell, side: selectedCell.side })}
                     onClose={() => setSelectedCell(null)}
                   />
                 </div>
@@ -747,6 +796,43 @@ function ChainView() {
             </div>
           )}
         </>
+      )}
+
+      {/* Queue result dialog */}
+      {queueResult && (
+        <Dialog open onOpenChange={() => setQueueResult(null)}>
+          <DialogContent className="bg-[#1a1f2e] border-slate-700 max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-white flex items-center gap-2">
+                {queueResult.riskChecksPassed
+                  ? <><CheckCircle className="w-4 h-4 text-emerald-400" /> Added to review queue</>
+                  : <><AlertTriangle className="w-4 h-4 text-amber-400" /> Queued with risk flag</>
+                }
+              </DialogTitle>
+              <DialogDescription className="text-slate-400">{queueResult.message}</DialogDescription>
+            </DialogHeader>
+
+            {queueResult.riskNotes.length > 0 && (
+              <div className={`space-y-2 p-3 rounded-lg border text-xs ${
+                queueResult.riskChecksPassed
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                  : "bg-red-500/10 border-red-500/30 text-red-300"
+              }`}>
+                {queueResult.riskNotes.map((note, i) => (
+                  <p key={i} className="leading-snug">{note}</p>
+                ))}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Go to the Options Signals page to review and place your order via IBKR.
+            </p>
+
+            <DialogFooter>
+              <Button onClick={() => setQueueResult(null)} className="w-full">Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

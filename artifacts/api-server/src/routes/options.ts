@@ -979,6 +979,103 @@ router.get("/options/performance", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Chain View — queue from raw contract ─────────────────────────────────────
+
+// POST /api/options/queue/from-chain
+// Creates a trade review queue entry directly from a chain contract (no pre-existing signal).
+// Performs a server-side 7-day earnings proximity check and appends a risk note.
+router.post("/options/queue/from-chain", requireAuth, async (req, res) => {
+  const payload = (req as any).user as AuthPayload;
+  const userId = payload.userId;
+
+  const {
+    ticker,
+    side,        // "call" | "put"
+    strike,
+    expiry,
+    dte,
+    mid,         // per-share premium (mid-price)
+    iv,
+    delta,
+    theta,
+    openInterest,
+  } = req.body ?? {};
+
+  if (!ticker || !side || !strike || !expiry || !dte || mid == null) {
+    res.status(400).json({ error: "Missing required fields: ticker, side, strike, expiry, dte, mid" });
+    return;
+  }
+
+  const strategy = side === "put" ? "SELL_PUT" : "SELL_CALL";
+  const estimatedPremium = Number(mid);
+  const collateral = side === "put" ? Number(strike) * 100 : Number(strike) * 100;
+
+  // ── Server-side 7-day earnings guard ──────────────────────────────────────
+  const riskNotes: string[] = [];
+  let riskChecksPassed = true;
+
+  try {
+    const earnings = await checkEarningsProximity(ticker.toUpperCase());
+
+    if (earnings.earningsWithin7Days) {
+      riskChecksPassed = false;
+      const days = earnings.daysToEarnings ?? 0;
+      riskNotes.push(
+        `EARNINGS RISK: ${ticker} reports in ${days === 0 ? "today" : days === 1 ? "1 day" : days + " days"} (${earnings.nextEarningsDate}). ` +
+        "IV is elevated, increasing premium collected, but the stock can gap significantly after the announcement. " +
+        "This trade is queued with a risk flag — review carefully before placing."
+      );
+    } else if (earnings.earningsWithin14Days) {
+      const days = earnings.daysToEarnings ?? 0;
+      riskNotes.push(
+        `Note: ${ticker} reports in ${days} days (${earnings.nextEarningsDate}). ` +
+        "Earnings fall within your option's DTE window — consider this when planning your exit."
+      );
+    }
+  } catch {
+    // Non-fatal — earnings check failure should not block queueing
+  }
+
+  const aiRationale = `Chain View selection: ${side.toUpperCase()} $${strike} expiring ${expiry} (${dte} DTE). ` +
+    `Mid-price: $${estimatedPremium.toFixed(2)}/share. ` +
+    (iv != null ? `Implied volatility: ${iv}%. ` : "") +
+    (delta != null ? `Delta: ${delta}. ` : "") +
+    (theta != null ? `Theta (daily decay): $${(theta * 100).toFixed(2)}/contract. ` : "") +
+    (openInterest != null ? `Open interest: ${openInterest.toLocaleString()} contracts.` : "");
+
+  const [queueItem] = await db
+    .insert(tradeReviewQueueTable)
+    .values({
+      userId,
+      signalId:          null,
+      ticker:            ticker.toUpperCase(),
+      strategy,
+      strike:            Number(strike),
+      expiry,
+      dte:               Number(dte),
+      quantity:          1,
+      limitPrice:        estimatedPremium,
+      estimatedPremium,
+      collateralRequired: collateral,
+      maxRisk:           collateral,
+      aiRationale,
+      riskChecksPassed,
+      riskCheckNotes:    riskNotes.length > 0 ? riskNotes.join(" | ") : null,
+      status:            "pending",
+    })
+    .returning();
+
+  res.json({
+    success:          true,
+    queueId:          queueItem.id,
+    riskChecksPassed,
+    riskNotes,
+    message:          riskChecksPassed
+      ? `${ticker} ${strategy} added to your review queue.`
+      : `${ticker} ${strategy} queued with an earnings risk flag — please review before placing.`,
+  });
+});
+
 // ─── Options Chain View ───────────────────────────────────────────────────────
 
 // GET /api/options/chain/:ticker/expiries

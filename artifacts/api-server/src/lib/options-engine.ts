@@ -762,6 +762,7 @@ export interface ChainContract {
   mid:                number | null;
   iv:                 number | null;
   delta:              number | null;
+  theta:              number | null;
   openInterest:       number | null;
   volume:             number | null;
   inTheMoney:         boolean;
@@ -798,6 +799,10 @@ function enrichContract(
   const last   = raw.lastPrice ?? null;
   const iv     = raw.impliedVolatility ?? null;
   const delta  = raw.delta ?? null;
+  // Theta: daily premium decay — YF returns it as negative number (e.g. -0.05 = loses $5/day)
+  // Normalise to a rounded 4dp value for display
+  const thetaRaw = raw.theta ?? null;
+  const theta  = thetaRaw != null ? Math.round(thetaRaw * 10000) / 10000 : null;
   const oi     = raw.openInterest ?? null;
   const vol    = raw.volume ?? null;
   const mid    = bid != null && ask != null ? (bid + ask) / 2 : (last ?? null);
@@ -829,7 +834,7 @@ function enrichContract(
   const premiumQuality = ivPct == null ? null : ivPct >= 40 ? "high" : ivPct >= 25 ? "moderate" : "low";
 
   return {
-    strike, bid, ask, last, mid, iv: ivPct, delta, openInterest: oi, volume: vol,
+    strike, bid, ask, last, mid, iv: ivPct, delta, theta, openInterest: oi, volume: vol,
     inTheMoney: itm, annualizedROC, probabilityProfit, capitalRequired, premiumQuality,
   };
 }
@@ -909,9 +914,10 @@ export async function fetchOptionsChainData(
     const calls = rawCalls.map((r) => enrichContract(r, currentPrice!, dte, "call"));
     const puts  = rawPuts.map((r)  => enrichContract(r, currentPrice!, dte, "put"));
 
-    // Filter to reasonable range: ±30% from ATM
-    const filterRange = (contracts: ChainContract[]) =>
-      contracts.filter((c) => c.strike >= currentPrice! * 0.70 && c.strike <= currentPrice! * 1.30);
+    // Return full chain — no strike range truncation.
+    // Sort calls descending by strike, puts descending so the grid renders ATM near the middle.
+    calls.sort((a, b) => b.strike - a.strike);
+    puts.sort((a, b) => b.strike - a.strike);
 
     const result: OptionsChainResult = {
       ticker,
@@ -919,8 +925,8 @@ export async function fetchOptionsChainData(
       currentPrice,
       expiry:     expiryStr,
       dte,
-      calls:      filterRange(calls),
-      puts:       filterRange(puts),
+      calls,
+      puts,
       ivRank,
       ivPercentile,
       iv:         currentIv,
