@@ -311,7 +311,22 @@ function ContractDetailPanel({ contract, side, ticker, currentPrice, expiry, dte
   const pctFromMoney = Math.abs((contract.strike - currentPrice) / currentPrice * 100);
   const thetaPerContract = contract.theta != null ? (contract.theta * 100).toFixed(2) : null;
 
+  // A/B/C quality grade derived from premiumQuality
+  //   A = high (IV ≥ 40%, strong premium relative to capital)
+  //   B = moderate (IV 25–39%)
+  //   C = low or unavailable
+  const qualityGrade =
+    contract.premiumQuality === "high"     ? { grade: "A", style: "text-emerald-400" } :
+    contract.premiumQuality === "moderate" ? { grade: "B", style: "text-amber-400"   } :
+    contract.premiumQuality === "low"      ? { grade: "C", style: "text-slate-400"   } :
+                                             { grade: "–", style: "text-muted-foreground" };
+
   const metrics: MetricRow[] = [
+    {
+      label: "Quality grade",
+      value: qualityGrade.grade,
+      style: qualityGrade.style,
+    },
     { label: "Bid",             value: contract.bid != null ? `$${contract.bid.toFixed(2)}` : "–" },
     { label: "Ask",             value: contract.ask != null ? `$${contract.ask.toFixed(2)}` : "–" },
     { label: "Mid (premium)",   value: contract.mid != null ? `$${contract.mid.toFixed(2)}/sh` : "–", highlight: true },
@@ -453,6 +468,7 @@ function ChainView() {
           expiry:       chain.expiry,
           dte:          chain.dte,
           mid:          contract.mid,
+          currentPrice: chain.currentPrice,
           iv:           contract.iv,
           delta:        contract.delta,
           theta:        contract.theta,

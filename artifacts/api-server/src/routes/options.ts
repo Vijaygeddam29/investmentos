@@ -1011,11 +1011,12 @@ router.post("/options/queue/from-chain", requireAuth, async (req, res) => {
 
   const {
     ticker,
-    side,        // "call" | "put"
+    side,         // "call" | "put"
     strike,
     expiry,
     dte,
-    mid,         // per-share premium (mid-price)
+    mid,          // per-share mid-price (market convention — 1 contract = mid × 100)
+    currentPrice, // underlying stock price; required for call collateral calculation
     iv,
     delta,
     theta,
@@ -1028,8 +1029,19 @@ router.post("/options/queue/from-chain", requireAuth, async (req, res) => {
   }
 
   const strategy = side === "put" ? "SELL_PUT" : "SELL_CALL";
-  const estimatedPremium = Number(mid);
-  const collateral = side === "put" ? Number(strike) * 100 : Number(strike) * 100;
+
+  // estimatedPremium stored in per-contract units (mid × 100) to match the
+  // standard signal path and the premiumCollected field in options_trades.
+  const estimatedPremium = Number(mid) * 100;
+
+  // Collateral model:
+  //   SELL_PUT  → cash-secured: strike × 100 (worst case: you buy 100 shares at strike)
+  //   SELL_CALL → covered or naked: underlying price × 100 (cost to acquire if exercised)
+  //               If currentPrice isn't sent, fall back to strike × 100.
+  const underlyingPrice = currentPrice != null ? Number(currentPrice) : Number(strike);
+  const collateral = side === "put"
+    ? Number(strike) * 100
+    : underlyingPrice * 100;
 
   // ── Server-side 7-day earnings guard ──────────────────────────────────────
   const riskNotes: string[] = [];
@@ -1057,8 +1069,9 @@ router.post("/options/queue/from-chain", requireAuth, async (req, res) => {
     // Non-fatal — earnings check failure should not block queueing
   }
 
+  const midPerShare = Number(mid);
   const aiRationale = `Chain View selection: ${side.toUpperCase()} $${strike} expiring ${expiry} (${dte} DTE). ` +
-    `Mid-price: $${estimatedPremium.toFixed(2)}/share. ` +
+    `Mid-price: $${midPerShare.toFixed(2)}/share ($${estimatedPremium.toFixed(0)}/contract). ` +
     (iv != null ? `Implied volatility: ${iv}%. ` : "") +
     (delta != null ? `Delta: ${delta}. ` : "") +
     (theta != null ? `Theta (daily decay): $${(theta * 100).toFixed(2)}/contract. ` : "") +
@@ -1075,8 +1088,8 @@ router.post("/options/queue/from-chain", requireAuth, async (req, res) => {
       expiry,
       dte:               Number(dte),
       quantity:          1,
-      limitPrice:        estimatedPremium,
-      estimatedPremium,
+      limitPrice:        midPerShare,      // per-share (IBKR order price convention)
+      estimatedPremium,                   // per-contract (mid × 100), matches signal path
       collateralRequired: collateral,
       maxRisk:           collateral,
       aiRationale,
