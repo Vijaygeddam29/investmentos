@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { TradeStoryPanel } from "@/components/options/TradeStoryPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, TrendingDown, TrendingUp, AlertTriangle, CheckCircle,
@@ -59,6 +62,8 @@ function MarginDonut({ pct, cap, status }: { pct: number; cap: number; status: s
 }
 
 function RiskDashboardPanel() {
+  const [expanded, setExpanded] = useState(false);
+
   const { data, isLoading } = useQuery<RiskDashboard>({
     queryKey: ["options-risk-dashboard"],
     queryFn: async () => {
@@ -71,8 +76,10 @@ function RiskDashboardPanel() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  if (isLoading) return <div className="h-20 rounded-xl bg-slate-800/40 animate-pulse" />;
+  if (isLoading) return <div className="h-12 rounded-xl bg-slate-800/40 animate-pulse" />;
   if (!data) return null;
+
+  const isHealthy = data.marginStatus === "ok" || data.marginStatus === "unknown";
 
   const statusColor = {
     ok:       "border-emerald-500/30 bg-emerald-500/5",
@@ -88,22 +95,44 @@ function RiskDashboardPanel() {
     unknown:  "Connect IBKR to see margin",
   }[data.marginStatus];
 
+  const showCollapsed = isHealthy && !expanded;
+
   return (
-    <div className={`rounded-xl border p-4 ${statusColor}`}>
-      <div className="flex items-center gap-2 mb-3">
-        <Activity className="w-4 h-4 text-blue-400" />
-        <span className="text-sm font-semibold text-white">Portfolio Risk Dashboard</span>
+    <div className={`rounded-xl border ${statusColor}`}>
+      {/* Header — always visible */}
+      <button
+        className="w-full flex items-center gap-2 px-4 py-3 text-left"
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <Activity className="w-4 h-4 text-blue-400 shrink-0" />
+        <span className="text-sm font-semibold text-white flex-1">Portfolio Risk Dashboard</span>
         {data.marginStatus === "breach" && (
-          <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-400 bg-red-500/10 ml-auto">
-            MARGIN BREACH
-          </Badge>
+          <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-400 bg-red-500/10">MARGIN BREACH</Badge>
         )}
         {data.marginStatus === "elevated" && (
-          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400 bg-amber-500/10 ml-auto">
-            ELEVATED
-          </Badge>
+          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400 bg-amber-500/10">ELEVATED</Badge>
         )}
-      </div>
+        {isHealthy && data.totalPositions > 0 && !expanded && (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {data.totalPositions} position{data.totalPositions !== 1 ? "s" : ""} ·{" "}
+              {data.marginPct != null ? `${data.marginPct}% margin used` : "margin ok"} ·{" "}
+              <span className="text-emerald-400">${data.currentMonthIncome.toLocaleString()} this month</span>
+            </span>
+          </>
+        )}
+        {isHealthy && data.totalPositions === 0 && !expanded && (
+          <span className="text-xs text-muted-foreground">No open positions</span>
+        )}
+        {expanded
+          ? <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+        }
+      </button>
+
+      {/* Full panel — shown when expanded or status is elevated/breach */}
+      {!showCollapsed && (
+      <div className="px-4 pb-4">
 
       <div className="flex items-start gap-4 flex-wrap">
         {/* Margin meter */}
@@ -186,14 +215,11 @@ function RiskDashboardPanel() {
           </div>
         </div>
       )}
+      </div>
+      )}
     </div>
   );
 }
-import { useState } from "react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import { TradeStoryPanel } from "@/components/options/TradeStoryPanel";
 
 interface Trade {
   id: number;

@@ -754,13 +754,13 @@ export default function OptionsSignals() {
                       >
                         <GitCompare className="w-4 h-4 mr-1.5" /> Compare
                       </Button>
-                      {(s.strategy === "SELL_PUT" || s.strategy === "WHEEL") && (
+                      {(s.strategy === "SELL_PUT" || s.strategy === "WHEEL") && s.capitalRequired > 2000 && (
                         <Button
                           size="sm"
                           variant="ghost"
                           className="border border-slate-600 text-slate-400 hover:text-violet-300 hover:border-violet-500/50"
                           onClick={() => setSpreadSignal({ signal: s, company: c })}
-                          title="View spread alternative (capped risk)"
+                          title="View spread alternative — caps your max loss at $500"
                         >
                           <Layers className="w-4 h-4 mr-1" /> Spread
                         </Button>
@@ -961,7 +961,10 @@ export default function OptionsSignals() {
                   <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-red-300">
-                      {orderResult.breachType === "margin_cap" ? "Margin cap exceeded" : "Concentration limit exceeded"}
+                      {orderResult.breachType === "margin_cap" ? "Margin cap exceeded"
+                        : orderResult.breachType === "per_trade_cap" ? "Per-trade capital limit exceeded"
+                        : orderResult.breachType === "drawdown_circuit_breaker" ? "Drawdown circuit breaker active"
+                        : "Concentration limit exceeded"}
                     </p>
                     <p className="text-xs text-red-400 mt-1">{orderResult.reason as string}</p>
                   </div>

@@ -1308,8 +1308,8 @@ export default function OptionsScreener() {
               </div>
             ) : (
               <div className="space-y-2">
-                {/* Column headers */}
-                <div className="hidden md:grid grid-cols-[1.8fr_1.2fr_0.8fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                {/* Column headers — sticky */}
+                <div className="hidden md:grid grid-cols-[1.8fr_1.2fr_0.8fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider sticky top-0 bg-[#0f1420]/95 backdrop-blur-sm z-10 rounded-t-lg border-b border-slate-800/60 -mb-1">
                   <span>Company</span>
                   <span>Strategy / Tier</span>
                   <button
@@ -1423,11 +1423,11 @@ export default function OptionsScreener() {
                           >
                             <GitCompare className="w-3.5 h-3.5" />
                           </Button>
-                          {(signal.strategy === "SELL_PUT" || signal.strategy === "WHEEL") && (
+                          {(signal.strategy === "SELL_PUT" || signal.strategy === "WHEEL") && signal.capitalRequired > 2000 && (
                             <Button
                               variant="ghost" size="sm"
                               className="h-7 px-2 text-[11px] text-slate-400 hover:text-violet-300 border border-slate-700/50 hover:border-violet-500/40"
-                              title="View spread alternative"
+                              title="Spread alternative available — caps max loss at $500"
                               onClick={() => setSpreadScreenerSignal(signal)}
                             >
                               <Layers className="w-3 h-3 mr-1" />Spread
@@ -1538,7 +1538,10 @@ export default function OptionsScreener() {
                 <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-red-300">
-                    {blockedResult.breachType === "margin_cap" ? "Margin cap exceeded" : "Concentration limit exceeded"}
+                    {blockedResult.breachType === "margin_cap" ? "Margin cap exceeded"
+                      : blockedResult.breachType === "per_trade_cap" ? "Per-trade capital limit exceeded"
+                      : blockedResult.breachType === "drawdown_circuit_breaker" ? "Drawdown circuit breaker active"
+                      : "Concentration limit exceeded"}
                   </p>
                   <p className="text-xs text-red-400 mt-1">{blockedResult.reason as string}</p>
                 </div>

@@ -266,7 +266,15 @@ router.post("/options/queue", requireAuth, async (req, res) => {
 
     const maxCapPct = profile?.maxCapitalPerTradePct ?? 10;
     if (accountNlv && collateral > accountNlv * (maxCapPct / 100)) {
-      riskNotes.push(`Collateral $${collateral.toFixed(0)} exceeds ${maxCapPct}% capital limit`);
+      const tradeCapLimit = Math.round(accountNlv * (maxCapPct / 100));
+      res.status(422).json({
+        blocked: true,
+        breachType: "per_trade_cap",
+        reason: `This trade requires $${collateral.toLocaleString()} of capital but your per-trade limit is $${tradeCapLimit.toLocaleString()} (${maxCapPct}% of account).`,
+        headroom: tradeCapLimit,
+        suggestion: `A spread alternative only requires ~$500 of capital — use the Spread button to see the details.`,
+      });
+      return;
     }
 
     // Check pending position count
@@ -335,21 +343,57 @@ router.post("/options/queue", requireAuth, async (req, res) => {
         return;
       }
 
-      if (projectedTotal > 5000) {
-        const tickerCollateral = openPositions
-          .filter((t) => t.ticker === s.ticker)
-          .reduce((sum, t) => sum + (t.strike * 100 * (t.quantity ?? 1)), 0);
-        const tickerProjected = tickerCollateral + collateral;
-        const tickerPct = (tickerProjected / projectedTotal) * 100;
-        if (tickerPct > 20) {
-          res.status(422).json({
-            blocked: true,
-            breachType: "ticker_concentration",
-            reason: `${s.ticker} would represent ${tickerPct.toFixed(1)}% of your total options capital. The limit is 20% per ticker to stay diversified.`,
-            headroom: 0,
-            suggestion: "Diversify across different tickers, or use a spread to reduce the capital required.",
-          });
-          return;
+      // Ticker concentration — 20% limit, always enforced (no floor)
+      const tickerCollateral = openPositions
+        .filter((t) => t.ticker === s.ticker)
+        .reduce((sum, t) => sum + (t.strike * 100 * (t.quantity ?? 1)), 0);
+      const tickerProjected = tickerCollateral + collateral;
+      const tickerPct = projectedTotal > 0 ? (tickerProjected / projectedTotal) * 100 : 0;
+      if (tickerPct > 20) {
+        res.status(422).json({
+          blocked: true,
+          breachType: "ticker_concentration",
+          reason: `${s.ticker} would represent ${tickerPct.toFixed(1)}% of your total options capital. The limit is 20% per ticker to stay diversified.`,
+          headroom: 0,
+          suggestion: "Diversify across different tickers, or use a spread to reduce the capital required.",
+        });
+        return;
+      }
+
+      // Drawdown circuit breaker — pause new puts when monthly income is down >10% vs 3-month peak
+      if (s.strategy !== "SELL_CALL") {
+        const monthlyRows = await db
+          .select({
+            bucket:       optionsTradesTable.monthlyBucket,
+            totalPremium: sql<number>`sum(coalesce(${optionsTradesTable.premiumCollected}, 0))`,
+          })
+          .from(optionsTradesTable)
+          .where(and(
+            eq(optionsTradesTable.userId, user.userId),
+            ne(optionsTradesTable.monthlyBucket, ""),
+          ))
+          .groupBy(optionsTradesTable.monthlyBucket)
+          .orderBy(desc(optionsTradesTable.monthlyBucket))
+          .limit(4);
+
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const currentMonthIncome = Number(monthlyRows.find((r) => r.bucket === currentMonth)?.totalPremium ?? 0);
+        const pastThree = monthlyRows.filter((r) => r.bucket !== currentMonth).slice(0, 3);
+        if (pastThree.length >= 2) {
+          const peakIncome = Math.max(...pastThree.map((r) => Number(r.totalPremium ?? 0)));
+          if (peakIncome > 0) {
+            const drawdown = (peakIncome - currentMonthIncome) / peakIncome;
+            if (drawdown > 0.10) {
+              res.status(422).json({
+                blocked: true,
+                breachType: "drawdown_circuit_breaker",
+                reason: `Monthly income is ${(drawdown * 100).toFixed(0)}% below recent peak ($${Math.round(currentMonthIncome)} vs $${Math.round(peakIncome)} peak). New puts are paused until income recovers above the 10% drawdown threshold.`,
+                headroom: 0,
+                suggestion: "Selling covered calls on shares you already own is still allowed — these carry less downside risk than new put positions.",
+              });
+              return;
+            }
+          }
         }
       }
     }
@@ -1553,21 +1597,21 @@ router.get("/options/signals/:id/spread-alternative", requireAuth, async (req, r
 
     let longPremium: number | null = null;
     try {
-      const yf = YahooFinanceClass as any;
       const expiryDate = new Date(s.expiry + "T16:00:00");
-      const chain = await yf.options(s.ticker, { date: expiryDate });
-      const contracts = isSellPut
-        ? (chain?.options?.[0]?.puts ?? [])
-        : (chain?.options?.[0]?.calls ?? []);
-      const sorted = [...contracts].sort((a: any, b: any) =>
-        Math.abs((a.strike ?? 0) - longStrike) - Math.abs((b.strike ?? 0) - longStrike),
+      const chain = await YahooFinanceClass.options(s.ticker, { date: expiryDate });
+      const contracts: { strike?: number; bid?: number | null; ask?: number | null }[] =
+        isSellPut
+          ? (chain?.options?.[0]?.puts ?? [])
+          : (chain?.options?.[0]?.calls ?? []);
+      const sorted = [...contracts].sort(
+        (a, b) => Math.abs((a.strike ?? 0) - longStrike) - Math.abs((b.strike ?? 0) - longStrike),
       );
-      const best = sorted[0] as any;
+      const best = sorted[0];
       if (best?.bid != null && best?.ask != null) {
         longPremium = (best.bid + best.ask) / 2;
       }
     } catch {
-      // Fallback to estimate
+      // Fallback to 40% estimate if live data unavailable
     }
 
     const shortPremium = s.premium;
