@@ -276,6 +276,31 @@ router.post("/options/queue", requireAuth, async (req, res) => {
       riskNotes.push(`Already at max positions limit (${maxPos})`);
     }
 
+    // ── Earnings proximity check (shared risk policy with from-chain path) ────
+    // Any queue creation that lands within 7 days of earnings is hard-flagged
+    // so the approval endpoint can block it (unless the user passes override:true).
+    try {
+      const earningsInfo = await checkEarningsProximity(s.ticker);
+      if (earningsInfo.earningsWithin7Days) {
+        riskChecksPassed = false;
+        const days = earningsInfo.daysToEarnings ?? 0;
+        riskNotes.push(
+          `EARNINGS RISK: ${s.ticker} reports in ${days === 0 ? "today" : days === 1 ? "1 day" : `${days} days`} ` +
+          `(${earningsInfo.nextEarningsDate}). ` +
+          "IV is elevated but the stock can gap significantly after the announcement. " +
+          "Review carefully — you can override this block at approval time."
+        );
+      } else if (earningsInfo.earningsWithin14Days) {
+        const days = earningsInfo.daysToEarnings ?? 0;
+        riskNotes.push(
+          `Note: ${s.ticker} reports in ${days} days (${earningsInfo.nextEarningsDate}). ` +
+          "Earnings fall within the option DTE window — plan your exit accordingly."
+        );
+      }
+    } catch {
+      // Non-fatal — earnings check failure should not block queueing
+    }
+
     const queueItem = await db
       .insert(tradeReviewQueueTable)
       .values({
