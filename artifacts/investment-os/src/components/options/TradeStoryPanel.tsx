@@ -1,39 +1,41 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ComposedChart, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Legend,
 } from "recharts";
 import { BookOpen, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── API types (matching backend TradeStoryResult exactly) ───────────────────
 
 interface StoryPoint {
-  day: number;
   date: string;
-  actualPnl: number | null;
+  daysElapsed: number;
+  markPnl: number | null;
   theoreticalPnl: number;
-  underlyingPrice?: number | null;
 }
 
-interface StoryResult {
+interface WhatIfPath {
+  label: string;
+  points: { day: number; pnl: number }[];
+  finalPnl: number;
+  description: string;
+}
+
+interface TradeStoryResult {
   tradeId: number;
   ticker: string;
-  strategy: string;
-  status: string;
-  openedAt: string;
+  strike: number;
   expiry: string;
+  right: string;
+  premiumCollected: number;
+  openedAt: string;
+  closedAt: string | null;
+  status: string;
+  realisedPnl: number | null;
   initialDte: number;
-  premium: number;
-  premiumPerContract: number;
-  currentDte: number;
-  daysSinceOpen: number;
-  actualPnlToDate: number;
-  theoreticalPnlToDate: number;
-  profitTargetPct: number;
-  profitTargetAmount: number;
-  curve: StoryPoint[];
-  insight: string;
+  snapshots: StoryPoint[];
+  whatIf: WhatIfPath[] | null;
 }
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -43,13 +45,13 @@ function StoryTooltip({ active, payload, label }: any) {
   return (
     <div className="bg-[#0f1420] border border-slate-700 rounded-lg px-3 py-2 text-xs space-y-1">
       <p className="text-muted-foreground">Day {label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p: any) =>
         p.value != null && (
           <p key={p.name} style={{ color: p.color }}>
             {p.name}: <span className="font-semibold">${Number(p.value).toFixed(0)}</span>
           </p>
-        )
-      ))}
+        ),
+      )}
     </div>
   );
 }
@@ -62,10 +64,12 @@ interface Props {
   status: string;
 }
 
+const WHAT_IF_COLORS = ["#10b981", "#60a5fa", "#f59e0b"];
+
 export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
   const [open, setOpen] = useState(false);
 
-  const { data, isLoading, error } = useQuery<StoryResult>({
+  const { data, isLoading, error } = useQuery<TradeStoryResult>({
     queryKey: ["trade-story", tradeId],
     queryFn: async () => {
       const r = await fetch(`/api/options/trades/${tradeId}/story`, {
@@ -78,16 +82,58 @@ export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Build chart data from story curve — scatter for actual points, line for theta decay
-  const chartData = (data?.curve ?? []).map((pt) => ({
-    day: pt.day,
-    "Theta decay (est)": Math.round(pt.theoreticalPnl * 100) / 100,
-    "Actual P&L": pt.actualPnl != null ? Math.round(pt.actualPnl * 100) / 100 : null,
+  // --- Derived values from real API shape ---
+  const snapshots = data?.snapshots ?? [];
+  const hasActualData = snapshots.some((s) => s.markPnl != null);
+
+  // Find latest actual P&L from snapshots
+  const latestSnap = [...snapshots].reverse().find((s) => s.markPnl != null);
+  const currentPnl = latestSnap?.markPnl ?? 0;
+  const currentTheo = latestSnap?.theoreticalPnl ?? 0;
+  const premiumCollected = data?.premiumCollected ?? 0;
+  const profitTarget50 = premiumCollected * 0.5;
+  const atTarget = currentPnl >= profitTarget50 && premiumCollected > 0;
+
+  // Build main chart: daysElapsed as x-axis, two series
+  const mainChartData = snapshots.map((pt) => ({
+    day: pt.daysElapsed,
+    "Theta decay (est)": pt.theoreticalPnl,
+    "Actual P&L": pt.markPnl,
   }));
 
-  const profitTarget = data?.profitTargetAmount ?? 0;
-  const currentPnl = data?.actualPnlToDate ?? 0;
-  const atTarget = profitTarget > 0 && currentPnl >= profitTarget;
+  // Build what-if chart for closed/assigned trades
+  // Each WhatIfPath has its own { day, pnl } array — merge into common day axis
+  const whatIf = data?.whatIf ?? null;
+  const whatIfChartData: Record<string, number | undefined>[] = [];
+  if (whatIf?.length) {
+    const maxDay = Math.max(...whatIf.flatMap((w) => w.points.map((p) => p.day)));
+    for (let d = 0; d <= maxDay; d++) {
+      const row: Record<string, number | undefined> = { day: d };
+      for (const path of whatIf) {
+        const pt = path.points.find((p) => p.day === d);
+        row[path.label] = pt?.pnl;
+      }
+      whatIfChartData.push(row);
+    }
+  }
+
+  // Simple insight derived from data
+  function buildInsight(): string {
+    if (!data) return "";
+    const { status: tradeStatus, premiumCollected: prem, realisedPnl, initialDte } = data;
+    if (tradeStatus === "expired") return `This position expired worthless after ${initialDte} days — you kept the full $${prem.toFixed(0)} premium.`;
+    if (tradeStatus === "assigned") return `You were assigned on ${ticker} after ${initialDte} days. The $${prem.toFixed(0)} premium offsets your cost basis.`;
+    if (tradeStatus === "closed") {
+      const pnl = realisedPnl ?? 0;
+      if (pnl >= profitTarget50) return `Excellent — you closed at ${((pnl / prem) * 100).toFixed(0)}% of premium, locking in $${pnl.toFixed(0)}.`;
+      if (pnl > 0) return `You closed early with $${pnl.toFixed(0)} profit (${((pnl / prem) * 100).toFixed(0)}% of premium).`;
+      return `This trade closed with a $${Math.abs(pnl).toFixed(0)} loss.`;
+    }
+    // Open trade
+    if (hasActualData && currentPnl >= profitTarget50) return `You've reached the 50% profit target! Consider closing to lock in $${currentPnl.toFixed(0)} now.`;
+    if (hasActualData) return `${ticker} is tracking ${currentPnl >= currentTheo ? "ahead of" : "behind"} the theta decay model at $${currentPnl.toFixed(0)} P&L.`;
+    return `Theta decay is working for you — check back once daily snapshots begin populating.`;
+  }
 
   return (
     <div className="border-t border-slate-700/50 pt-3 mt-3">
@@ -116,46 +162,69 @@ export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
 
           {data && (
             <>
-              {/* Insight strip */}
-              {data.insight && (
-                <div className="p-2.5 bg-violet-500/10 border border-violet-500/30 rounded-lg text-xs text-violet-200 leading-relaxed">
-                  {data.insight}
-                </div>
-              )}
+              {/* Insight */}
+              <div className="p-2.5 bg-violet-500/10 border border-violet-500/30 rounded-lg text-xs text-violet-200 leading-relaxed">
+                {buildInsight()}
+              </div>
 
-              {/* P&L status for open trades */}
+              {/* Open trade live metrics */}
               {status === "open" && (
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex flex-wrap items-center gap-4 text-xs">
                   <div>
-                    <span className="text-muted-foreground">P&L to date: </span>
-                    <span className={`font-semibold ${currentPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      ${currentPnl.toFixed(0)}
-                    </span>
+                    <span className="text-muted-foreground">Premium: </span>
+                    <span className="text-emerald-400 font-semibold">${premiumCollected.toFixed(0)}</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Theta estimate: </span>
-                    <span className="text-slate-300">${(data.theoreticalPnlToDate ?? 0).toFixed(0)}</span>
-                  </div>
-                  {profitTarget > 0 && (
+                  {hasActualData && (
                     <div>
-                      <span className="text-muted-foreground">Target (50%): </span>
-                      <span className={atTarget ? "text-emerald-400 font-semibold" : "text-slate-300"}>
-                        ${profitTarget.toFixed(0)}
-                        {atTarget && " ✓ Reached!"}
+                      <span className="text-muted-foreground">P&L to date: </span>
+                      <span className={`font-semibold ${currentPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        ${currentPnl.toFixed(0)}
                       </span>
                     </div>
                   )}
+                  <div>
+                    <span className="text-muted-foreground">Theta est: </span>
+                    <span className="text-slate-300">${currentTheo.toFixed(0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">50% target: </span>
+                    <span className={atTarget ? "text-emerald-400 font-semibold" : "text-slate-300"}>
+                      ${profitTarget50.toFixed(0)}{atTarget && " ✓"}
+                    </span>
+                  </div>
                 </div>
               )}
 
-              {/* Chart */}
-              {chartData.length > 1 && (
+              {/* Closed trade outcome */}
+              {status !== "open" && (
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Premium collected: </span>
+                    <span className="text-emerald-400 font-semibold">${premiumCollected.toFixed(0)}</span>
+                  </div>
+                  {data.realisedPnl != null && (
+                    <div>
+                      <span className="text-muted-foreground">Realised P&L: </span>
+                      <span className={`font-semibold ${data.realisedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        ${data.realisedPnl.toFixed(0)}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Duration: </span>
+                    <span className="text-slate-300">{data.initialDte} days</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Main P&L chart (open trades or any with snapshots) */}
+              {mainChartData.length > 1 && (
                 <div className="rounded-xl bg-slate-900/50 border border-slate-700/50 p-3">
                   <p className="text-[10px] text-muted-foreground mb-2">
-                    Blue = actual mark-to-market P&L snapshots · Dashed = expected theta decay · Dashed line = 50% profit target
+                    Blue = actual mark-to-market P&L · Grey dashed = theoretical theta decay · Emerald dashed = 50% target
                   </p>
                   <ResponsiveContainer width="100%" height={160}>
-                    <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                    <ComposedChart data={mainChartData} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis
                         dataKey="day"
@@ -169,19 +238,15 @@ export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
                       />
                       <Tooltip content={<StoryTooltip />} />
                       <Legend wrapperStyle={{ fontSize: "11px" }} />
-
-                      {/* 50% profit target reference */}
-                      {profitTarget > 0 && (
+                      {premiumCollected > 0 && (
                         <ReferenceLine
-                          y={profitTarget}
+                          y={profitTarget50}
                           stroke="#10b981"
-                          strokeDasharray="6 3"
+                          strokeDasharray="5 3"
                           strokeOpacity={0.5}
-                          label={{ value: "Target", position: "insideTopRight", fill: "#10b981", fontSize: 10 }}
+                          label={{ value: "50% target", position: "insideTopRight", fill: "#10b981", fontSize: 10 }}
                         />
                       )}
-
-                      {/* Theta decay model — dashed */}
                       <Line
                         type="monotone"
                         dataKey="Theta decay (est)"
@@ -191,8 +256,6 @@ export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
                         dot={false}
                         connectNulls
                       />
-
-                      {/* Actual P&L dots */}
                       <Line
                         type="monotone"
                         dataKey="Actual P&L"
@@ -207,25 +270,53 @@ export function TradeStoryPanel({ tradeId, ticker, status }: Props) {
                 </div>
               )}
 
-              {chartData.length <= 1 && (
-                <p className="text-xs text-muted-foreground py-2">
-                  Not enough daily snapshot data yet — the system records snapshots each evening. Check back tomorrow.
+              {!hasActualData && status === "open" && (
+                <p className="text-xs text-muted-foreground py-1">
+                  Actual P&L snapshots recorded each evening — check back tomorrow to see this chart populate.
                 </p>
               )}
 
-              {/* Closed trade what-if */}
-              {status !== "open" && data.premiumPerContract > 0 && (
-                <div className="p-2.5 bg-slate-800/60 border border-slate-700 rounded-lg text-xs text-muted-foreground space-y-1">
-                  <p className="font-medium text-white">How did this trade end?</p>
-                  <p>
-                    You collected <span className="text-emerald-400 font-semibold">${data.premiumPerContract.toFixed(0)}</span> in premium.
-                    {" "}
-                    {data.status === "expired"
-                      ? "The option expired worthless — you kept 100% of the income."
-                      : data.status === "assigned"
-                        ? "You were assigned shares. Premiums collected offset your cost basis."
-                        : "You closed the position early."}
+              {/* What-if overlay for closed/assigned trades */}
+              {whatIf && whatIf.length > 0 && whatIfChartData.length > 1 && (
+                <div className="rounded-xl bg-slate-900/50 border border-slate-700/50 p-3">
+                  <p className="text-xs font-medium text-white mb-1">What if you had…</p>
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    Three alternative exit strategies overlaid on the same trade
                   </p>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <ComposedChart data={whatIfChartData} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 10 }} />
+                      <YAxis tick={{ fill: "#64748b", fontSize: 10 }} tickFormatter={(v) => `$${v}`} width={42} />
+                      <Tooltip content={<StoryTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: "11px" }} />
+                      {whatIf.map((path, i) => (
+                        <Line
+                          key={path.label}
+                          type="monotone"
+                          dataKey={path.label}
+                          stroke={WHAT_IF_COLORS[i % WHAT_IF_COLORS.length]}
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      ))}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-1 mt-2">
+                    {whatIf.map((path, i) => (
+                      <div key={path.label} className="flex items-start gap-2 text-xs">
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                          style={{ backgroundColor: WHAT_IF_COLORS[i % WHAT_IF_COLORS.length] }}
+                        />
+                        <div>
+                          <span className="font-medium text-white">{path.label}</span>
+                          <span className="text-muted-foreground ml-1">— {path.description}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </>

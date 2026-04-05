@@ -15,6 +15,7 @@ import {
   optionsTradeSnapshotsTable,
   signalQualityStatsTable,
   companiesTable,
+  priceHistoryTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 
@@ -104,18 +105,22 @@ function buildDecayCurve(premium: number, dte: number): ScenarioPoint[] {
 
 // ─── Current price helper ────────────────────────────────────────────────────
 
+interface YfQuoteResult {
+  regularMarketPrice?: number;
+}
+
 async function getCurrentPrice(ticker: string): Promise<number | null> {
   try {
-    const quote = await yf.quote(ticker, { validateResult: false } as any);
-    const price = (quote as any)?.regularMarketPrice ?? null;
+    const quote = await yf.quote(ticker) as YfQuoteResult;
+    const price = quote?.regularMarketPrice ?? null;
     if (price) return price;
   } catch { /* fall back to DB */ }
 
   const row = await db
-    .select({ close: (await import("@workspace/db/schema")).priceHistoryTable.close })
-    .from((await import("@workspace/db/schema")).priceHistoryTable)
-    .where(eq((await import("@workspace/db/schema")).priceHistoryTable.ticker, ticker))
-    .orderBy(desc((await import("@workspace/db/schema")).priceHistoryTable.date))
+    .select({ close: priceHistoryTable.close })
+    .from(priceHistoryTable)
+    .where(eq(priceHistoryTable.ticker, ticker))
+    .orderBy(desc(priceHistoryTable.date))
     .limit(1);
   return row[0]?.close ?? null;
 }

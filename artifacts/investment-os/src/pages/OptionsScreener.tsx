@@ -14,8 +14,9 @@ import {
   TrendingDown, TrendingUp, RefreshCw, SlidersHorizontal, CheckCircle,
   AlertTriangle, Info, Star, Shield, DollarSign, BarChart2, ChevronDown,
   ChevronUp, Zap, BookOpen, X, Search, Grid3X3, Calendar,
-  AlertCircle, ArrowRight,
+  AlertCircle, ArrowRight, GitCompare,
 } from "lucide-react";
+import { ScenarioCompareModal } from "@/components/options/ScenarioCompareModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -415,6 +416,8 @@ function ChainView() {
   const [selectedExpiry, setSelectedExpiry] = useState<string>("");
   const [selectedCell, setSelectedCell] = useState<{ strike: number; side: "call" | "put" } | null>(null);
   const [queueResult, setQueueResult] = useState<QueueResult | null>(null);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [scenarioSide, setScenarioSide] = useState<"put" | "call">("put");
 
   const { data: expiries, isLoading: expiriesLoading } = useQuery<{ expiries: ExpiryInfo[] }>({
     queryKey: ["options-expiries", ticker],
@@ -535,6 +538,28 @@ function ChainView() {
         <Button size="sm" onClick={handleSearch} disabled={!inputTicker.trim()}>
           Load chain
         </Button>
+        {ticker && (
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-violet-700/60 text-violet-400 hover:text-violet-300 hover:border-violet-500 text-xs"
+              onClick={() => { setScenarioSide("put"); setScenarioOpen(true); }}
+              title="Compare 3 put scenarios"
+            >
+              <GitCompare className="w-3.5 h-3.5 mr-1" /> Puts
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-blue-700/60 text-blue-400 hover:text-blue-300 hover:border-blue-500 text-xs"
+              onClick={() => { setScenarioSide("call"); setScenarioOpen(true); }}
+              title="Compare 3 call scenarios"
+            >
+              <GitCompare className="w-3.5 h-3.5 mr-1" /> Calls
+            </Button>
+          </div>
+        )}
         <div className="flex gap-1 flex-1 flex-wrap items-center">
           {["PLTR", "TSM", "AAPL", "NVDA", "MSFT"].map((t) => (
             <button
@@ -861,6 +886,16 @@ function ChainView() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* ─── Scenario Compare Modal ─────────────────────────────────── */}
+      {scenarioOpen && ticker && (
+        <ScenarioCompareModal
+          open={scenarioOpen}
+          onClose={() => setScenarioOpen(false)}
+          ticker={ticker}
+          strategy={scenarioSide === "call" ? "SELL_CALL" : "SELL_PUT"}
+        />
       )}
     </div>
   );

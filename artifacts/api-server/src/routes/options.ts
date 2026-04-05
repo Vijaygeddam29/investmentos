@@ -1281,24 +1281,9 @@ router.get("/options/income/forecast", requireAuth, async (req, res) => {
         eq(optionsTradesTable.status, "open"),
       ));
 
-    // Forecast = sum of remaining theta for open trades
-    // remaining_value ≈ premium × sqrt(remaining_dte / initial_dte)
-    // theta collected so far = premium - remaining_value
-    // remaining theta = remaining_value (the part not yet decayed)
-    let forecastPremium = 0;
-    for (const t of openTrades) {
-      const premium = t.premiumCollected ?? 0;
-      const initialDte = Math.max(1, Math.round(
-        (new Date(t.expiry + "T16:00:00").getTime() - new Date(t.openedAt).getTime()) / 86400000,
-      ));
-      const dteRemaining = Math.max(0, Math.round(
-        (new Date(t.expiry + "T16:00:00").getTime() - Date.now()) / 86400000,
-      ));
-      const remainingValue = premium * Math.sqrt(dteRemaining / initialDte);
-      forecastPremium += remainingValue; // this is what we stand to gain from theta decay
-    }
+    const currentMonth = new Date().toISOString().slice(0, 7);
 
-    // 3-month moving average
+    // 3-month moving average on monthly rows
     const monthly = rows.map((r) => ({
       bucket: r.bucket ?? "",
       totalPremium: Number(r.totalPremium ?? 0),
@@ -1313,13 +1298,35 @@ router.get("/options/income/forecast", requireAuth, async (req, res) => {
       return { ...m, ma3: Math.round(ma3) };
     });
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    // Current month actual from the aggregated monthly data
+    const currentMonthRow = monthly.find((m) => m.bucket === currentMonth);
+    const currentMonthActual = currentMonthRow?.totalPremium ?? 0;
+
+    // Forecast = remaining theta per open trade (square-root-of-time model)
+    let forecastPremium = 0;
+    const detail: { ticker: string; remainingTheta: number }[] = [];
+
+    for (const t of openTrades) {
+      const premium = t.premiumCollected ?? 0;
+      const initialDte = Math.max(1, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - new Date(t.openedAt).getTime()) / 86400000,
+      ));
+      const dteRemaining = Math.max(0, Math.round(
+        (new Date(t.expiry + "T16:00:00").getTime() - Date.now()) / 86400000,
+      ));
+      const remainingValue = Math.round(premium * Math.sqrt(dteRemaining / initialDte));
+      forecastPremium += remainingValue;
+      detail.push({ ticker: t.ticker, remainingTheta: remainingValue });
+    }
 
     res.json({
       monthly: withMa,
-      forecastPremium: Math.round(forecastPremium),
+      currentMonthActual: Math.round(currentMonthActual),
+      forecastRemainder: Math.round(forecastPremium),
+      forecastTotal: Math.round(currentMonthActual + forecastPremium),
+      openPositionsCount: openTrades.length,
+      detail,
       currentMonth,
-      openTradeCount: openTrades.length,
     });
   } catch (err) {
     console.error("[Options] Income forecast error:", err);
